@@ -1,0 +1,13 @@
+{
+  "name": "spideriq",
+  "owner": { "name": "SpiderIQ", "url": "https://spideriq.ai" },
+  "plugins": [
+    {
+      "name": "spideriq",
+      "source": "./",
+      "description": "SpiderIQ agent skills — install once, get every SpiderIQ product's procedural knowledge.",
+      "version": "0.1.0",
+      "homepage": "https://spideriq.ai"
+    }
+  ]
+}

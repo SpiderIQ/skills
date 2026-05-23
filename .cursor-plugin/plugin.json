@@ -1,0 +1,15 @@
+{
+  "$schema": "https://cursor.com/schemas/cursor-plugin/plugin.json",
+  "name": "spideriq",
+  "displayName": "SpiderIQ",
+  "version": "0.1.0",
+  "description": "Agent skills for every SpiderIQ product (SpiderPublish, SpiderMail, SpiderGate, …). Install once, agents learn how to author, publish, and deploy.",
+  "author": { "name": "SpiderIQ" },
+  "publisher": "SpiderIQ",
+  "homepage": "https://spideriq.ai",
+  "repository": "https://github.com/SpiderIQ/skills",
+  "category": "developer-tools",
+  "keywords": ["spideriq", "spiderpublish", "spidermail", "spidergate", "cms", "booking", "liquid", "cloudflare", "agent-skills"],
+  "tags": ["web", "publishing", "email", "llm-gateway", "workflow"],
+  "skills": "./skills/"
+}

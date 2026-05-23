@@ -1,0 +1,9 @@
+{
+  "name": "spideriq",
+  "description": "SpiderIQ agent skills. Install once to give your agent procedural knowledge for every SpiderIQ product — SpiderPublish (multi-tenant content + booking runtime), with SpiderMail and SpiderGate coming.",
+  "version": "0.1.0",
+  "author": { "name": "SpiderIQ", "url": "https://spideriq.ai" },
+  "homepage": "https://spideriq.ai",
+  "repository": "https://github.com/SpiderIQ/skills",
+  "license": "MIT"
+}
