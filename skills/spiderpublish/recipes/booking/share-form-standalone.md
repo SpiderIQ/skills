@@ -108,7 +108,7 @@ form_lock({ flow_id: "<flow_id>", reason: "Under review by client; do not edit."
 form_unlock({ flow_id: "<flow_id>" })
 ```
 
-See [`lock-form-for-review.md`](#) <!-- VERIFY: confirm this recipe is queued for v0.4.0+; if not yet authored, link drops. --> for the full lock semantics.
+See [`lock-form-for-review.md`](lock-form-for-review.md) for the full lock semantics.
 
 ## After publish — verify the URL works
 

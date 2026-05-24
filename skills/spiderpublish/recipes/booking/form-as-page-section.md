@@ -77,7 +77,7 @@ page_insert_section({
 
 When you want one source of truth for the form (theme, fields, logic) and TWO surfaces: the page-block AND the standalone `/f/<flow_id>` URL.
 
-The native form block component slug is `spideriq-form-embed` <!-- VERIFY: confirm canonical slug — `spideriq-form-embed` is best-guess from `dom.shadow_hosts.includes("spideriq-form")` shadow-host convention. Check `content_list_components({ category: "contact_form", include_global: true })` for the actual slug; may be `sys-form-flow-embed` or similar. -->.
+The native form block component slug is **`"form"`** (literal four-character string). Confirmed at [`app/services/form_submission_service.py:256`](https://github.com/SpiderIQ/SpiderIQ/blob/master/app/services/form_submission_service.py#L256): `if block.get("component_slug") == "form"`. The rendered Web Component tag is `<spideriq-form>` (DOM-side, what `dom.shadow_hosts` reports); the block-side slug in `content_pages.blocks[]` is `"form"`. The two are different layers — slug = STORE-side identifier; `<spideriq-form>` = the SERVE-side custom-element tag the renderer emits.
 
 ### The 4-call path
 

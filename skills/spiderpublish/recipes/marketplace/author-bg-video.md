@@ -26,7 +26,7 @@ If you want to USE an existing bg-video on a page → use the `sys-bg-video` com
 4. content_get_marketplace_bg_video — confirm shape
 ```
 
-<!-- VERIFY: confirm `content_create_bg_video` / `content_update_bg_video` MCP tool surface. The upload tool exists (`content_upload_bg_video`); the catalog-row CRUD may be REST-only via `POST /api/v1/dashboard/projects/{pid}/content/bg-videos` until MCP wrapper lands. Grep `packages/mcp-tools/src/publish/` for `bg_video_create`. -->
+**Resolved 2026-05-24 — product gap flagged:** the upload tool exists (`content_upload_bg_video` at [`packages/mcp-tools/src/publish/content.ts:1663`](https://github.com/SpiderIQ/SpiderIQ/blob/master/packages/mcp-tools/src/publish/content.ts#L1663)) but `content_create_bg_video` and `content_update_bg_video` are **referenced in `next_step` hints** without being registered as actual MCP tools. The catalog-row CRUD is REST-only via `POST /api/v1/dashboard/projects/{pid}/content/bg-videos` and `PATCH .../{slug}` (files: [`app/api/v1/dashboard_bg_videos.py:188`](https://github.com/SpiderIQ/SpiderIQ/blob/master/app/api/v1/dashboard_bg_videos.py#L188), `:239`). Tracked for an MCP-wrapper PR.
 
 ### Step 1 — upload the MP4
 
@@ -84,7 +84,7 @@ Same `slug` — R2 key differs by extension. The catalog row references BOTH URL
 
 ### Step 3 — create the catalog row
 
-REST until MCP wrapper lands. <!-- VERIFY: prefer MCP if `content_create_bg_video` exists. -->
+REST only as of 2026-05-24. No MCP wrapper for create/update; use the REST path below.
 
 ```bash
 curl -X POST "https://spideriq.ai/api/v1/dashboard/projects/$AUTHORING_PID/content/bg-videos" \

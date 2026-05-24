@@ -109,6 +109,10 @@ for re-reading this whole file.
 | add a scroll-linked video hero | `recipes/content/scroll-video-hero.md` |
 | iterate on a page with live preview | `recipes/content/preview-iteration.md` |
 | lock a page while a human reviews | `recipes/content/lock-page-during-review.md` |
+| **roll back one page to a historical version** | `recipes/content/restore-page-version.md` |
+| **export the full page envelope (round-trip via VSCode ext)** | `recipes/content/export-page-roundtrip.md` |
+| **duplicate a page as a fresh draft** | `recipes/content/duplicate-page.md` |
+| **duplicate one block in-place on the same page** | `recipes/content/duplicate-block.md` |
 | import a site from Tilda | `recipes/content/import-tilda-site.md` |
 | connect a custom domain | `recipes/content/custom-domain.md` |
 | apply a theme | `recipes/content/apply-theme.md` |
@@ -121,6 +125,7 @@ for re-reading this whole file.
 | upload a preview thumbnail / MP4 for a component | `recipes/components/upload-component-preview.md` |
 | browse marketplace + insert a section into a page | `recipes/marketplace/browse-and-insert-section.md` |
 | **browse CRO components (urgency, scarcity, social proof, capture popups, sticky bars, timers, GEO primitives)** | `recipes/marketplace/browse-cro-components.md` |
+| **pick + insert a background video from the curated catalog** | `recipes/marketplace/pick-bg-video.md` |
 | publish a curated site template to the marketplace (super_admin) | `recipes/marketplace/author-site-template.md` |
 | publish a bg-video clip to the marketplace (super_admin) | `recipes/marketplace/author-bg-video.md` |
 | suggest agent-meta tags for a marketplace asset | `recipes/marketplace/suggest-agent-meta.md` |
@@ -133,23 +138,46 @@ for re-reading this whole file.
 | **embed a form INSIDE a SpiderPublish page** | `recipes/booking/form-as-page-section.md` |
 | **share a form via standalone URL (QR / bio / reviewer link)** | `recipes/booking/share-form-standalone.md` |
 | **add conditional logic + variables to a form** | `recipes/booking/add-logic-and-variables.md` |
+| **freeze a form during review (lock/unlock)** | `recipes/booking/lock-form-for-review.md` |
+| **submit a test answer to verify a form end-to-end** | `recipes/booking/test-form-submission.md` |
 | import directory listings from IDAP | `recipes/directory/import-listings.md` |
 | bulk upload media to SpiderMedia | `recipes/media/bulk-upload.md` |
+| **import a file from a URL into SpiderMedia** | `recipes/media/import-from-url.md` |
+| **tighten the media budget (sweep unused, orphan detection, free quota)** | `recipes/media/tighten-media-budget.md` |
 | fill IDAP records from form submissions | `recipes/integrations/idap-fill-from-form.md` |
+| **sync an Airtable view → directory listings** | `recipes/integrations/airtable/sync-to-directory.md` |
+| **mirror a Stripe price catalog → pricing_table block** | `recipes/integrations/stripe/pricing-table.md` |
+| **mirror a HubSpot form → SpiderForms flow (with webhook back)** | `recipes/integrations/hubspot/form-mirror.md` |
+| **wire a cal.com event type → SpiderPublish booking flow** | `recipes/integrations/cal/booking-flow.md` |
+| **connect a custom domain via Cloudflare for SaaS (end-to-end)** | `recipes/integrations/cloudflare/custom-domain.md` |
 | clone a public URL into a Liquid template (SpiderClone) | `recipes/clone/url-to-template.md` |
+| **import a Tailwind site (config + HTML) → theme + components** | `recipes/clone/import-tailwind.md` |
 | run a content audit before shipping | `recipes/audit/audit-driven-edit.md` |
 | audit + fix all internal links | `recipes/audit/link-audit.md` |
 | audit + fix a content issue end-to-end | `recipes/audit/audit-and-fix.md` |
 | **visual-check a deployed page (Playwright sidecar; Rule 62)** | `recipes/audit/visual-check-a-page.md` |
 | **pre-flight deploy readiness checklist** | `recipes/audit/deploy-readiness.md` |
+| **preview a deploy without going live (`*.sites.spideriq.ai`)** | `recipes/deploy/deploy-preview-only.md` |
+| **roll back a bad deploy (per-page restore + redeploy)** | `recipes/deploy/rollback-deploy.md` |
 
 All recipes are authored. The 16 ported from the public starter kit
 (designer-kit) — proven in production by HeyGen-class agent runs — were
 joined in v0.3.0 (2026-05-24) by 14 new recipes + 5 reference docs, then
-v0.4.0 (2026-05-24) added 14 more: 3 forms (page-section + standalone + logic),
-4 content (site-template + dynamic pages + settings), 3 components/audit
-(preview-upload + visual-check + deploy-readiness), and 4 marketplace
-(CRO catalog + author-site-template + author-bg-video).
+v0.4.0 (2026-05-24) added 14 more, and v0.5.0 (2026-05-24) closed the
+inventory with **12 Lane-A recipes + 5 vendor integrations** + full
+VERIFY-marker resolution:
+
+- **content/** — `restore-page-version`, `export-page-roundtrip`, `duplicate-page`, `duplicate-block`
+- **booking/** — `lock-form-for-review`, `test-form-submission`
+- **marketplace/** — `pick-bg-video`
+- **media/** — `import-from-url`, `tighten-media-budget`
+- **clone/** — `import-tailwind`
+- **deploy/** (new directory) — `deploy-preview-only`, `rollback-deploy`
+- **integrations/** vendor seeds — `airtable/sync-to-directory`, `stripe/pricing-table`,
+  `hubspot/form-mirror`, `cal/booking-flow`, `cloudflare/custom-domain`
+
+All 16 in-context `<!-- VERIFY -->` markers from v0.3.0/v0.4.0 are
+resolved with explicit source-of-truth citations or product-gap flags.
 
 ---
 

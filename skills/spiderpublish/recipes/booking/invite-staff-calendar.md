@@ -39,7 +39,7 @@ Mental model: this is the calendar-equivalent of "sign in with Google" for end u
 
 Then verify with a slot-grid check.
 
-<!-- VERIFY: tool name `booking_flow_invite_staff` is the canonical surface. May also be exposed as `staff_invite_to_calendar_pool` or via direct REST. Grep `packages/mcp-tools/src/publish/` and `app/api/v1/booking/` for the canonical name + path. -->
+**Resolved 2026-05-24 — product gap flagged:** there is NO `booking_flow_invite_staff` MCP tool in `@spideriq/mcp` as of this writing. Staff-invite happens via REST at `POST /api/v1/booking/flows/{flow_id}/staff/invite` (file: [`app/api/v1/booking/`](https://github.com/SpiderIQ/SpiderIQ/tree/master/app/api/v1/booking)). Use CLI or curl until the MCP wrapper lands. Tracked for a future MCP-wrapper PR.
 
 ### 1. (Pre-flight) ensure the flow exists
 
@@ -100,7 +100,7 @@ booking_flow_list_staff({ flow_id: "flow_..." })
 
 Once at least one staff member shows `connected_at: <timestamp>`, the slot grid will populate when visitors hit `/f/<flow_id>`.
 
-<!-- VERIFY: `booking_flow_list_staff` tool name + return shape. Either exists in `@spideriq/mcp` or is REST-only at `GET /api/v1/dashboard/booking/flows/{flow_id}/staff`. Grep packages/mcp-tools/src/publish/ for `list_staff`. -->
+**Resolved 2026-05-24 — product gap flagged:** there is NO `booking_flow_list_staff` MCP tool. List staff via REST at `GET /api/v1/booking/flows/{flow_id}/staff` (returns `[{actor_id, email, role, calendar_status, connected_at, ...}, ...]`). Tracked for a future MCP-wrapper PR alongside `booking_flow_invite_staff`.
 
 ## Slot grid spot-check
 
