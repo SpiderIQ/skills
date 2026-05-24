@@ -99,40 +99,40 @@ for re-reading this whole file.
 
 | The user wants to… | Read |
 |---|---|
-| create + publish a landing page | `recipes/content/landing-page.md` *(stub)* |
-| publish a blog post | `recipes/content/blog-post.md` *(stub)* |
-| add a page to the docs tree | `recipes/content/docs-page.md` *(stub)* |
+| create + publish a landing page | `recipes/content/landing-page.md` |
+| publish a blog post | `recipes/content/blog-post.md` |
+| add a page to the docs tree | `recipes/content/docs-page.md` |
 | add a scroll-linked video hero | `recipes/content/scroll-video-hero.md` |
 | iterate on a page with live preview | `recipes/content/preview-iteration.md` |
 | lock a page while a human reviews | `recipes/content/lock-page-during-review.md` |
 | import a site from Tilda | `recipes/content/import-tilda-site.md` |
-| connect a custom domain | `recipes/content/custom-domain.md` *(stub)* |
-| apply a theme | `recipes/content/apply-theme.md` *(stub)* |
-| edit the navigation menus | `recipes/content/navigation.md` *(stub)* |
-| override a single section without forking the theme | `recipes/content/section-override.md` *(stub)* |
+| connect a custom domain | `recipes/content/custom-domain.md` |
+| apply a theme | `recipes/content/apply-theme.md` |
+| edit the navigation menus | `recipes/content/navigation.md` |
+| override a single section without forking the theme | `recipes/content/section-override.md` |
 | edit header/footer once, propagate site-wide | `recipes/components/update-and-propagate.md` |
 | iterate a component safely with rollback | `recipes/components/rollback-component.md` |
-| find a component without paginating | `recipes/components/find-component.md` *(stub)* |
-| create a new library component (Tier 1–4) | `recipes/components/create-component.md` *(stub)* |
+| find a component without paginating | `recipes/components/find-component.md` |
+| create a new library component (Tier 1–4) | `recipes/components/create-component.md` |
 | browse marketplace + insert a section into a page | `recipes/marketplace/browse-and-insert-section.md` |
 | suggest agent-meta tags for a marketplace asset | `recipes/marketplace/suggest-agent-meta.md` |
 | design a form's look + per-question media | `recipes/booking/build-form.md` |
 | build a full lead-gen form end-to-end | `recipes/booking/build-lead-gen-form.md` |
-| clone an existing form template | `recipes/booking/clone-form-template.md` *(stub)* |
-| set up a booking flow (calendar slots) | `recipes/booking/clone-booking-template.md` *(stub)* |
-| invite staff to connect their calendar | `recipes/booking/invite-staff-calendar.md` *(stub)* |
-| embed a form on an external site (inline / popup) | `recipes/booking/embed-form.md` *(stub)* |
+| clone an existing form template | `recipes/booking/clone-form-template.md` |
+| set up a booking flow (calendar slots) | `recipes/booking/clone-booking-template.md` |
+| invite staff to connect their calendar | `recipes/booking/invite-staff-calendar.md` |
+| embed a form on an external site (inline / popup) | `recipes/booking/embed-form.md` |
 | import directory listings from IDAP | `recipes/directory/import-listings.md` |
 | bulk upload media to SpiderMedia | `recipes/media/bulk-upload.md` |
 | fill IDAP records from form submissions | `recipes/integrations/idap-fill-from-form.md` |
-| clone a public URL into a Liquid template (SpiderClone) | `recipes/clone/url-to-template.md` *(stub)* |
+| clone a public URL into a Liquid template (SpiderClone) | `recipes/clone/url-to-template.md` |
 | run a content audit before shipping | `recipes/audit/audit-driven-edit.md` |
 | audit + fix all internal links | `recipes/audit/link-audit.md` |
 | audit + fix a content issue end-to-end | `recipes/audit/audit-and-fix.md` |
 
-**Note:** rows marked *(stub)* are queued for the recipe-authoring session.
-The rest are ported from the public starter kit (designer-kit) — proven
-in production by HeyGen-class agent runs.
+All recipes are authored. The 16 ported from the public starter kit
+(designer-kit) — proven in production by HeyGen-class agent runs — were
+joined in v0.3.0 (2026-05-24) by 14 new recipes + 5 reference docs.
 
 ---
 
@@ -157,7 +157,7 @@ Prefer one-shot tools over multi-step choreography
 (`content_get_component_by_slug` over `list_components` + filter;
 `form_create_from_template` over `form_create` + N × `form_add_field`).
 
-Full map: [`reference/tool-surface.md`](reference/tool-surface.md) *(stub — authoring session)*.
+Full map: [`reference/tool-surface.md`](reference/tool-surface.md).
 
 ---
 
@@ -191,8 +191,8 @@ Full map: [`reference/tool-surface.md`](reference/tool-surface.md) *(stub — au
 ## See also
 
 - [`scripts/README.md`](../../scripts/README.md) — full script inventory + the "why scripts not prose" rationale
-- [`reference/deploy-protocol.md`](reference/deploy-protocol.md) — full two-phase pipeline + five-lock defense *(stub)*
-- [`reference/block-types.md`](reference/block-types.md) — block model + the `css`-field rule + validators *(stub)*
-- [`reference/tool-surface.md`](reference/tool-surface.md) — CLI vs MCP map + discovery endpoints *(stub)*
-- [`reference/booking-model.md`](reference/booking-model.md) — `flow.json` / `schema.json`, cal.com, OAuth-by-invite *(stub)*
-- [`../_shared/auth.md`](../../_shared/auth.md) — the PAT auth pattern (shared with `spidermail`, `spidergate`) *(stub)*
+- [`reference/deploy-protocol.md`](reference/deploy-protocol.md) — full two-phase pipeline + five-lock defense
+- [`reference/block-types.md`](reference/block-types.md) — block model + the `css`-field rule + validators
+- [`reference/tool-surface.md`](reference/tool-surface.md) — CLI vs MCP map + discovery endpoints
+- [`reference/booking-model.md`](reference/booking-model.md) — `flow.json` / `schema.json`, cal.com, OAuth-by-invite
+- [`../_shared/auth.md`](../../_shared/auth.md) — the PAT auth pattern (shared with `spidermail`, `spidergate`)
