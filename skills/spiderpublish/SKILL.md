@@ -102,6 +102,10 @@ for re-reading this whole file.
 | create + publish a landing page | `recipes/content/landing-page.md` |
 | publish a blog post | `recipes/content/blog-post.md` |
 | add a page to the docs tree | `recipes/content/docs-page.md` |
+| apply a curated starter site (browse + clone) | `recipes/content/apply-site-template.md` |
+| add a dynamic LIST page (iterates posts/docs/listings) | `recipes/content/dynamic-list-page.md` |
+| add a dynamic ITEM page (`/blog/<slug>` pattern) | `recipes/content/dynamic-item-page.md` |
+| change site-wide settings (SEO defaults, colors, analytics) | `recipes/content/update-site-settings.md` |
 | add a scroll-linked video hero | `recipes/content/scroll-video-hero.md` |
 | iterate on a page with live preview | `recipes/content/preview-iteration.md` |
 | lock a page while a human reviews | `recipes/content/lock-page-during-review.md` |
@@ -114,7 +118,11 @@ for re-reading this whole file.
 | iterate a component safely with rollback | `recipes/components/rollback-component.md` |
 | find a component without paginating | `recipes/components/find-component.md` |
 | create a new library component (Tier 1–4) | `recipes/components/create-component.md` |
+| upload a preview thumbnail / MP4 for a component | `recipes/components/upload-component-preview.md` |
 | browse marketplace + insert a section into a page | `recipes/marketplace/browse-and-insert-section.md` |
+| **browse CRO components (urgency, scarcity, social proof, capture popups, sticky bars, timers, GEO primitives)** | `recipes/marketplace/browse-cro-components.md` |
+| publish a curated site template to the marketplace (super_admin) | `recipes/marketplace/author-site-template.md` |
+| publish a bg-video clip to the marketplace (super_admin) | `recipes/marketplace/author-bg-video.md` |
 | suggest agent-meta tags for a marketplace asset | `recipes/marketplace/suggest-agent-meta.md` |
 | design a form's look + per-question media | `recipes/booking/build-form.md` |
 | build a full lead-gen form end-to-end | `recipes/booking/build-lead-gen-form.md` |
@@ -122,6 +130,9 @@ for re-reading this whole file.
 | set up a booking flow (calendar slots) | `recipes/booking/clone-booking-template.md` |
 | invite staff to connect their calendar | `recipes/booking/invite-staff-calendar.md` |
 | embed a form on an external site (inline / popup) | `recipes/booking/embed-form.md` |
+| **embed a form INSIDE a SpiderPublish page** | `recipes/booking/form-as-page-section.md` |
+| **share a form via standalone URL (QR / bio / reviewer link)** | `recipes/booking/share-form-standalone.md` |
+| **add conditional logic + variables to a form** | `recipes/booking/add-logic-and-variables.md` |
 | import directory listings from IDAP | `recipes/directory/import-listings.md` |
 | bulk upload media to SpiderMedia | `recipes/media/bulk-upload.md` |
 | fill IDAP records from form submissions | `recipes/integrations/idap-fill-from-form.md` |
@@ -129,10 +140,16 @@ for re-reading this whole file.
 | run a content audit before shipping | `recipes/audit/audit-driven-edit.md` |
 | audit + fix all internal links | `recipes/audit/link-audit.md` |
 | audit + fix a content issue end-to-end | `recipes/audit/audit-and-fix.md` |
+| **visual-check a deployed page (Playwright sidecar; Rule 62)** | `recipes/audit/visual-check-a-page.md` |
+| **pre-flight deploy readiness checklist** | `recipes/audit/deploy-readiness.md` |
 
 All recipes are authored. The 16 ported from the public starter kit
 (designer-kit) — proven in production by HeyGen-class agent runs — were
-joined in v0.3.0 (2026-05-24) by 14 new recipes + 5 reference docs.
+joined in v0.3.0 (2026-05-24) by 14 new recipes + 5 reference docs, then
+v0.4.0 (2026-05-24) added 14 more: 3 forms (page-section + standalone + logic),
+4 content (site-template + dynamic pages + settings), 3 components/audit
+(preview-upload + visual-check + deploy-readiness), and 4 marketplace
+(CRO catalog + author-site-template + author-bg-video).
 
 ---
 
