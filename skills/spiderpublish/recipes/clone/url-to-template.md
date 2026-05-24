@@ -24,9 +24,9 @@ It's a **starting-point generator**, not a one-shot finished site.
 
 The first-party SpiderClone MCP tool surface is **still emerging**. As of 2026-05-24, the production-ready paths are:
 
-1. **REST endpoint** at `POST /api/v1/dashboard/projects/{pid}/clone/from-url` (server-side). <!-- VERIFY: confirm endpoint path — based on inventory `recipes/clone/url-to-template.md` Section A.10 row 45 referencing `content_clone_*` tool family with confirm-existence-in-kitchen-sink note. -->
-2. **CLI command**: `spideriq clone from-url <url>`. <!-- VERIFY: command surface — based on @spideriq/cli inventory; may be named differently. -->
-3. **MCP tool**: not yet exposed in `@spideriq/mcp` kitchen-sink as of 2026-05-24. <!-- VERIFY: grep `packages/mcp-tools/src/publish/` for `clone_from_url` or similar; if absent, this recipe stays REST/CLI-only until the MCP wrapper lands. -->
+1. **REST endpoint**: **NOT YET EXPOSED** as of 2026-05-24. No `/clone/from-url` route exists in `app/api/v1/`. SpiderClone is being staged as a separate worker; the public REST surface lands later. Tracked as product gap.
+2. **CLI command**: **NOT YET EXPOSED** in `@spideriq/cli` as of 2026-05-24. Same product gap.
+3. **MCP tool**: **NOT YET EXPOSED** in `@spideriq/mcp` kitchen-sink as of 2026-05-24 — no `clone_from_url` / `content_clone_*` registration in `packages/mcp-tools/src/publish/`. Same product gap.
 
 This recipe shows the REST path. When the MCP tool lands, the structure here transfers directly — same params, same flow.
 
@@ -70,7 +70,7 @@ curl -X POST "https://spideriq.ai/api/v1/dashboard/projects/$PID/clone/from-url"
 | `extract_strategy` | `"section"` = one component per visible section (recommended). `"whole_page"` = one component per page (less granular, harder to iterate). |
 | `upload_images_to_r2` | When `true`, every `<img src="...">` is fetched and uploaded to your SpiderMedia bucket. Source URLs rewritten to `https://media.cdn.spideriq.ai/...`. Skip with `false` only if you're testing — link-rot from the source CDN breaks the site months later. |
 
-<!-- VERIFY: confirm `clone_from_url` endpoint shape. Based on research-spiderpublish-content-inventory.md Section A.10 — actual signature may differ. -->
+**Resolved 2026-05-24 — product gap, full surface not yet shipped:** the SpiderClone family is roadmapped but no REST/CLI/MCP surface is registered in `master` yet. This recipe stays in the catalog as forward-compatibility documentation — once the surface lands, the structure here transfers directly (4-step path: scope verify → submit URL → poll → review draft). Until then, the practical paths are [`import-tailwind.md`](import-tailwind.md) (if you have Tailwind source) or [`../content/import-tilda-site.md`](../content/import-tilda-site.md) (if you have HTML).
 
 ### 2. Poll for completion
 

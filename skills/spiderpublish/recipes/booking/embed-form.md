@@ -133,14 +133,14 @@ content_update_page({
     {
       id: "blk_form",
       type: "component",
-      component_slug: "spideriq-form-embed",
+      component_slug: "form",
       data: { flow_id: "flow_..." }
     }
   ]
 })
 ```
 
-<!-- VERIFY: the canonical native-block component_slug for forms inside SpiderPublish pages. `spideriq-form-embed` is a best-guess; check `content_list_components({ category: "contact_form", include_global: true })` for the actual slug. -->
+The canonical native-block component slug is **`"form"`** (literal four-character string). The server-side check is at [`app/services/form_submission_service.py:256`](https://github.com/SpiderIQ/SpiderIQ/blob/master/app/services/form_submission_service.py#L256) — `if block.get("component_slug") == "form"`. The rendered Web Component tag is `<spideriq-form>` (DOM-side), but the BLOCK-side slug stored in `content_pages.blocks[]` is `"form"`. Don't confuse them.
 
 Inline server-side render avoids the iframe round-trip + CSP boundary. Use this when the form lives on a SpiderPublish-served page. The `form_get_embed_snippet` iframe path is for external (non-SpiderPublish) host pages.
 

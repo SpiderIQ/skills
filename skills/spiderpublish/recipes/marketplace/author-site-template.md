@@ -27,7 +27,7 @@ If you want to APPLY an existing template to a tenant → [`../content/apply-sit
 5. (across other tenants) content_apply_site_template — confirms it works end-to-end
 ```
 
-<!-- VERIFY: confirm the canonical MCP tool name for creating a site-template catalog row. The upload-preview tool exists (`content_upload_site_template_preview`); the create+update mutations may be REST-only via `POST /api/v1/dashboard/projects/{pid}/content/site-templates` until an MCP wrapper lands. Grep `packages/mcp-tools/src/publish/` for `site_template_create` / `site_template_update`. -->
+**Resolved 2026-05-24 — product gap flagged:** the upload-preview MCP tool exists (`content_upload_site_template_preview`), and `next_step` strings in content.ts reference `content_create_site_template` / `content_update_site_template` as if they were registered. They are NOT — the catalog-row CRUD is REST-only via `POST /api/v1/dashboard/projects/{pid}/content/site-templates` and `PATCH .../{slug}` (files: [`app/api/v1/dashboard_site_templates.py:177`](https://github.com/SpiderIQ/SpiderIQ/blob/master/app/api/v1/dashboard_site_templates.py#L177), `:232`). Tracked for an MCP-wrapper PR; the `next_step` strings in content.ts also need updating once the wrappers land.
 
 ### Step 1 — build the source pages
 
@@ -77,7 +77,7 @@ content_upload_site_template_preview({
 
 ### Step 3 — create the catalog row
 
-Until an MCP wrapper lands, this is REST. <!-- VERIFY: if `content_create_site_template` MCP tool exists, prefer it; this REST path is the fallback. -->
+REST only as of 2026-05-24. No MCP wrapper for create/update; use the REST path below. (Upload-preview IS exposed via `content_upload_site_template_preview`.)
 
 ```bash
 curl -X POST "https://spideriq.ai/api/v1/dashboard/projects/$AUTHORING_PID/content/site-templates" \
@@ -123,7 +123,7 @@ curl -X POST "https://spideriq.ai/api/v1/dashboard/projects/$AUTHORING_PID/conte
 | `agent_meta` | AI-discovery axes (mood / palette / brand_fit / scene_type) — for `marketplace_search` semantic queries. See catalog/CLAUDE.md → marketplace_taxonomy. |
 | `is_featured` | Promote in the catalog. Curated decision; not for self-promotion. |
 
-Phase 11+12 gate is `dry_run`/`confirm_token` style on the underlying endpoint. <!-- VERIFY: confirm the create path is gated; if not, this becomes a single POST with no preview step. -->
+As of 2026-05-24, the REST create endpoint is NOT Phase 11+12 gated — single POST creates the catalog row. This is intentional for super_admin authoring flows (low-frequency, high-trust). If the gate is added later, the same recipe applies with a `dry_run=true` → `confirm_token` round-trip prepended.
 
 ### Step 4 — confirm the catalog row landed
 

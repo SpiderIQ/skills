@@ -27,7 +27,7 @@ For a simple data-collection form (no calendar) → [`clone-form-template.md`](c
 
 The exact MCP tool names for the booking surface match the form surface where there's parity (`booking_flow_get`, `booking_flow_update`, `booking_flow_delete`, etc.) and add cal.com-specific tools (`booking_flow_publish` provisions cal.com, the staff-invite flow uses dedicated endpoints).
 
-<!-- VERIFY: confirm whether @spideriq/mcp exposes `booking_flow_list_templates` or whether browsing booking templates goes through the same `form_list_global_templates({ kind: "booking" })` filter. The form-specific helper filters server-side; the booking helper may live under a different name. Codify after grep. -->
+**Resolved 2026-05-24:** there is NO `booking_flow_list_templates` MCP tool. Booking templates browse via `form_list_global_templates({ kind: "booking" })` — the same tool the form-flow surface uses, filtered server-side by `kind`. The `booking_flows` table holds both kinds; the `kind` column disambiguates. Tool at [`packages/mcp-tools/src/publish/forms.ts:1665`](https://github.com/SpiderIQ/SpiderIQ/blob/master/packages/mcp-tools/src/publish/forms.ts#L1665).
 
 ### 1. Browse booking templates
 
@@ -149,7 +149,7 @@ booking_flow_update({
 # NOTE: pool changes happen via cal.com directly — manage team membership there.
 ```
 
-<!-- VERIFY: confirm whether `booking_flow_add_field` exists OR whether step-level field additions go through `booking_flow_update({ changes: { flow: { flow: [{ ... }] } } })`. Form tools have dedicated add_field; booking surface may not. -->
+**Resolved 2026-05-24:** there is NO `booking_flow_add_field` MCP tool. Booking flows use the same `form_add_field` ([`packages/mcp-tools/src/publish/forms.ts:853`](https://github.com/SpiderIQ/SpiderIQ/blob/master/packages/mcp-tools/src/publish/forms.ts#L853)) — they share the `booking_flows` row schema. Pass the booking flow's `flow_id` and `form_add_field` will land the field correctly regardless of `kind`. For step-level additions on multi-step booking flows, pass the explicit `step_id`.
 
 ## Embed + share
 
