@@ -9,6 +9,6 @@
     "app/schemas/campaign.py:159-162 — WorkflowVayaPinConfig.enabled default False (opt-in, flowstest-1.2-r2)",
     "app/services/campaign_service.py:113 — select_workflow_flow reads vayapin.get('enabled', True)",
     "references/vayapin-export.md",
-    "flow-maps-site-verify-vayapin SKILL.md HARD-GATE name=vayapin-default-on"
+    "spiderflows SKILL.md HARD-GATE name=vayapin-default-on"
   ]
 }

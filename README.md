@@ -18,8 +18,7 @@ Skills install into your **agent runtime** — they never touch your project's
 
 | Skill | What it teaches | Status |
 |---|---|---|
-| `spiderflows` | Foundation router for SpiderIQ pipelines — surfaces, auth, formats, progress, reading results via IDAP, the campaign cost gate | ✅ v0.1.0 |
-| `flow-maps-site-verify-vayapin` | The lead / local-business pipeline: Google Maps → site crawl → email verify → optional VayaPin pin. Single run or multi-location campaign, full lifecycle, results via IDAP (sold as both leadSearch and localSeo — one chain) | ✅ v0.1.0 |
+| `spiderflows` | Run SpiderIQ flows (server-side pipelines). Today: the lead / local-business chain — Google Maps → site crawl → email verify → optional VayaPin pin (sold as both leadSearch and localSeo). Single run or multi-location campaign, full lifecycle, results via IDAP. More flows added here as recipes. | ✅ v0.1.0 |
 | `spiderpublish` | Pages, posts, docs, components, navigation, themes, forms, booking flows, custom domains, two-phase deploy | ✅ v0.1.0 |
 | `spidermail` | Mailboxes, threads, send, templates, automation | 🔜 |
 | `spidergate` | LLM completions, routing, traces, cost tracking | 🔜 |
