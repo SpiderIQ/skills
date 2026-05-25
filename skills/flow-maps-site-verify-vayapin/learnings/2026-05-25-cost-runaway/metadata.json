@@ -1,0 +1,13 @@
+{
+  "title": "Country-wide campaign filters fan out to thousands of locations",
+  "summary": "A campaign's filter.mode of 'all' or 'cities_only' over a whole country expands to every city/postcode — one (country: DE, mode: all) campaign fanned to 1,733 locations and dispatched 113 worker jobs in 23 seconds. Check the location count before submitting; narrow with regions/population/custom.",
+  "created_at": "2026-05-25",
+  "updated_at": "2026-05-25",
+  "tags": ["cost", "campaigns", "filter", "hard-gate"],
+  "references": [
+    "app/schemas/campaign.py:221 — CampaignFilterConfig (mode all|population|cities_only|custom|regions, default 'all')",
+    "spiderflows SKILL.md HARD-GATE name=cost-budget",
+    "references/cost-check.md",
+    "Flows Phase 2 incident: (country: DE) campaign → 1,733 locations / 113 jobs / 23s"
+  ]
+}

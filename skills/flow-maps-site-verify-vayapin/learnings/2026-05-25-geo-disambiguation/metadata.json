@@ -1,0 +1,12 @@
+{
+  "title": "Query construction differs single vs campaign — don't double-target the location",
+  "summary": "Single mode appends location to the query (server builds '{query} in {location}'), so put the place in search_query OR in location, never both. Campaign mode takes a BARE query plus country_code + filter and builds the per-location string itself — a city in the campaign search_query double-targets and wastes the run.",
+  "created_at": "2026-05-25",
+  "updated_at": "2026-05-25",
+  "tags": ["query", "geo", "single-vs-campaign"],
+  "references": [
+    "app/api/v1/lead_search.py:72-74 — single: search_query = f'{search_query} in {location}' when location set",
+    "app/flows/lead-search.yaml / local-seo.yaml — campaign_enumerator: country-to-cities",
+    "references/run-single.md, references/run-campaign.md"
+  ]
+}

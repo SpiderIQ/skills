@@ -1,0 +1,14 @@
+{
+  "title": "VayaPin publishes permanent public pins, and its default is path-dependent",
+  "summary": "The vayapin stage publishes a real, permanent cs.vayapin.com page per business — deleting the campaign does NOT remove the pages. On /lead-search with an omitted workflow the request forces vayapin.enabled=true (publishes); on campaigns it follows what you send; the bare schema default is false. Don't reason about the default — always set workflow.vayapin.enabled explicitly.",
+  "created_at": "2026-05-25",
+  "updated_at": "2026-05-25",
+  "tags": ["vayapin", "irreversible", "defaults", "hard-gate"],
+  "references": [
+    "app/schemas/lead_search.py:64-71 — LeadSearchRequest default_factory sets WorkflowVayaPinConfig(enabled=True)",
+    "app/schemas/campaign.py:159-162 — WorkflowVayaPinConfig.enabled default False (opt-in, flowstest-1.2-r2)",
+    "app/services/campaign_service.py:113 — select_workflow_flow reads vayapin.get('enabled', True)",
+    "references/vayapin-export.md",
+    "flow-maps-site-verify-vayapin SKILL.md HARD-GATE name=vayapin-default-on"
+  ]
+}

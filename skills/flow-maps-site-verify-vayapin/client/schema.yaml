@@ -1,0 +1,210 @@
+# flow-maps-site-verify-vayapin — API surface + envelope contract
+# Canonical source for the opvsHUB Tier-3 generator (`opvs-skills generate`)
+# and the marketplace package. Consolidates the legacy opvsHUB `lead-search`
+# (3 methods) + `campaigns` (6 methods) skills into ONE chain-named skill with
+# the full lifecycle (incl. delete + retry, added in the S0a slice) + IDAP reads.
+#
+# Channel note: this file is SpiderIQ-native (base_url /api/v1, env_var
+# SPIDERIQ_PAT). The opvsHUB mirror on LLM14 adapts two fields per the
+# SPIDERIQ-SKILL-MAP: base_url -> /api/v1/spideriq, env_var -> OPVS_PAT.
+# Verify paths against app/api/v1/{lead_search,campaigns,idap}.py before regen.
+
+name: flow-maps-site-verify-vayapin
+version: "0.1.0"
+description: >
+  SpiderIQ's lead and local-business pipeline: search Google Maps, crawl each
+  business's website, verify the emails, and (optionally) publish a VayaPin map
+  profile. Runs as a single location or a multi-location campaign. The chain
+  marketed as both leadSearch and localSeo — one pipeline, differing only by the
+  vayapin stage. Replaces the separate lead-search + campaigns skills.
+category: data-collection
+base_url: /api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: yaml
+  timeout_ms: 60000
+triggers:
+  - find local businesses
+  - scrape leads
+  - build a verified lead list
+  - lead search
+  - local seo
+  - google maps scrape with contact details
+
+guidance:
+  use: >
+    Discover businesses + verified contact emails for a place (single) or across
+    many locations (campaign). Maps -> Site -> Verify -> (optional) VayaPin.
+  not:
+    - "find-people-extract-linkedin-profile -> look up one named person"
+    - "scrape-google-maps -> Maps listings only, no site crawl or email verify"
+    - "verify-email-deliverability -> verify a list of emails you already have"
+    - "flow-perplexity-site-companydata-people -> deep company research chain"
+  # Q1 (LOCKED): every textual search param must be aliased explicitly.
+  intent_aliases: ["search_query", "query"]
+  pitfalls:
+    - "Campaign filter.mode 'all'/'cities_only' over a country fans to thousands of locations — size it first."
+    - "vayapin publishes PERMANENT public pins; deleting the campaign does not remove them. Set vayapin.enabled explicitly."
+    - "Single mode: location goes in search_query OR location, never both. Campaign mode: keep search_query bare."
+
+methods:
+  # ── Run ──────────────────────────────────────────────────────────────────
+  searchLeads:
+    description: >
+      Run the full pipeline for ONE search in ONE location (Maps -> Site ->
+      Verify -> optional VayaPin). Returns a job_id to poll.
+    guidance:
+      use: "one city / one search — fastest path, always safe on cost"
+      next: "getJobStatus, then getJobResults"
+      warn: "omitting workflow makes vayapin publish (default ON on this path) — set vayapin.enabled=false for a data-only lead list"
+      telemetry_signal_default: "cold"
+    http: POST /lead-search
+    params:
+      search_query: { type: string, required: true, description: 'What to search for (e.g. "plumbers in Berlin"). 1-255 chars.' }
+      country_code: { type: string, required: false, description: 'ISO 2-letter code (default US)' }
+      location:     { type: string, required: false, description: 'Place; appended as "{query} in {location}". Do not also put it in search_query.' }
+      max_results:  { type: integer, required: false, description: 'Businesses from Maps, 1-500 (default 20)' }
+      lang:         { type: string, required: false, description: 'Maps language (default en)' }
+      workflow:     { type: object, required: false, description: 'Per-stage config: { spidersite:{enabled,mode}, spiderverify:{enabled}, vayapin:{enabled} }' }
+      test:         { type: boolean, required: false, description: 'Route to test queue' }
+    response: { format: json }
+
+  createCampaign:
+    description: >
+      Run the same search across many locations (a country/region/population
+      band). One pipeline per location. Returns campaign_id + total_locations.
+    guidance:
+      use: "multi-location coverage — check total_locations in the response"
+      next: "getCampaignStatus (poll >=5s), retryFailedLocations, getCampaignResults"
+      warn: "filter.mode defaults to 'all' (every location). Narrow with regions/population/custom or stop immediately."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderMaps/campaigns/submit
+    params:
+      search_query: { type: string, required: true, description: 'BARE term (e.g. "plumbers") — location comes from country_code + filter' }
+      country_code: { type: string, required: true, description: 'ISO 2-letter code' }
+      filter:       { type: object, required: false, description: 'Location selection: { mode: all|population|cities_only|custom|regions, min_population?, admin_regions?, location_ids? }. Default mode=all.' }
+      max_results:  { type: integer, required: false, description: 'Businesses PER LOCATION, 1-500 (default 100)' }
+      name:         { type: string, required: false, description: 'Campaign label (auto if omitted)' }
+      workflow:     { type: object, required: false, description: 'Per-stage config; vayapin follows what you send here' }
+      test:         { type: boolean, required: false, description: 'Route to test queue' }
+    response: { format: json }
+
+  # ── Monitor ──────────────────────────────────────────────────────────────
+  listCampaigns:
+    description: List campaigns with optional filters.
+    guidance: { use: "see existing campaigns before creating a duplicate", telemetry_signal_default: "warm" }
+    http: GET /jobs/spiderMaps/campaigns
+    params:
+      status:       { type: string, required: false, description: 'active | completed | stopped' }
+      country_code: { type: string, required: false }
+    response: { format: json }
+
+  getCampaignStatus:
+    description: Per-stage campaign progress with a velocity-based ETA.
+    guidance: { use: "poll campaign progress", warn: "poll no faster than every 5s — workers are seconds-to-minutes per location", telemetry_signal_default: "hot" }
+    http: GET /jobs/spiderMaps/campaigns/{campaign_id}/stage-progress
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+    response: { format: json }
+
+  getJobStatus:
+    description: Status of a single lead-search job.
+    guidance: { use: "poll a single run", warn: "poll >=3-5s", telemetry_signal_default: "hot" }
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id: { type: string, required: true, description: 'Job ID returned by searchLeads' }
+    response: { format: json }
+
+  # ── Control ──────────────────────────────────────────────────────────────
+  stopCampaign:
+    description: Halt dispatch of further locations (resumable).
+    guidance: { use: "stop a runaway campaign at once; in-flight jobs finish", next: "continueCampaign or deleteCampaign", telemetry_signal_default: "cold" }
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/stop
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+    response: { format: json }
+
+  continueCampaign:
+    description: Resume a stopped campaign from where it left off.
+    guidance: { use: "resume after a stop", next: "getCampaignStatus", telemetry_signal_default: "cold" }
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/continue
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+    response: { format: json }
+
+  retryLocation:
+    description: Re-run a single failed/completed location.
+    guidance:
+      use: "recover one location"
+      warn: "pick the narrowest retry_mode: verify (SMTP only) < site (keep Maps) < full (from scratch)"
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/locations/{location_id}/retry
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+      location_id: { type: integer, required: true, description: 'Location ID within the campaign (from getCampaignResults / listCampaigns)' }
+      retry_mode:  { type: string, required: false, description: 'full (default) | site | verify' }
+    response: { format: json }
+
+  retryFailedLocations:
+    description: Re-run every failed location, up to max_locations.
+    guidance:
+      use: "bulk-recover a campaign's failures"
+      warn: "locations already at the 3-retry limit are SKIPPED (skipped_count), not errored"
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/retry-failed
+    params:
+      campaign_id:   { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+      max_locations: { type: integer, required: false, description: 'cap on how many failed locations to retry' }
+    response: { format: json }
+
+  deleteCampaign:
+    description: Delete a campaign and its run/location rows.
+    guidance:
+      use: "remove a campaign you no longer need"
+      warn: "returns 409 while jobs are active — stop first. Does NOT unpublish VayaPin pins (those persist on cs.vayapin.com)."
+      telemetry_signal_default: "cold"
+    http: DELETE /jobs/spiderMaps/campaigns/{campaign_id}
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+    response: { format: json }
+
+  # ── Read results ─────────────────────────────────────────────────────────
+  getJobResults:
+    description: Aggregated output of a completed single run.
+    guidance: { use: "read a single run's results", telemetry_signal_default: "warm" }
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id: { type: string, required: true, description: 'Job ID returned by searchLeads' }
+    response: { format: json }
+
+  getCampaignResults:
+    description: One-shot aggregate of a campaign (Maps + Site + Verify per business).
+    guidance: { use: "dump a whole campaign once", next: "readResources for paged/filtered reads", telemetry_signal_default: "warm" }
+    http: GET /jobs/spiderMaps/campaigns/{campaign_id}/workflow-results
+    params:
+      campaign_id: { type: string, required: true, description: 'Campaign ID returned by createCampaign' }
+    response: { format: json }
+
+  readResources:
+    description: >
+      Query a campaign's normalized records via IDAP — paged, projectable,
+      flaggable. resource_type is businesses|contacts|emails|phones|domains
+      (pins read via include=pins on businesses, not as a type).
+    guidance:
+      use: "the read surface for campaign data — page, project fields, filter by flag"
+      warn: "GET /idap/pins 422s — read pins via ?include=pins on businesses (pins[].vayapin_url)"
+      telemetry_signal_default: "warm"
+    http: GET /idap/{resource_type}
+    params:
+      resource_type: { type: string, required: true, description: 'businesses | contacts | emails | phones | domains | company_registry | linkedin_profiles | staff | bookings | media' }
+      campaign_id:   { type: string, required: false, description: 'scope to one run' }
+      include:       { type: string, required: false, description: 'comma-separated relations, e.g. emails,phones,domains,pins (businesses)' }
+      fields:        { type: string, required: false, description: 'comma-separated projection' }
+      limit:         { type: integer, required: false, description: '1-500 (default 100)' }
+      cursor:        { type: string, required: false, description: 'next-page token' }
+      format:        { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
