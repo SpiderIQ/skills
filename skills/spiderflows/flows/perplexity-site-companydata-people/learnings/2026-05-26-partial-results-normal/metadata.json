@@ -1,0 +1,14 @@
+{
+  "title": "Five stages are independently optional and independently fallible — partial briefs are normal",
+  "summary": "The chain runs Perplexity -> SpiderSite -> SpiderCompanyData -> SpiderPeople -> SpiderVerify in sequence, but each stage is toggled independently (config.<stage>.enabled) and can come back empty without failing the run: no LinkedIn page found, registry miss, a site with no emails. A completed job with an empty section is a legitimate partial brief. Read each stage's status, not just the top-level job status, before telling the user a field is missing. Also: company_registry and linkedin_profiles are STANDALONE IDAP types, not include= relations on businesses.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["partial-failure", "stages", "idap", "results"],
+  "references": [
+    "app/flows/company-intel.yaml:10-15 — steps: perplexity-discovery, siteScraper, companyRegistry, linkedinProfiles, emailVerify",
+    "app/schemas/company_intel.py:14-47 — each stage has its own enabled toggle",
+    "app/services/idap_service.py:33-34 — company_registry + linkedin_profiles are top-level TABLE_MAP types",
+    "app/services/idap_service.py:124-131 — INCLUDE_MAP[businesses] = emails/phones/domains/contacts/pins (NO registry/linkedin)",
+    "recipes/read-results.md, recipes/results-shape.md"
+  ]
+}

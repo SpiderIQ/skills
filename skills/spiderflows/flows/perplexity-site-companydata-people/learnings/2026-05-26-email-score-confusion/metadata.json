@@ -1,0 +1,13 @@
+{
+  "title": "A 'valid' email can score low — the 0-100 score penalizes catch-all / disposable / role",
+  "summary": "SpiderVerify returns each email with a status (valid/risky/invalid/unknown) AND a 0-100 score. The score starts at 50 and penalizes catch-all (-15), disposable (-30), and role accounts (-10), so a syntactically valid, MX-present, deliverable address on a catch-all domain lands in the 60s and a valid disposable can score ~30. status:valid + a mid score is not a contradiction — explain it from the quality flags. Verification is also deliberately slow (rate-limited per email to protect deliverability), so a company with many emails adds real time; cap max_emails when you only need a few.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "email-score", "timing"],
+  "references": [
+    "docs/services/spiderverifyer/LEARNINGS.md:182-191 — scoring algorithm (base 50, catch-all -15, disposable -30, role -10)",
+    "docs/services/spiderverifyer/LEARNINGS.md:164-169 — 3-second delay between verifications is critical (slow by design)",
+    "app/schemas/company_intel.py:34-36 — VerifyConfig enabled + max_emails 1-200",
+    "recipes/results-shape.md"
+  ]
+}

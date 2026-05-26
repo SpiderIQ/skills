@@ -10,9 +10,15 @@ description: >
   (campaign); you submit, poll or stream progress, then read results. This one
   skill covers the client surfaces (HTTP / CLI / MCP), the Bearer PAT, response
   formats, live progress, reading results, and the cost gate every flow shares —
-  plus each flow's payload and recipes. Today it implements the lead /
+  plus each flow's payload and recipes. It implements the lead /
   local-business pipeline (Maps → Site → Verify → VayaPin), sold as both
-  leadSearch and localSeo; more flows are added here as recipes.
+  leadSearch and localSeo; and the company-intel pipeline
+  (flow:perplexity-site-companydata-people, marketed as Company Intel) — one
+  company name in, a full account brief out (domain, registry filing, LinkedIn
+  team, verified emails). Trigger company-intel on: "research <company>",
+  "company intel", "account brief", "enrich this company / vendor list", "KYC
+  enrichment", "find a company's domain / registry number / LinkedIn / employees".
+  More flows are added here as recipes.
 ---
 
 # SpiderFlows
@@ -37,6 +43,22 @@ on Google Maps    (emails, phones,      (deliverability,    (optional; see the
 
 `leadSearch` (verified-leads output) and `localSeo` (published-pin output) are the
 **same** chain — the only difference is whether the vayapin stage publishes.
+
+The second flow — **company-intel** — goes the other way: you start from a
+**company name** (not a place) and get back a full account brief.
+
+```
+flow:perplexity-site-companydata-people   (marketed as Company Intel)
+Perplexity        SpiderSite        SpiderCompanyData   SpiderPeople     SpiderVerify
+discover domain → crawl the site → registry filing →   LinkedIn team → verify the
++ LinkedIn URL    (emails, team)    (UK/US/EU registry)  (employees)     extracted emails
+```
+
+Run it for one company (an account brief) or a list of up to 50 (KYC / list
+enrichment). It is a **single + batch** flow — there is no campaign / location
+fan-out (that's the lead chain). Results come back as a per-company brief via
+`GET /jobs/{job_id}/results`, with registry + LinkedIn also queryable as their own
+IDAP types.
 
 ## Approach
 
@@ -96,6 +118,9 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | read the businesses, emails, phones, and pins a run produced | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
+| research ONE company → a full account brief (domain, registry, LinkedIn, emails) | [flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md) |
+| enrich a LIST of companies (KYC / list enrichment, up to 50) | [flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md) |
+| read a company-intel run's brief (registry / LinkedIn / emails via IDAP) | [flows/perplexity-site-companydata-people/recipes/read-results.md](flows/perplexity-site-companydata-people/recipes/read-results.md) |
 | understand poll-vs-SSE progress and realistic timing | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 
 ## Per-stage settings (quick map — full detail in the reference)
@@ -120,6 +145,8 @@ This skill ships as typed tool calls generated from `client/schema.yaml`:
 | `retryLocation` / `retryFailedLocations` | recover failures | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | `deleteCampaign` | delete (409 if active; pins persist) | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | `getJobResults` / `getCampaignResults` / `readResources` | read results (IDAP) | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
+| `researchCompany` | research ONE company (account brief) | [flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md) |
+| `researchCompaniesBatch` | enrich a LIST of companies (≤50, KYC) | [flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md) |
 
 The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 `telemetry_signal_default`, plus skill-level `intent_aliases`) lives in
@@ -140,7 +167,14 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md)** — what vayapin publishes, the opt-out, verifying pins.
 - **[flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md](flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md)** — the fields a finished business record carries.
 
+**flow:perplexity-site-companydata-people (Company Intel):**
+- **[flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md)** · **[flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md)** — submit (one company / a list of ≤50).
+- **[flows/perplexity-site-companydata-people/recipes/read-results.md](flows/perplexity-site-companydata-people/recipes/read-results.md)** — read the account brief (registry + LinkedIn are standalone IDAP types).
+- **[flows/perplexity-site-companydata-people/recipes/per-stage-settings.md](flows/perplexity-site-companydata-people/recipes/per-stage-settings.md)** — every `config` setting per stage. **Read before composing a non-trivial `config`.**
+- **[flows/perplexity-site-companydata-people/recipes/results-shape.md](flows/perplexity-site-companydata-people/recipes/results-shape.md)** — the fields a finished company brief carries.
+
 ## See also
 
-- `learnings/` — the cost-runaway, vayapin-default-on, and geo-disambiguation lessons (starting points, not ground truth — verify against current code).
-- `flows/maps-site-verify-vayapin/scripts/verify-pipeline-complete.sh` — audits a finished run against its expected stages.
+- `flows/*/learnings/` — per-flow lessons (cost-runaway / vayapin-default-on / geo-disambiguation for the lead chain; hints-skip-stages / registry-coverage / partial-results / email-score for company-intel) — starting points, not ground truth; verify against current code.
+- `flows/maps-site-verify-vayapin/scripts/verify-pipeline-complete.sh` — audits a finished lead run against its expected stages.
+- `flows/perplexity-site-companydata-people/scripts/verify-intel-complete.sh` — audits a finished company-intel run against its five stages.

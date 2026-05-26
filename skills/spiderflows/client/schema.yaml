@@ -12,11 +12,14 @@
 name: spiderflows
 version: "0.1.0"
 description: >
-  Run SpiderIQ flows — server-side scrape/enrich pipelines. Today: the lead and
+  Run SpiderIQ flows — server-side scrape/enrich pipelines. The lead and
   local-business chain (Maps → Site → Verify → optional VayaPin), sold as both
-  leadSearch and localSeo (one pipeline, differing only by the vayapin stage).
-  Single location or multi-location campaign, full lifecycle, results via IDAP.
-  Replaces the separate lead-search + campaigns skills.
+  leadSearch and localSeo (one pipeline, differing only by the vayapin stage);
+  single location or multi-location campaign, full lifecycle, results via IDAP.
+  And the company-intel chain (Perplexity → Site → Registry → LinkedIn → Verify):
+  one company name in, a full account brief out (domain, registry filing,
+  LinkedIn team, verified emails); single or batch (≤50). Replaces the separate
+  lead-search + campaigns skills.
 category: data-collection
 base_url: /api/v1
 auth:
@@ -35,20 +38,29 @@ triggers:
   - lead search
   - local seo
   - google maps scrape with contact details
+  - research a company
+  - company intel
+  - account brief
+  - enrich a company list
+  - kyc enrichment
 
 guidance:
   use: >
     Discover businesses + verified contact emails for a place (single) or across
-    many locations (campaign). Maps -> Site -> Verify -> (optional) VayaPin.
+    many locations (campaign) via Maps -> Site -> Verify -> (optional) VayaPin;
+    OR research a company by NAME into a full account brief (domain, registry
+    filing, LinkedIn team, verified emails) via Perplexity -> Site -> Registry ->
+    LinkedIn -> Verify (researchCompany single / researchCompaniesBatch ≤50).
   not:
-    - "find-people-extract-linkedin-profile -> look up one named person"
     - "scrape-google-maps -> Maps listings only, no site crawl or email verify"
     - "verify-email-deliverability -> verify a list of emails you already have"
-  intent_aliases: ["search_query", "query"]
+    - "find-people-extract-linkedin-profile -> one named PERSON (company-intel is company-first)"
+  intent_aliases: ["search_query", "query", "company_name"]
   pitfalls:
     - "Campaign filter.mode 'all'/'cities_only' over a country fans to thousands of locations — size it first."
     - "vayapin publishes PERMANENT public pins; deleting the campaign does not remove them. Set vayapin.enabled explicitly."
     - "Single mode: location goes in search_query OR location, never both. Campaign mode: keep search_query bare."
+    - "company-intel: pass domain/linkedin_url hints when known (they skip a discovery step). Registry resolves UK/US/EU only; empty registry/LinkedIn is a normal partial brief. Batch caps at 50 companies."
 
 methods:
   searchLeads:
@@ -214,4 +226,51 @@ methods:
       limit:         { type: integer, required: false, description: '1-500 (default 100)' }
       cursor:        { type: string, required: false, description: 'next-page token' }
       format:        { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  # ── flow:perplexity-site-companydata-people (Company Intel) ──────────────
+  # One company name -> account brief. Perplexity discovery -> Site -> Registry
+  # -> LinkedIn people -> Verify. Single + batch only (no campaign fan-out).
+  # Read the brief via getJobResults; registry + LinkedIn are standalone IDAP
+  # types (readResources resource_type=company_registry | linkedin_profiles).
+  researchCompany:
+    description: >
+      Research ONE company by name through the full intelligence chain
+      (Perplexity discovery -> Site crawl -> registry filing -> LinkedIn team ->
+      email verify). Returns a job_id to poll; getJobResults yields the brief.
+    guidance:
+      use: "one company -> a full account brief (domain, registry, LinkedIn, verified emails)"
+      next: "getJobStatus, then getJobResults"
+      warn: "pass domain/linkedin_url hints when known — they skip a discovery step (cheaper, more accurate). Registry resolves UK/US/EU only; empty registry/LinkedIn is a normal partial brief, not a failure."
+      telemetry_signal_default: "cold"
+    http: POST /company-intel
+    params:
+      company_name:  { type: string, required: true, description: 'Company to research (1-255 chars), e.g. "Acme Corp"' }
+      city:          { type: string, required: false, description: 'City hint — sharpens Perplexity discovery + constrains registry' }
+      country_code:  { type: string, required: false, description: 'ISO 2-letter; constrains registry. GB auto-enables UK financials (~$0.05).' }
+      domain:        { type: string, required: false, description: 'Known domain — SKIPS Perplexity domain discovery' }
+      linkedin_url:  { type: string, required: false, description: 'Known LinkedIn company URL — SKIPS LinkedIn discovery' }
+      profile_mode:  { type: string, required: false, description: 'Employee detail: short (default) | full | full_email — higher = slower/pricier' }
+      max_employees: { type: integer, required: false, description: 'Employees from LinkedIn, 1-2000 (default 20)' }
+      config:        { type: object, required: false, description: 'Per-stage toggles: { discovery, spidersite{mode,max_pages,extract_*}, spidercompanydata{country,include_financials}, spiderverify{max_emails}, spiderpeople{max_employees,profile_mode} } — each has enabled' }
+      test:          { type: boolean, required: false, description: 'Route to test queues' }
+    response: { format: json }
+
+  researchCompaniesBatch:
+    description: >
+      Research a LIST of companies (up to 50) through the same chain — KYC /
+      list enrichment. One job_id covers the whole batch; getJobResults returns
+      one brief per company.
+    guidance:
+      use: "enrich many companies at once (≤50) — KYC, vendor lists, ABM target lists"
+      next: "getJobStatus (poll >=3-5s), then getJobResults"
+      warn: "hard cap 50/batch (422 over). Put each company's domain/linkedin_url hint on ITS entry; top-level profile_mode/max_employees/config are shared. Default profile_mode=short for large lists — full/full_email scale cost steeply."
+      telemetry_signal_default: "cold"
+    http: POST /company-intel/batch
+    params:
+      companies:     { type: array,   required: true,  description: '1-50 entries; each a company object {company_name, city?, country_code?, domain?, linkedin_url?, config?}' }
+      profile_mode:  { type: string,  required: false, description: 'Shared employee detail for all: short | full | full_email' }
+      max_employees: { type: integer, required: false, description: 'Shared per-company employee cap, 1-2000' }
+      config:        { type: object,  required: false, description: 'Shared per-stage config (per-company config overrides)' }
+      test:          { type: boolean, required: false, description: 'Route to test queues' }
     response: { format: json }

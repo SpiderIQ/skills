@@ -1,0 +1,13 @@
+{
+  "title": "Discovery hints skip a stage — pass domain / linkedin_url when you have them",
+  "summary": "company_name is the only required field, but every hint you add either sharpens Perplexity discovery (city + country_code) or skips a discovery sub-step entirely: domain skips Perplexity domain discovery and starts the crawl immediately; linkedin_url skips LinkedIn discovery and points SpiderPeople straight at the page. Skipping is cheaper and more accurate. Agents that pass only the name pay for discovery they didn't need.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["discovery", "perplexity", "hints", "cost"],
+  "references": [
+    "app/schemas/company_intel.py:55-56 — domain 'skips Perplexity discovery', linkedin_url 'Known LinkedIn company URL'",
+    "app/flows/company-intel.yaml:34-41 — domain hint 'skips Perplexity domain discovery', linkedin_url 'skips Perplexity LinkedIn discovery'",
+    "windmill-scripts/spiderperplexity.py:47-69 — discovery prompt uses company_name + city/country_code location_hint",
+    "recipes/run-single.md, recipes/per-stage-settings.md"
+  ]
+}

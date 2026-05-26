@@ -1,0 +1,14 @@
+{
+  "title": "Registry resolves UK / US / EU only — and UK financials cost money",
+  "summary": "SpiderCompanyData reads free public registries: UK Companies House, US SEC EDGAR, EU VIES (VAT). A company outside those three jurisdictions returns an empty registry — that is expected, not a failure; never promise a filing for every company. Financials are UK-only and cost ~$0.05/company via OCR (auto-enabled when country_code=GB). UK small/micro filings (AA01/AA02) omit revenue/P&L, so financial fields can be null even when the filing resolves.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["registry", "companydata", "coverage", "cost", "financials"],
+  "references": [
+    "docs/services/SpiderCompanyData/CLAUDE.md:5 — 'free public registries (US SEC, UK Companies House, EU VIES)'",
+    "docs/services/SpiderCompanyData/CLAUDE.md:189-194 — financials url_only FREE vs ocr/auto $0.05",
+    "docs/services/SpiderCompanyData/LEARNINGS.md:161-164 — AA01/AA02/AAS filings omit turnover/P&L",
+    "app/api/v1/company_intel.py:122-124 — country_code GB auto-enables include_financials",
+    "app/schemas/company_intel.py:29-32 — CompanyDataConfig country 'auto', include_financials UK only ~$0.05"
+  ]
+}
