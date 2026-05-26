@@ -41,13 +41,13 @@ on Google Maps    (emails, phones,      (deliverability,    (optional; see the
 ## Approach
 
 - **Single location** — one city, one search. Fastest; use
-  [references/run-single.md](references/run-single.md). Always safe on cost.
+  [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md). Always safe on cost.
 - **Campaign** — the same search across many locations (a country/region/population
-  band). Use [references/run-campaign.md](references/run-campaign.md), and respect
-  the cost gate first ([references/cost-check.md](references/cost-check.md)).
+  band). Use [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md), and respect
+  the cost gate first ([flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md)).
 - **Manage / read** — stop, resume, retry, delete, and read results out
-  through IDAP. See [references/manage-campaign.md](references/manage-campaign.md)
-  and [references/read-results.md](references/read-results.md).
+  through IDAP. See [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md)
+  and [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md).
 
 <HARD-GATE name="cost-budget">
 Before submitting a **campaign**, know how many locations it will fan out to. A
@@ -57,7 +57,7 @@ city — one `(country: DE)` campaign once fanned to **1,733 locations** and bur
 without a `population` or `regions` narrowing, STOP: narrow the filter, or submit
 and immediately check `total_locations` in the response and `stopCampaign` if it is
 larger than intended. A single-location run is always safe — this gate is campaigns
-only. ([references/cost-check.md](references/cost-check.md))
+only. ([flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md))
 </HARD-GATE>
 
 <HARD-GATE name="vayapin-default-on">
@@ -69,7 +69,7 @@ omitted `workflow`; whatever you send on a campaign), so **never rely on the def
 list* (data to export / outreach) and did NOT ask to publish anything, set
 `{"workflow": {"vayapin": {"enabled": false}}}`. Only set it `true` when the user
 explicitly wants published map profiles. When in doubt, ask — you cannot undo a
-published pin. ([references/vayapin-export.md](references/vayapin-export.md))
+published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md))
 </HARD-GATE>
 
 ## Rules (Non-Negotiable)
@@ -91,21 +91,21 @@ published pin. ([references/vayapin-export.md](references/vayapin-export.md))
 | The user wants to… | Read |
 |---|---|
 | understand the surfaces / auth / `?format=yaml` before the first call | [references/surfaces-and-auth.md](references/surfaces-and-auth.md) |
-| run one city / one search (lead list or local SEO) | [references/run-single.md](references/run-single.md) |
-| run a search across many locations (country / region / population band) | [references/run-campaign.md](references/run-campaign.md) |
-| check how big a campaign will be BEFORE submitting | [references/cost-check.md](references/cost-check.md) |
-| stop / resume / retry / delete a campaign | [references/manage-campaign.md](references/manage-campaign.md) |
-| read the businesses, emails, phones, and pins a run produced | [references/read-results.md](references/read-results.md) |
+| run one city / one search (lead list or local SEO) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
+| run a search across many locations (country / region / population band) | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
+| check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
+| stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
+| read the businesses, emails, phones, and pins a run produced | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
 | understand poll-vs-SSE progress and realistic timing | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 
 ## Per-stage settings (quick map — full detail in the reference)
 
 | Stage | Key settings | Reference |
 |---|---|---|
-| Maps | `search_query`, `country_code`, `max_results` (1–500), `lang` | [references/per-stage-settings.md](references/per-stage-settings.md) |
-| Site | `mode` (contacts / compendium / leads / full), `max_pages`, `extract_team`, CHAMP `product_description`+`icp_description` | [references/per-stage-settings.md](references/per-stage-settings.md) |
-| Verify | `check_gravatar`, `check_dnsbl`, `max_emails_per_business` | [references/per-stage-settings.md](references/per-stage-settings.md) |
-| VayaPin | `enabled` (path-dependent default — see the HARD-GATE) | [references/vayapin-export.md](references/vayapin-export.md) |
+| Maps | `search_query`, `country_code`, `max_results` (1–500), `lang` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
+| Site | `mode` (contacts / compendium / leads / full), `max_pages`, `extract_team`, CHAMP `product_description`+`icp_description` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
+| Verify | `check_gravatar`, `check_dnsbl`, `max_emails_per_business` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
+| VayaPin | `enabled` (path-dependent default — see the HARD-GATE) | [flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md) |
 
 ## Methods (native tool calls — opvsHUB & marketplace)
 
@@ -113,13 +113,13 @@ This skill ships as typed tool calls generated from `client/schema.yaml`:
 
 | Method | Does | Recipe |
 |---|---|---|
-| `searchLeads` | run one location (single) | [references/run-single.md](references/run-single.md) |
-| `createCampaign` | run across many locations | [references/run-campaign.md](references/run-campaign.md) |
+| `searchLeads` | run one location (single) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
+| `createCampaign` | run across many locations | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
 | `listCampaigns` / `getCampaignStatus` / `getJobStatus` | list + poll progress | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
-| `stopCampaign` / `continueCampaign` / `updateCampaign` | halt / resume / edit config | [references/manage-campaign.md](references/manage-campaign.md) |
-| `retryLocation` / `retryFailedLocations` | recover failures | [references/manage-campaign.md](references/manage-campaign.md) |
-| `deleteCampaign` | delete (409 if active; pins persist) | [references/manage-campaign.md](references/manage-campaign.md) |
-| `getJobResults` / `getCampaignResults` / `readResources` | read results (IDAP) | [references/read-results.md](references/read-results.md) |
+| `stopCampaign` / `continueCampaign` / `updateCampaign` | halt / resume / edit config | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
+| `retryLocation` / `retryFailedLocations` | recover failures | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
+| `deleteCampaign` | delete (409 if active; pins persist) | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
+| `getJobResults` / `getCampaignResults` / `readResources` | read results (IDAP) | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
 
 The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 `telemetry_signal_default`, plus skill-level `intent_aliases`) lives in
@@ -133,14 +133,14 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[references/reading-results.md](references/reading-results.md)** — the IDAP read surface (resource types, `include`, paging).
 
 **flow:maps-site-verify-vayapin:**
-- **[references/run-single.md](references/run-single.md)** · **[references/run-campaign.md](references/run-campaign.md)** · **[references/cost-check.md](references/cost-check.md)** — submit.
-- **[references/manage-campaign.md](references/manage-campaign.md)** — stop / resume / retry / delete.
-- **[references/read-results.md](references/read-results.md)** — read this chain's results.
-- **[references/per-stage-settings.md](references/per-stage-settings.md)** — every setting per stage. **Read before composing a non-trivial `workflow` block.**
-- **[references/vayapin-export.md](references/vayapin-export.md)** — what vayapin publishes, the opt-out, verifying pins.
-- **[references/campaign-results-shape.md](references/campaign-results-shape.md)** — the fields a finished business record carries.
+- **[flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md)** · **[flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md)** · **[flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md)** — submit.
+- **[flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md)** — stop / resume / retry / delete.
+- **[flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md)** — read this chain's results.
+- **[flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md)** — every setting per stage. **Read before composing a non-trivial `workflow` block.**
+- **[flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md)** — what vayapin publishes, the opt-out, verifying pins.
+- **[flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md](flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md)** — the fields a finished business record carries.
 
 ## See also
 
 - `learnings/` — the cost-runaway, vayapin-default-on, and geo-disambiguation lessons (starting points, not ground truth — verify against current code).
-- `scripts/verify-pipeline-complete.sh` — audits a finished run against its expected stages.
+- `flows/maps-site-verify-vayapin/scripts/verify-pipeline-complete.sh` — audits a finished run against its expected stages.
