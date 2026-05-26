@@ -1,0 +1,12 @@
+{
+  "title": "Verification is slow by design — ~3s/email, budget minutes for a list",
+  "summary": "SpiderVerify rate-limits to ~3 seconds between SMTP probes (~20/minute per worker) to protect sender reputation — going faster gets the verifying IPs blacklisted, which takes days to undo. So a single email is 3-10s and a full batch of 100 is roughly 5-8 minutes, not seconds. Set the user's expectation up front, poll no faster than every 3-5s (a tight loop burns your tokens and doesn't speed the workers), and prefer smaller targeted lists over verifying everything speculatively. Throughput scales by adding workers, not by lowering the delay.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "timing", "rate-limit"],
+  "references": [
+    "docs/services/spiderverifyer/LEARNINGS.md:164-169 — 3-second delay is critical (never reduce below 3s)",
+    "app/api/v1/jobs/spiderverify.py:56-75 — rate limiting + processing-time notes (single 3-10s, bulk-100 5-8min)",
+    "references/run-modes-and-progress.md"
+  ]
+}

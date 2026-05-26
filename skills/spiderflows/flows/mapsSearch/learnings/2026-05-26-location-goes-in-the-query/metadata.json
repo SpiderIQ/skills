@@ -1,0 +1,14 @@
+{
+  "title": "Location goes IN the query — there is no location/country_code field on a single Maps job",
+  "summary": "The mapsSearch flow YAML advertises location and country_code in its input_schema, but the single Maps worker reads neither — it reads search_query/url, max_results, lang, country, extract_reviews, extract_photos. country_code and filter are campaign-only; the single SpiderMapsJobPayload doesn't even define location/country_code (extra fields are dropped). So embed the place in search_query ('plumbers in Berlin'). The marketing schema is aspirational; the worker contract is what runs.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["payload", "location", "country_code", "input-schema-divergence", "single"],
+  "references": [
+    "app/schemas/spidermaps.py:13-105 — SpiderMapsJobPayload has NO location/country_code field (only search_query/url/max_results/lang/extract_reviews/extract_photos/...)",
+    "workers/SpiderBrowser/skills/googlemaps/search.py:108-117 — worker reads search_query, max_results, lang, country (NOT country_code); never reads 'location'",
+    "app/flows/mapsSearch.yaml:19-28 — input_schema advertises location + country_code (max_results up to 500), none honored by the single worker",
+    "docs/services/SpiderMaps/CLAUDE.md:177-178 — country_code + filter are 'Campaign-only', ❌ for single jobs",
+    "recipes/run-single.md, recipes/per-stage-settings.md"
+  ]
+}

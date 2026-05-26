@@ -1,0 +1,15 @@
+{
+  "title": "vat mode validates a VAT number via VIES — it is not company enrichment, and VIES is flaky",
+  "summary": "vat mode calls EU VIES to validate a VAT number + return the registered entity name/address — a validation, not a full profile (no officers/filings/financials). VIES accepts 28 codes (AT BE BG CY CZ DE DK EE EL ES FI FR HR HU IE IT LT LU LV MT NL PL PT RO SE SI SK XI): note EL=Greece (not GR) and XI=Northern Ireland (GB is NOT in VIES post-Brexit). The number is cleaned (spaces/dashes/dots stripped) before parsing. valid:false WITH an error key = couldn't validate (unsupported country / VIES fault / service down — retry the same well-formed number); valid:false WITHOUT error = genuinely invalid. valid:true can still have company_name:null (some member states return validity without the name). vat results do NOT normalize into IDAP company_registry (no name/source_id) — read via /jobs/{id}/results data.data.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["vat", "vies", "validation", "upstream-flakiness", "retry", "country-codes"],
+  "references": [
+    "windmill-scripts/spidercompanydata_vat.py:37-41 — EU_COUNTRY_CODES (28; EL not GR; XI; no GB)",
+    "windmill-scripts/spidercompanydata_vat.py:46-57 — _parse_vat_number strips separators, prefix must be 2 alpha",
+    "windmill-scripts/spidercompanydata_vat.py:60-138 — valid:false+error (unsupported/fault) vs valid:false alone (invalid); company_name/address from VIES",
+    "windmill-scripts/spidercompanydata_vat.py:191-195 — response {success, data{vat_result}, query_time_ms}",
+    "docs/services/SpiderCompanyData/LEARNINGS.md:101-104 — VIES intermittent malformed XML, retry + graceful error",
+    "app/jobs/crm_sync_worker.py:1166-1168 — normalizer requires name+source_id -> vat dict skipped (not in IDAP)"
+  ]
+}

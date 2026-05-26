@@ -1,0 +1,13 @@
+{
+  "title": "mode sets the page budget AND the AI features; max_pages is hard-capped at 50",
+  "summary": "mode is the primary control: contacts=5 pages/no AI, compendium=10/no AI, leads=50/team+company, full=100/everything+scoring. The standalone max_pages field is validated 1-50 on both the API and the flow input_schema, so you CANNOT request >50 via max_pages — full mode's ~100-page budget comes from the mode preset only. For guaranteed behavior, set the specific knobs you need explicitly (max_pages within 1-50, extract_team, compendium, etc.) rather than relying solely on mode defaults; the explicit fields are always honored. Use overrides to change a mode default, e.g. overrides:{max_pages:20}.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["site", "mode", "max-pages"],
+  "references": [
+    "workers/SpiderSite/modes.py:85-169 — mode page counts (5/10/50/100) + which AI each enables",
+    "app/schemas/spider_site.py:204-209 — max_pages Field(ge=1, le=50)",
+    "app/flows/siteScraper.yaml:26-32 — flow input_schema max_pages maximum 50",
+    "recipes/crawl-options.md"
+  ]
+}

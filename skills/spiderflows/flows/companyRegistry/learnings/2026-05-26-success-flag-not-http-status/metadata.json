@@ -1,0 +1,15 @@
+{
+  "title": "HTTP 200 is not 'found' — the verdict is the worker's data.success / data.data.valid",
+  "summary": "The worker posts every outcome (incl. not-found and unsupported-country) to /jobs/{id}/complete, never /fail, so a missed lookup is still status:completed / HTTP 200. There are two success flags: envelope.success/status = the JOB ran; data.success = the LOOKUP landed. search is always data.success:true (check total_results/results.length); lookup success:false carries data.error ('Company not found' / 'Unsupported country: XX') and no data.data; vat is always success:true with the verdict at data.data.valid. CRITICAL ambiguity: search swallows upstream UK/US API errors and returns success:true, results:[], total_results:0 — identical to a genuine no-match — so an empty search is worth ONE retry, then treat as no-match. Always read data.success/data.error before concluding; a confident wrong 'found it' off a success:false is the costliest agent error here.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["results", "success-flag", "error-handling", "accuracy", "http-status"],
+  "references": [
+    "app/api/v1/jobs/status.py:393-410 — /jobs/{id}/results returns raw worker response under data (no transform) for spiderCompanyData",
+    "windmill-scripts/spidercompanydata_lookup.py:359-379 — _post_results always posts to /complete (even error_result)",
+    "windmill-scripts/spidercompanydata_lookup.py:403-433 — missing identifier / unsupported country / not-found all -> success:false posted to /complete",
+    "windmill-scripts/spidercompanydata_search.py:56-58 — UK API non-200 swallowed -> returns [] (success:true, total_results:0)",
+    "windmill-scripts/spidercompanydata_search.py:284-291 — search envelope success:true regardless of result count",
+    "windmill-scripts/spidercompanydata_vat.py:191-199 — vat success:true; verdict is data.valid"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "title": "'unknown' is not 'invalid' — it means the probe failed, not the address",
+  "summary": "An `unknown` status reflects the SMTP probe, not the mailbox: the receiving server was unreachable, timed out, rate-limited, or greylisted. The address may be perfectly real. Don't discard `unknown` rows or fold them into 'bad' — surface them as 'couldn't determine, re-verify later'. Lowering smtp_timeout_secs trades speed for MORE unknowns (slow-but-real servers get cut off). Common causes: port 25 blocked at the destination, the verifier's IP being throttled, or transient greylisting that resolves on a retry minutes later.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "status", "unknown", "retry"],
+  "references": [
+    "docs/services/spiderverifyer/CLAUDE.md:254-274 — status mapping + sub_status (smtp_unreachable, mailbox_not_found)",
+    "docs/services/spiderverifyer/LEARNINGS.md:217-222 — mail-server probe detection raises unknown rates",
+    "app/schemas/job.py:99-104 — smtp_timeout_secs (10-120): lower = more unknown",
+    "recipes/results-shape.md"
+  ]
+}

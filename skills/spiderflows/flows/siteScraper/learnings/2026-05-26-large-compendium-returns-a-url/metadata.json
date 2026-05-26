@@ -1,0 +1,14 @@
+{
+  "title": "A large compendium comes back as a download URL, not inline — 3-tier storage, 24h presigned TTL",
+  "summary": "The markdown compendium uses 3-tier storage by size: <1MB inline in the response, 1-10MB in PostgreSQL (fetched via API), >10MB in Cloudflare R2 as a presigned URL. A client that always expects inline markdown_compendium text will get a URL instead for big crawls and may break. R2 presigned URLs expire after 24 hours — a cached/stored URL 403s after that; re-fetch /jobs/{id}/results for a fresh one. To keep responses small set compendium.include_in_response=false (get the URL) or lower compendium.max_chars / use cleanup_level minimal.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["site", "compendium", "storage"],
+  "references": [
+    "docs/services/spidersite/LEARNINGS.md:133-140 — 3-tier storage thresholds",
+    "docs/services/spidersite/LEARNINGS.md:161-164 — R2 presigned URLs expire after 24h",
+    "app/schemas/spider_site.py:24-45 — CompendiumConfig max_chars, cleanup_level, include_in_response",
+    "recipes/crawl-options.md",
+    "recipes/results-shape.md"
+  ]
+}

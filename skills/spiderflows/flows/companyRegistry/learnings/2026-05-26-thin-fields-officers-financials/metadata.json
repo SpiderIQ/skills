@@ -1,0 +1,17 @@
+{
+  "title": "Worker never returns officers; US records are thin; financials are UK-only/mostly-paid/often-partial",
+  "summary": "The result schema and IDAP company_registry have officers/financials columns, but the live worker hard-codes officers:[] in BOTH search and lookup (never calls the appointments endpoint) — never promise directors from this flow. US (SEC EDGAR) records are thin: status is hard-coded 'active' (not real), incorporation/dissolution dates are null, search US records have no address (only name+CIK), and coverage is SEC-filing (public) companies only. UK (Companies House) records are the rich ones (real status, structured address, dates, SIC). Financials apply only to UK lookup with include_financials, ignored on US, absent from search; the worker has only url_only (free, URL) and auto/ocr (~$0.05 Mistral OCR) — ixbrl/regex coerced to auto (no free extraction). Figures are GBP and can be null on success (AA01/AA02 small/micro filings omit revenue/P&L); needs an AA* accounts filing with a document link.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["fields", "officers", "financials", "us-coverage", "schema-vs-worker"],
+  "references": [
+    "windmill-scripts/spidercompanydata_search.py:82,84 — search hardcodes officers:[], financials:null",
+    "windmill-scripts/spidercompanydata_lookup.py:102 — lookup hardcodes officers:[]",
+    "windmill-scripts/spidercompanydata_search.py:130-154 — US search: name+CIK+status hardcoded 'active', address null, dates null",
+    "windmill-scripts/spidercompanydata_lookup.py:326-350 — US lookup: status 'active', incorporation_date null",
+    "windmill-scripts/spidercompanydata_lookup.py:436-441 — financials UK-only (country=='GB')",
+    "windmill-scripts/spidercompanydata_lookup.py:437 — financials_mode coerced to auto unless url_only/ocr/auto",
+    "windmill-scripts/spidercompanydata_lookup.py:184-192,266-280 — url_only (free) vs mistral_ocr (~$0.05); fields revenue/net_income/total_assets/.../fiscal_year_end",
+    "docs/services/SpiderCompanyData/LEARNINGS.md:161-164 — AA01/AA02 omit turnover/P&L"
+  ]
+}

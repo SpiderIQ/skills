@@ -1,0 +1,12 @@
+{
+  "title": "company mode's profile_mode is a cost dial — short / full / full_email map to $4 / $8 / $12 per 1K",
+  "summary": "Only company mode uses profile_mode, and it sets BOTH per-employee detail and per-employee cost via the Apify harvestapi scraper modes: short ($4/1K, name+title), full ($8/1K, +skills/education/experience), full_email ($12/1K, +discovered email). Cost is max_employees x profile_mode, so a 2000-employee full_email pull is large, slow, and expensive. Default short; reserve full/full_email for short, high-value rosters. profile_mode has no effect in profile or search mode.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["company-mode", "cost", "profile_mode", "apify"],
+  "references": [
+    "app/schemas/spider_people.py:60-66 — profile_mode Literal short|full|full_email, 'short ($4/1K), full ($8/1K), full_email ($12/1K)'",
+    "docs/services/spiderpeople/CLAUDE.md:125 — Apify mode strings 'Short ($4 per 1k)' / 'Full ($8 per 1k)' / 'Full + email search ($12 per 1k)'",
+    "recipes/run-company.md, recipes/per-mode-settings.md"
+  ]
+}

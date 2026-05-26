@@ -1,0 +1,14 @@
+{
+  "title": "Don't override from_email / hello_name — you bypass the warmed, PTR-matched rotation",
+  "summary": "The worker rotates across 50 pre-warmed sending identities, each on an IP whose reverse-DNS (PTR) matches its EHLO/HELO hostname. That PTR<->EHLO match is the single most important factor in not getting rejected by Gmail/Outlook — a mismatch causes >50% rejection, which surfaces to the client as inflated unknown/risky rates and WORSE accuracy. A fresh from_email has zero sender reputation (warmup takes 2-4 weeks) and gets greylisted. The payload lets you override both (from_email/hello_name), but empty/omitted = the worker's warmed rotated identity, which is almost always what you want. Only override as a MATCHED pair if you operate your own warmed infra with matching PTR.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "deliverability", "from_email", "hello_name", "smtp"],
+  "references": [
+    "docs/services/spiderverifyer/LEARNINGS.md:195-204 — PTR record is the most critical DNS config (mismatch >50% rejection)",
+    "docs/services/spiderverifyer/LEARNINGS.md:155-160 — warmup requires 2-4 weeks before reliable results",
+    "docs/services/spiderverifyer/LEARNINGS.md:106-111 — rotation across warmed identities; static fallback defeats it",
+    "workers/SpiderVerify/verification_engine.py:255-281 — _build_reacher_request: payload override OR rotator OR static",
+    "recipes/verification-options.md"
+  ]
+}

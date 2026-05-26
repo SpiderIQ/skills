@@ -1,0 +1,14 @@
+{
+  "title": "rating 4.0 / reviews_count 1024 can be anti-bot placeholders, not real data",
+  "summary": "When Google detects automation it serves a reduced 'compact' JSON format with only name + place_id; its rating defaults to 4.0 and reviews_count to 1024. These are placeholders. The worker's DOM-extraction layer fills the real values when it can, but if you see exactly 4.0 / 1024 repeated across listings, treat them as suspect. Missing website/phone/address is also normal (not every business lists them) — don't conflate a data gap with an extraction failure.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["results", "compact-format", "dummy-values", "rating", "reviews"],
+  "references": [
+    "docs/services/SpiderMaps/CLAUDE.md:402-413 — Full vs Compact format; 'reviews_count == 1024' and 'rating == 4.0' are placeholders from compact",
+    "docs/services/SpiderMaps/LEARNINGS.md:31-35 — '#2 Dummy Values from Compact Format'",
+    "docs/services/SpiderMaps/LEARNINGS.md:87-91 — '#9 Missing Data != Extraction Failure'",
+    "docs/services/SpiderBrowser/LEARNINGS.md:217-221 — COMPACT format is expected (TLS fingerprint detection), DOM layer fills gaps",
+    "recipes/results-shape.md"
+  ]
+}

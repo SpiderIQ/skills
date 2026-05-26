@@ -1,0 +1,12 @@
+{
+  "title": "An identical payload within 24h returns the cached job for free (from_cache) — don't re-submit in a loop",
+  "summary": "The job-submit layer hashes the payload and, if the same payload was submitted within the last 24 hours, returns the prior job instead of running (and billing) a new one — the submit response carries from_cache: true. For paid people calls this is a real cost lever: re-reading a profile/search/company you already ran today costs nothing and returns instantly. Conversely, re-submitting the SAME payload expecting 'fresher' data just returns the cache — to force a genuinely new scrape you must change a field (e.g. bump max_employees, change profile_mode, tweak the query). Cost per fresh run: profile ~$0.003, search ~$0.01, company $4/$8/$12 per 1K employees.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["cost", "dedup", "caching", "from_cache"],
+  "references": [
+    "app/api/v1/jobs/common.py:514 — 'Automatic deduplication: Returns cached job if submitted within 24 hours'",
+    "app/api/v1/jobs/common.py:584-606 — job hash computed from payload; cached hit returns from_cache=True",
+    "windmill-scripts/spiderpeople_profile.py:13 / _search.py:16 / _company.py:15 — per-call cost (~$0.003 / ~$0.01 / $4-12 per 1K)"
+  ]
+}

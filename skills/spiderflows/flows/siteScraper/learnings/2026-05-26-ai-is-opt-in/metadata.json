@@ -1,0 +1,14 @@
+{
+  "title": "AI is opt-in (zero tokens by default); CHAMP lead scoring needs BOTH product + ICP",
+  "summary": "By default a site crawl spends ZERO AI tokens — contacts/compendium modes do no LLM work. Team members, company vitals, and pain points only appear when you enable them (extract_team / extract_company_info / extract_pain_points, or mode leads/full which flips them on). CHAMP lead scoring requires BOTH product_description AND icp_description together — one without the other is a 422. custom_ai_prompt requires compendium.enabled=true and at least one of system/user prompt. An empty AI section in the results usually means the feature was off, not that the data was absent — check for null before telling the user 'no team found'.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["site", "ai", "champ", "cost"],
+  "references": [
+    "app/schemas/spider_site.py:232-253 — extract_* default False, product/icp optional",
+    "app/schemas/spider_site.py:309-330 — validate_champ_requirements: both-or-422",
+    "app/schemas/spider_site.py:133-141 — custom_ai_prompt requires a prompt when enabled",
+    "docs/services/spidersite/LEARNINGS.md:74-77 — 8B models fail ICP grading; lead-analysis uses 32B+ (server-side)",
+    "recipes/crawl-options.md"
+  ]
+}

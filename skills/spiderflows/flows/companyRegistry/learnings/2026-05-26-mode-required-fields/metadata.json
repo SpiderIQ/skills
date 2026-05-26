@@ -1,0 +1,14 @@
+{
+  "title": "Each mode requires different fields — wrong combo is a 422 at submit, not an empty result",
+  "summary": "spiderCompanyData has one endpoint and three modes with different required fields, enforced by the payload validator before dispatch: search needs name; lookup needs identifier AND country; vat needs vat_number (or identifier). TWO failure layers: (1) schema 422 (missing required field, no job_id, never ran); (2) worker success:false after a well-formed request (HTTP 200, status completed) — e.g. lookup with country:DE passes the schema but the worker returns success:false 'Unsupported country: DE', or 'Company not found'. The schema validates field PRESENCE, not the country VALUE, so a bad country is a worker-level success:false, NOT a 422 — only visible by reading data.success. Mode defaults to search, so an identifier with no mode is a nameless search -> 422. Have a name but no ID: search first to get source_id, then lookup by id+country.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["modes", "validation", "422", "required-fields", "success-flag"],
+  "references": [
+    "app/schemas/spider_company_data.py:122-137 — validate_mode_requirements: search->name, lookup->identifier+country, vat->vat_number|identifier (presence only)",
+    "app/schemas/spider_company_data.py:61-64 — mode defaults to search",
+    "windmill-scripts/spidercompanydata_lookup.py:422-426 — worker rejects non-GB/US country at runtime with success:false 'Unsupported country'",
+    "windmill-scripts/spidercompanydata_lookup.py:428-433 — not-found -> success:false 'Company not found' (posted to /complete, HTTP 200)",
+    "app/api/v1/jobs/spidercompanydata.py:31-51 — _build_windmill_args maps mode-specific fields"
+  ]
+}

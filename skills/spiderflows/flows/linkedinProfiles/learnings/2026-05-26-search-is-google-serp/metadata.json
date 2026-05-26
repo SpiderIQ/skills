@@ -1,0 +1,14 @@
+{
+  "title": "search mode is a Google-SERP first-page discovery (worker-capped at 25, shallow) — not an authenticated LinkedIn search",
+  "summary": "linkedinProfiles search mode runs a Bright Data Google SERP: it Googles 'site:linkedin.com/in <query>', reads ONLY the first results page (start=0, no pagination), and keeps the /in/ URLs. So: (1) realistic yield is often <10 even when you ask for more; (2) the worker hard-caps max_results at min(n,25) even though the API/Pydantic accepts search_limit up to 50; (3) records are SHALLOW (url+name+headline+snippet, name/headline parsed from the Google title, location best-effort from the snippet) — re-run a result's linkedin_url through profile mode (~$0.003 each) for depth. No LinkedIn account, no proxy. This is a DIFFERENT service from the account/proxy/warmup-gated SpiderPublicLinkedin (linkedinSearch.yaml, Voyager search_people), out of scope here.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["search-mode", "serp", "brightdata", "limits", "scope-boundary"],
+  "references": [
+    "windmill-scripts/spiderpeople_search.py:92 — max_results = max(1, min(max_results, 25))",
+    "windmill-scripts/spiderpeople_search.py:114-117 — auto-prepends 'site:linkedin.com/in', requests start=0 (first page only)",
+    "windmill-scripts/spiderpeople_search.py:244-267 — _extract_profile_summary: name/headline split from Google title, location from snippet",
+    "app/schemas/spider_people.py:42-47 — search_limit Field ge=1 le=50 (API accepts 50; worker caps 25)",
+    "app/flows/linkedinSearch.yaml + docs/services/SpiderPublicLinkedin/CLAUDE.md — the separate Voyager search service (out of scope)"
+  ]
+}

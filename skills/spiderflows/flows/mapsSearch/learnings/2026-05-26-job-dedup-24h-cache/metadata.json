@@ -1,0 +1,12 @@
+{
+  "title": "Identical submissions dedup to a cached job for 24 hours (from_cache: true)",
+  "summary": "Submitting an identical SpiderMaps payload within 24 hours returns the SAME job_id with from_cache: true — a cached result, not a fresh scrape. This is great for idempotent retries but a trap if the user actually wants fresh data or you're looping a batch with duplicate queries. Force a fresh run by varying the query or setting test: true. The submit response always carries from_cache; check it.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["caching", "dedup", "from_cache", "idempotency", "submit"],
+  "references": [
+    "app/api/v1/jobs/common.py:514 — 'Automatic deduplication: Returns cached job if submitted within 24 hours'",
+    "app/schemas/job.py:459 — JobSubmitResponse.from_cache field",
+    "recipes/run-single.md, recipes/run-batch.md"
+  ]
+}

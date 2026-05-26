@@ -1,0 +1,12 @@
+{
+  "title": "Read people results from /jobs/{id}/results first — IDAP linkedin_profiles/contacts are populated async by the CRM sync",
+  "summary": "A standalone linkedinProfiles job has no campaign_id; its authoritative, immediate output is GET /jobs/{job_id}/results (SpiderPeopleData). The same people ALSO normalize into IDAP linkedin_profiles + contacts, but via a dual-write to the results table with crm_status='pending' that the CRM sync processes AFTER completion — so there's a lag and you don't filter by campaign_id (it's tenant-scoped). Query the job aggregate first; use IDAP for cross-job/paged reads once it has caught up.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["read-results", "idap", "crm-sync", "eventual-consistency"],
+  "references": [
+    "app/api/v1/jobs/worker_callbacks.py:222-236 — spiderPeople dual-write to results table, crm_status='pending' ('CRM sync writes contacts + linkedin_profiles')",
+    "docs/services/catalog/skills/skills/spiderflows/references/reading-results.md:23-26 — IDAP types include linkedin_profiles, contacts, staff",
+    "recipes/read-results.md"
+  ]
+}

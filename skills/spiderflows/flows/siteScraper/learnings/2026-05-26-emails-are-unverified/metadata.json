@@ -1,0 +1,13 @@
+{
+  "title": "siteScraper emails are EXTRACTED, not SMTP-verified — no deliverability stage in this flow",
+  "summary": "siteScraper is a single-worker crawl: it scrapes emails/phones off the page but does NOT verify them. The emails[] in the results carry no deliverability status/score (that's the lead chain's SpiderVerify stage). Treat them as candidates. If the user needs deliverable addresses, run flow:maps-site-verify-vayapin (which adds SpiderVerify) or feed the extracted emails into the emailVerify flow. Don't promise 'verified' contacts from a bare site crawl.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["site", "emails", "expectation-setting"],
+  "references": [
+    "app/schemas/spider_site.py:664-665 — SpiderSiteData.emails is a plain List[str], no status/score",
+    "app/flows/siteScraper.yaml:7 — dispatch_type spiderSite, single worker (no verify step)",
+    "../../maps-site-verify-vayapin/recipes/run-single.md — the chain that DOES verify emails",
+    "recipes/results-shape.md"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Tell transient failures (resubmit) apart from terminal ones (don't) — only one is worth retrying",
+  "summary": "Two different non-success outcomes need opposite responses. TERMINAL: a profile that returns status:'unavailable' is private/closed and will stay that way; a non-/in/ URL in profile mode or an empty roster from a wrong slug are input problems — retrying the same payload wastes a call. TRANSIENT: a FAILED job (seen on /status) is usually an infra/provider blip — remote workers hit DNS/network errors reaching Bright Data/Apify (the IPv4 monkey-patch + fail-open poll retries handle most, but a hard fail at trigger does not) and Apify can return a 5xx — these typically SUCCEED on one resubmit. A 5xx/network error mid-poll is auto-retried by the worker; an Apify run that ends FAILED/ABORTED/TIMED-OUT raises and fails the job. revoked_by_dispatcher:true means the job ran past its SLA and was reaped — resubmit, ideally smaller.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["failures", "retry", "errors", "reliability"],
+  "references": [
+    "windmill-scripts/spiderpeople_profile.py:172-187 — private/unavailable returns status:'unavailable' (terminal)",
+    "windmill-scripts/spiderpeople_profile.py:92-93 — non-/in/ URL raises ValueError (terminal input error)",
+    "windmill-scripts/spiderpeople_company.py:177-193 — network/5xx on poll treated as transient (auto-retry); FAILED/ABORTED/TIMED-OUT raise",
+    "docs/services/spiderpeople/LEARNINGS.md:85-96 — remote WindMill workers can hit DNS resolution failures; retry usually works"
+  ]
+}

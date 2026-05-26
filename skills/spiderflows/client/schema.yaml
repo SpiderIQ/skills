@@ -43,6 +43,11 @@ triggers:
   - account brief
   - enrich a company list
   - kyc enrichment
+  - enrich a linkedin profile
+  - find people on linkedin
+  - look up a linkedin profile
+  - extract a company's employees from linkedin
+  - search linkedin for people
 
 guidance:
   use: >
@@ -61,6 +66,7 @@ guidance:
     - "vayapin publishes PERMANENT public pins; deleting the campaign does not remove them. Set vayapin.enabled explicitly."
     - "Single mode: location goes in search_query OR location, never both. Campaign mode: keep search_query bare."
     - "company-intel: pass domain/linkedin_url hints when known (they skip a discovery step). Registry resolves UK/US/EU only; empty registry/LinkedIn is a normal partial brief. Batch caps at 50 companies."
+    - "linkedinProfiles: set mode + its required field (profile->linkedin_url, search->search_query, company->company_url) or 422. search is a Google-SERP discovery (shallow URLs+snippets), not authenticated LinkedIn search; re-run profile on a URL for depth. company-mode profile_mode short/full/full_email drives cost steeply. Empty (private profile / no hits / no public roster) is a normal completed result."
 
 methods:
   searchLeads:
@@ -273,4 +279,162 @@ methods:
       max_employees: { type: integer, required: false, description: 'Shared per-company employee cap, 1-2000' }
       config:        { type: object,  required: false, description: 'Shared per-stage config (per-company config overrides)' }
       test:          { type: boolean, required: false, description: 'Route to test queues' }
+    response: { format: json }
+
+  # ── flow:mapsSearch (Maps Search) ────────────────────────────────────────
+  # One Google Maps search -> business listings. Maps-ONLY: no site crawl, no
+  # email verify (that's the maps-site-verify-vayapin lead chain). Single job
+  # via /jobs/spiderMaps/submit (nested {payload}); read via getJobResults.
+  # The place goes INSIDE search_query — a single Maps job has no location /
+  # country_code field. Standalone Maps results are NOT in IDAP (readResources)
+  # — that is the campaign lead-chain surface; read getJobResults instead.
+  searchMaps:
+    description: >
+      Scrape Google Maps business listings for ONE search query — names,
+      addresses, phones (E.164), websites, ratings, categories, coordinates.
+      Maps-only: no website crawl, no email verification, no emails in the
+      output. Returns a job_id to poll; getJobResults yields the businesses.
+    guidance:
+      use: "find businesses on Google Maps for one query — addresses, phones, websites, ratings (no emails)"
+      next: "getJobStatus, then getJobResults"
+      warn: "put the place INSIDE search_query ('plumbers in Berlin') — a single Maps job has NO location/country_code field (the worker ignores them). max_results is 1-100 (default 20). No emails (Maps-only) — use the lead chain (searchLeads) for verified emails + site data. Standalone Maps results read via getJobResults, NOT readResources/IDAP. Identical re-submits within 24h return a cached job (from_cache=true, same job_id); rate limit ~10 jobs/min per VPS so pace batch loops. extract_reviews/extract_photos are collected but the typed results expose only reviews_count + image_url."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderMaps/submit
+    params:
+      payload:  { type: object,  required: true,  description: 'SpiderMapsJobPayload: { search_query (or url), max_results 1-100 (default 20), lang (default en), extract_reviews (false), extract_photos (false), validate_phones (true), store_images (true), test (false) }. Embed the place in search_query — no separate location/country_code.' }
+      priority: { type: integer, required: false, description: 'Job priority 0-10 (higher runs sooner)' }
+  # ── flow:siteScraper (Site Scraper) ──────────────────────────────────────
+  # One website -> a full contact + intelligence profile. SINGLE-WORKER crawl
+  # (SpiderSite); no campaign fan-out and NO email-verify stage (emails are
+  # EXTRACTED, not SMTP-verified — use the leadSearch chain for deliverable
+  # emails). Single -> /jobs/spiderSite/submit (rich Pydantic); batch (1-500
+  # URLs) -> /flows/siteScraper/run with inputs[]. Read the profile via
+  # getJobResults; the crawl's contacts auto-sync to IDAP
+  # (businesses|contacts|emails|phones|domains — scope by ?domain= via resolve,
+  # no campaign_id on a standalone run).
+  scrapeSite:
+    description: >
+      Crawl ONE website and return a full profile — emails, phones, socials,
+      logo, optional AI team / company info / pain points + CHAMP lead score,
+      and a markdown compendium. Returns a job_id to poll; getJobResults yields
+      the profile. Emails are extracted, NOT SMTP-verified.
+    guidance:
+      use: "one website -> a contact + intelligence profile (emails, socials, team, company info, compendium)"
+      next: "getJobStatus, then getJobResults"
+      warn: "emails are EXTRACTED, not verified — this flow has no verify stage (use leadSearch for deliverable emails). AI is opt-in: contacts/compendium spend 0 tokens; CHAMP scoring needs BOTH product_description + icp_description (422 otherwise). max_pages caps at 50 — use mode:full for ~100 pages. Big compendiums come back as a 24h download URL, not inline."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderSite/submit
+    params:
+      url:                  { type: string,  required: true,  description: 'Website to crawl, include https:// (1-2048 chars)' }
+      mode:                 { type: string,  required: false, description: 'contacts (5p, no AI, default) | compendium (10p, markdown) | leads (50p, team+company AI) | full (100p, everything + lead scoring)' }
+      max_pages:            { type: integer, required: false, description: 'Pages to crawl, 1-50 (cannot exceed 50; full mode reaches ~100 via the preset)' }
+      overrides:            { type: object,  required: false, description: 'Override mode defaults, e.g. { max_pages, strategies }' }
+      enable_spa:           { type: boolean, required: false, description: 'Render JS-heavy sites with a headless browser (default true; slower)' }
+      extract_team:         { type: boolean, required: false, description: 'AI team-member extraction (~500 tokens)' }
+      extract_company_info: { type: boolean, required: false, description: 'AI company vitals (~500 tokens)' }
+      extract_pain_points:  { type: boolean, required: false, description: 'AI pain-point analysis (~500 tokens)' }
+      product_description:  { type: string,  required: false, description: 'CHAMP lead scoring — REQUIRES icp_description too (~1500 tokens)' }
+      icp_description:      { type: string,  required: false, description: 'CHAMP lead scoring — REQUIRES product_description too' }
+      compendium:           { type: object,  required: false, description: 'Markdown config: { enabled, cleanup_level raw|fit|citations|minimal, max_chars 1e3-1e6, include_in_response, remove_duplicates }' }
+      custom_ai_prompt:     { type: object,  required: false, description: 'Run your own prompt over the compendium: { enabled, system_prompt, user_prompt, model=spideriq/* alias, temperature, max_tokens } -> custom_analysis' }
+      priority:             { type: integer, required: false, description: 'Job priority 0-10' }
+      test:                 { type: boolean, required: false, description: 'Route to the test queue' }
+    response: { format: json }
+
+  scrapeSitesBatch:
+    description: >
+      Crawl a LIST of websites (1-500) in one request — the same single-site
+      crawl per URL, run in parallel. Returns a run_group_id + one run_id per
+      URL; read each via getJobResults.
+    guidance:
+      use: "scrape many sites at once (1-500 URLs) — list enrichment, competitor snapshots, LLM-context corpora"
+      next: "getJobStatus + getJobResults per run_id (the run-group aggregate GET /run-groups/{id} rolls up status — see run-batch.md)"
+      warn: "hard cap 1-500 inputs (422 outside). Per-URL settings live on EACH entry (no shared-defaults block, unlike company-intel batch). One malformed item rejects the whole submission (422 'Batch item {i}'). Emails extracted, not verified."
+      telemetry_signal_default: "cold"
+    http: POST /flows/siteScraper/run
+    params:
+      inputs:   { type: array,   required: true,  description: '1-500 entries; each a full single-site input {url, mode?, max_pages?, extract_*?, compendium?, custom_ai_prompt?, ...}' }
+      priority: { type: integer, required: false, description: 'Job priority 0-10, shared across the batch' }
+  # ── flow:emailVerify (standalone email verification) ─────────────────────
+  # Verify emails you ALREADY have (one, or a list of ≤100). SMTP handshake +
+  # MX + catch-all/disposable/role + optional DNSBL/gravatar. Single + batch
+  # only (no campaign fan-out). Distinct from the verify STAGE inside the lead
+  # and company-intel chains (those verify emails the crawl discovered).
+  # NOTE: unlike the flat flow endpoints above, /jobs/spiderVerify/submit wraps
+  # the verify fields in `payload` (it is a /jobs/{type}/submit endpoint) with
+  # `priority` as a sibling. Read via getJobResults — the result is a canonical
+  # bulk-of-1 (single email -> results[0]). Verify the OPVS proxy forwards
+  # /jobs/spiderVerify/submit before relying on it live.
+  verifyEmails:
+    description: >
+      Verify one email (single) or a list of up to 100 (batch) for
+      deliverability — SMTP handshake, MX, catch-all / disposable / role
+      detection, optional DNSBL + gravatar. Returns a job_id to poll;
+      getJobResults yields the per-email verdicts (bulk-of-1: single -> results[0]).
+    guidance:
+      use: "verify emails you ALREADY have — list hygiene, CRM cleaning, signup checks (NOT discovering new emails)"
+      next: "getJobStatus (poll >=3-5s), then getJobResults — read results[0] for single, results[] for batch"
+      warn: "provide exactly one of email/emails (≤100, else 422). Slow by design (~3s/email, ~20/min; bulk-100 ≈ 5-8min). status:valid can score mid (catch-all -15 / disposable -30 / role -10) — not a bug. 'unknown' = probe failed (server unreachable/timeout) — re-verify later, NOT invalid. fuzziq_enabled is the dedup flag, not a separate dedupe call. check_gravatar/check_dnsbl default OFF on the API."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderVerify/submit
+    params:
+      payload:  { type: object,  required: true,  description: 'Verify fields: { email? (single) | emails? (≤100 batch) — provide exactly one; check_gravatar? (def false), check_dnsbl? (def false), smtp_timeout_secs? (10-120, def 45), from_email?, hello_name?, fuzziq_enabled?, fuzziq_unique_only?, test? }' }
+      priority: { type: integer, required: false, description: 'Job priority 0-10 (default 0), higher = processed first. Sibling of payload, not inside it.' }
+  # ── flow:linkedinProfiles (SpiderPeople — LinkedIn people) ───────────────
+  # One endpoint, three modes selected by `mode`: profile (Bright Data datasets,
+  # enrich a profile URL) / search (Bright Data Google SERP, find profiles by a
+  # query — SHALLOW results) / company (Apify harvestapi, extract employees).
+  # Single jobs only — no campaign fan-out. Read via getJobResults; the people
+  # also normalize into IDAP linkedin_profiles + contacts (async CRM sync).
+  # NOTE: the native endpoint is /jobs/spiderPeople/submit and wraps these fields
+  # under a `payload` object ({ "payload": { mode, ... }, "priority": N }); the
+  # params below are the flat client surface — verify the OPVS proxy nests them
+  # under `payload` before relying on them live.
+  # NOT the account/proxy-gated Voyager search (spiderPublicLinkedin) — separate flow.
+  findPeople:
+    description: >
+      Fetch LinkedIn people in one of three modes (mode selects the provider):
+      profile (enrich a known profile URL -> full profile), search (find profiles
+      by a natural-language query -> a shallow list), or company (extract a
+      company's employees). Returns a job_id to poll; getJobResults yields the
+      people records.
+    guidance:
+      use: "LinkedIn people — enrich a profile URL (profile), find profiles by query (search), or pull a company's employees (company)"
+      next: "getJobStatus, then getJobResults"
+      warn: "set mode + its required field (profile->linkedin_url, search->search_query, company->company_url) or you get a 422. search is a Google-SERP discovery (shallow URLs+snippets), not an authenticated LinkedIn search — re-run profile on a URL for depth. company-mode profile_mode (short/full/full_email) drives cost steeply (~$4/$8/$12 per 1k). Empty result (private profile / no hits / no public roster) is a normal completed outcome, not a failure."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderPeople/submit
+    params:
+      mode:          { type: string,  required: true,  description: 'profile | search | company — selects the provider + the required field' }
+      linkedin_url:  { type: string,  required: false, description: 'profile mode — the profile URL to enrich (REQUIRED for mode=profile), <=512 chars' }
+      search_query:  { type: string,  required: false, description: 'search mode — natural-language query, e.g. "VP Sales SaaS Berlin" (REQUIRED for mode=search), <=256 chars' }
+      search_limit:  { type: integer, required: false, description: 'search mode — max profiles 1-50 (default 10)' }
+      country_code:  { type: string,  required: false, description: 'search mode — ISO 2-letter SERP locale, e.g. DE (<=2 chars)' }
+      company_url:   { type: string,  required: false, description: 'company mode — LinkedIn company URL (REQUIRED for mode=company), <=512 chars' }
+      max_employees: { type: integer, required: false, description: 'company mode — employees to pull 1-2000 (default 100)' }
+      profile_mode:  { type: string,  required: false, description: 'company mode — employee detail+cost: short ($4/1k, default) | full ($8/1k) | full_email ($12/1k)' }
+      test:          { type: boolean, required: false, description: 'route to the test queue (dev only)' }
+  # ── flow:companyRegistry (Company Registry — standalone single worker) ────
+  # Government-registry lookup with NO enrichment chain (that's researchCompany).
+  # One endpoint, three modes: search (by name) / lookup (by registry ID) / vat
+  # (EU VIES validation). No native batch — loop single jobs, or use
+  # researchCompaniesBatch for the enriched chain. Read the filing via
+  # getJobResults; normalized rows land in IDAP company_registry (readResources
+  # resource_type=company_registry). Verified against
+  # app/api/v1/jobs/spidercompanydata.py + app/schemas/spider_company_data.py.
+  lookupCompanyRegistry:
+    description: >
+      Look up a company in a free public government registry — search by name,
+      fetch one record by registry ID, or validate an EU VAT number. One job;
+      getJobResults yields the filing. Standalone single worker, no enrichment
+      chain (that's researchCompany / researchCompaniesBatch).
+    guidance:
+      use: "one registry lookup — filed name, registration number, VAT, officers, status, address (UK/US/EU)"
+      next: "getJobStatus, then getJobResults (or readResources resource_type=company_registry)"
+      warn: "mode drives required fields: search needs name; lookup needs identifier+country; vat needs vat_number — a wrong combo is a 422 at submit. COVERAGE: search/lookup are UK+US ONLY (lookup with any other country -> success:false 'Unsupported country'); the EU is reachable ONLY via vat (VIES). HTTP 200 != found — read the worker's data.success (search: data.results[]; lookup: data.data or data.error; vat: data.data.valid). officers are ALWAYS empty; US records are thin. include_financials is UK-only (~$0.05 OCR). No native batch endpoint — loop single jobs."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderCompanyData/submit
+    params:
+      payload:  { type: object,  required: true,  description: 'Lookup payload: { mode: search|lookup|vat (default search); name (search, 1-500 chars); identifier + country (lookup; country is ISO-2); vat_number (vat, incl. country prefix); country (ISO-2, narrows search); limit (1-100, search, default 10); include_financials (UK lookup only, ~$0.05); financials_mode: url_only|ixbrl|regex|ocr|auto; test }' }
+      priority: { type: integer, required: false, description: 'Job priority 1-10 (default 5)' }
     response: { format: json }

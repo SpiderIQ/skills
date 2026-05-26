@@ -1,0 +1,12 @@
+{
+  "title": "An empty people result is a normal completed outcome — not an error, not a retry trigger",
+  "summary": "Each mode has a legitimate empty case: profile mode returns nothing for a private/closed profile (status 'unavailable'); search mode returns no hits for a niche query or thin SERP coverage; company mode returns employees_count 0 for a page with no public roster or a wrong/slug-mismatched URL. All three complete with status 'completed' and an empty payload — that is success with no data, not a failure. Check the mode-appropriate container before telling the user a person/roster is 'missing'.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["partial-results", "empty", "profile", "search", "company"],
+  "references": [
+    "docs/services/spiderpeople/LEARNINGS.md:140-148 — 'Bright Data returns empty profile' (private) + 'Apify returns 0 employees' (slug not URL)",
+    "app/schemas/spider_people.py:209-217 — profiles[]/employees[] default_factory=list (empty by default)",
+    "recipes/run-profile.md, run-search.md, run-company.md, scripts/verify-people-complete.sh"
+  ]
+}

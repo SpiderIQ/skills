@@ -1,0 +1,13 @@
+{
+  "title": "profile and company are async polled scrapes (tens of seconds to minutes) — only search is instant",
+  "summary": "Timing differs sharply by mode and the agent must set the right expectation. profile TRIGGERS a Bright Data dataset scrape then polls the snapshot ~1x/sec with NO wall-clock cap (the dispatcher decides when to give up) — commonly 20s-2min. company starts an Apify actor run then polls ~1x/2sec, also uncapped — minutes, scaling with max_employees and profile_mode. search is the only one-shot mode: a single Google-SERP call (60s worker timeout) that returns in seconds. So: poll no faster than every 3-5s (or use SSE), tell the user 'a few moments / minutes' for profile+company, and never tight-loop — polling faster does not make the upstream scrape finish sooner.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["timing", "polling", "async", "expectations"],
+  "references": [
+    "windmill-scripts/spiderpeople_profile.py:123-218 — triggers snapshot, polls every POLL_INTERVAL=1s, while True (no cap)",
+    "windmill-scripts/spiderpeople_company.py:69,157-224 — Apify run, POLL_INTERVAL=2s, while True (no cap)",
+    "windmill-scripts/spiderpeople_search.py:147-157 — single requests.post, timeout=60 (one-shot)",
+    "docs/services/catalog/skills/skills/spiderflows/references/run-modes-and-progress.md — poll >=3-5s or SSE"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "title": "Coverage: search/lookup are UK+US only; EU is vat-validation only; flow card over-claims DE/FR/NL/ES/IL",
+  "summary": "The live spiderCompanyData worker is narrower than the flow card. search queries UK Companies House + US SEC EDGAR (country=GB->UK, US->US, omitted->both, other->empty). lookup resolves GB or US only — any other country returns success:false 'Unsupported country: XX'. The EU is reachable ONLY via vat (VIES validation, 28 member states), which validates a number + sometimes returns the entity name, not a filing. There is NO DE/FR/NL/ES/IL company-record lookup despite the flow card and the normalizer's _VALID_SOURCES (forward-compat tags, no adapter emits them). US coverage is SEC-filing (public) companies; US records are thin (name+CIK+hardcoded active). UK financials are lookup-only, ~$0.05 via OCR; the live worker has only url_only(free) and auto/ocr(paid) — ixbrl/regex are coerced to auto. Small/micro UK filings omit revenue/P&L.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["registry", "companydata", "coverage", "cost", "financials", "vat"],
+  "references": [
+    "windmill-scripts/spidercompanydata_search.py:270-280 — search branches ONLY on country=='GB'/'US' (omitted=both)",
+    "windmill-scripts/spidercompanydata_lookup.py:418-426 — lookup GB/US only; else success:false 'Unsupported country'",
+    "windmill-scripts/spidercompanydata_lookup.py:436-441 — include_financials only when country=='GB'",
+    "windmill-scripts/spidercompanydata_lookup.py:437 — financials_mode coerced: only url_only/ocr/auto honored, else auto",
+    "windmill-scripts/spidercompanydata_vat.py:37-41 — VIES EU_COUNTRY_CODES (28; EL not GR; XI; no GB)",
+    "windmill-scripts/spidercompanydata_search.py:104-114 — US EFTS queries 10-K/10-Q (public-company coverage)",
+    "app/jobs/crm_sync_worker.py:1154-1155 — normalizer _VALID_SOURCES lists DE/FR/NL/ES/IL (forward-compat, no worker adapter)",
+    "docs/services/SpiderCompanyData/LEARNINGS.md:161-164 — AA01/AA02 filings omit turnover/P&L"
+  ]
+}

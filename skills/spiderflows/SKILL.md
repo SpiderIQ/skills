@@ -18,6 +18,11 @@ description: >
   team, verified emails). Trigger company-intel on: "research <company>",
   "company intel", "account brief", "enrich this company / vendor list", "KYC
   enrichment", "find a company's domain / registry number / LinkedIn / employees".
+  And the LinkedIn-people flow (flow:linkedinProfiles): one endpoint, three modes
+  — enrich a profile URL, find profiles by a search query, or pull a company's
+  employees. Trigger linkedinProfiles on: "enrich this LinkedIn profile", "find
+  people on LinkedIn", "look up a LinkedIn profile", "who works at <company>",
+  "pull a company's employees / team from LinkedIn", "search LinkedIn for <title>".
   More flows are added here as recipes.
 ---
 
@@ -59,6 +64,23 @@ enrichment). It is a **single + batch** flow — there is no campaign / location
 fan-out (that's the lead chain). Results come back as a per-company brief via
 `GET /jobs/{job_id}/results`, with registry + LinkedIn also queryable as their own
 IDAP types.
+
+The third flow — **linkedinProfiles** — is people-first: you start from a LinkedIn
+**profile URL**, a **search query**, or a **company URL**, and get LinkedIn people
+records back.
+
+```
+flow:linkedinProfiles   (SpiderPeople — LinkedIn people)
+profile  → enrich one profile URL         → full profile (experience, education)   [Bright Data]
+search   → find profiles by a query       → shallow profile list (URL+headline)    [Bright Data SERP]
+company  → extract a company's employees  → employee roster (titles, +email/skills) [Apify]
+```
+
+One endpoint (`POST /jobs/spiderPeople/submit`, `mode` selects the provider), three
+modes — single jobs, **no campaign fan-out**. Read the people back via
+`GET /jobs/{job_id}/results`, with `linkedin_profiles` + `contacts` also queryable
+through IDAP. (This is *not* the account-and-proxy-gated Voyager LinkedIn search —
+that's a separate service, out of scope here.)
 
 ## Approach
 
@@ -121,6 +143,15 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | research ONE company → a full account brief (domain, registry, LinkedIn, emails) | [flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md) |
 | enrich a LIST of companies (KYC / list enrichment, up to 50) | [flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md) |
 | read a company-intel run's brief (registry / LinkedIn / emails via IDAP) | [flows/perplexity-site-companydata-people/recipes/read-results.md](flows/perplexity-site-companydata-people/recipes/read-results.md) |
+| scrape ONE website → a contact + intelligence profile (emails, socials, team, compendium) | [flows/siteScraper/recipes/run-single.md](flows/siteScraper/recipes/run-single.md) |
+| scrape a LIST of websites (1–500 URLs) | [flows/siteScraper/recipes/run-batch.md](flows/siteScraper/recipes/run-batch.md) |
+| read a site crawl's profile (results + contacts via IDAP) | [flows/siteScraper/recipes/read-results.md](flows/siteScraper/recipes/read-results.md) |
+| verify emails you ALREADY have — one address or a list of ≤100 | [flows/emailVerify/recipes/run-single.md](flows/emailVerify/recipes/run-single.md) |
+| read an emailVerify run's verdicts (status / score / flags per email) | [flows/emailVerify/recipes/read-results.md](flows/emailVerify/recipes/read-results.md) |
+| enrich ONE LinkedIn profile URL → a full profile | [flows/linkedinProfiles/recipes/run-profile.md](flows/linkedinProfiles/recipes/run-profile.md) |
+| find LinkedIn profiles from a search query (shallow list) | [flows/linkedinProfiles/recipes/run-search.md](flows/linkedinProfiles/recipes/run-search.md) |
+| extract a company's employees from its LinkedIn page | [flows/linkedinProfiles/recipes/run-company.md](flows/linkedinProfiles/recipes/run-company.md) |
+| read a linkedinProfiles run's people (job results / IDAP) | [flows/linkedinProfiles/recipes/read-results.md](flows/linkedinProfiles/recipes/read-results.md) |
 | understand poll-vs-SSE progress and realistic timing | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 
 ## Per-stage settings (quick map — full detail in the reference)
@@ -147,6 +178,12 @@ This skill ships as typed tool calls generated from `client/schema.yaml`:
 | `getJobResults` / `getCampaignResults` / `readResources` | read results (IDAP) | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
 | `researchCompany` | research ONE company (account brief) | [flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md) |
 | `researchCompaniesBatch` | enrich a LIST of companies (≤50, KYC) | [flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md) |
+| `searchMaps` | scrape Google Maps for one query — businesses only, no emails (Maps-only) | [flows/mapsSearch/recipes/run-single.md](flows/mapsSearch/recipes/run-single.md) |
+| `scrapeSite` | crawl ONE website (contact + intelligence profile) | [flows/siteScraper/recipes/run-single.md](flows/siteScraper/recipes/run-single.md) |
+| `scrapeSitesBatch` | crawl a LIST of websites (1–500 URLs) | [flows/siteScraper/recipes/run-batch.md](flows/siteScraper/recipes/run-batch.md) |
+| `verifyEmails` | verify one email (single) or a list (≤100, batch) | [flows/emailVerify/recipes/run-single.md](flows/emailVerify/recipes/run-single.md) |
+| `findPeople` | LinkedIn people — enrich a profile URL / search by query / a company's employees (`mode`) | [flows/linkedinProfiles/recipes/run-profile.md](flows/linkedinProfiles/recipes/run-profile.md) |
+| `lookupCompanyRegistry` | look up ONE company in a public registry — standalone, no chain (search / lookup / vat) | [flows/companyRegistry/recipes/run-single.md](flows/companyRegistry/recipes/run-single.md) |
 
 The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 `telemetry_signal_default`, plus skill-level `intent_aliases`) lives in
@@ -173,8 +210,27 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[flows/perplexity-site-companydata-people/recipes/per-stage-settings.md](flows/perplexity-site-companydata-people/recipes/per-stage-settings.md)** — every `config` setting per stage. **Read before composing a non-trivial `config`.**
 - **[flows/perplexity-site-companydata-people/recipes/results-shape.md](flows/perplexity-site-companydata-people/recipes/results-shape.md)** — the fields a finished company brief carries.
 
+**flow:siteScraper (Site Scraper):**
+- **[flows/siteScraper/recipes/run-single.md](flows/siteScraper/recipes/run-single.md)** · **[flows/siteScraper/recipes/run-batch.md](flows/siteScraper/recipes/run-batch.md)** — submit (one URL via `/jobs/spiderSite/submit` / a list of ≤500 via the Flows facade).
+- **[flows/siteScraper/recipes/read-results.md](flows/siteScraper/recipes/read-results.md)** — read the profile (`/jobs/{id}/results`; contacts auto-sync to IDAP, scope by `?domain=`).
+- **[flows/siteScraper/recipes/results-shape.md](flows/siteScraper/recipes/results-shape.md)** — the fields a finished site-crawl record carries (emails are extracted, NOT verified).
+- **[flows/siteScraper/recipes/crawl-options.md](flows/siteScraper/recipes/crawl-options.md)** — every crawl knob (mode, AI opt-ins, compendium, custom prompt). **Read before composing a non-trivial crawl.**
+**flow:emailVerify:**
+- **[flows/emailVerify/recipes/run-single.md](flows/emailVerify/recipes/run-single.md)** · **[flows/emailVerify/recipes/run-batch.md](flows/emailVerify/recipes/run-batch.md)** — submit (one email / a list of ≤100). Standalone verifier for emails you already have.
+- **[flows/emailVerify/recipes/read-results.md](flows/emailVerify/recipes/read-results.md)** — read the verdicts (single is **bulk-of-1** → `results[0]`).
+- **[flows/emailVerify/recipes/results-shape.md](flows/emailVerify/recipes/results-shape.md)** — the fields a verified email carries (status / score / flags / domain / dnsbl).
+- **[flows/emailVerify/recipes/verification-options.md](flows/emailVerify/recipes/verification-options.md)** — the payload toggles. **Read before composing a non-default request.**
+**flow:linkedinProfiles (LinkedIn people):**
+- **[flows/linkedinProfiles/recipes/run-profile.md](flows/linkedinProfiles/recipes/run-profile.md)** · **[flows/linkedinProfiles/recipes/run-search.md](flows/linkedinProfiles/recipes/run-search.md)** · **[flows/linkedinProfiles/recipes/run-company.md](flows/linkedinProfiles/recipes/run-company.md)** — submit (one profile URL / a search query / a company's employees).
+- **[flows/linkedinProfiles/recipes/read-results.md](flows/linkedinProfiles/recipes/read-results.md)** — read the people (job aggregate; `linkedin_profiles` + `contacts` via IDAP).
+- **[flows/linkedinProfiles/recipes/per-mode-settings.md](flows/linkedinProfiles/recipes/per-mode-settings.md)** — every field per mode + the `profile_mode` cost tiers. **Read before composing a non-trivial request.**
+- **[flows/linkedinProfiles/recipes/results-shape.md](flows/linkedinProfiles/recipes/results-shape.md)** — the fields a finished profile / search / employee record carries.
+
 ## See also
 
-- `flows/*/learnings/` — per-flow lessons (cost-runaway / vayapin-default-on / geo-disambiguation for the lead chain; hints-skip-stages / registry-coverage / partial-results / email-score for company-intel) — starting points, not ground truth; verify against current code.
+- `flows/*/learnings/` — per-flow lessons (cost-runaway / vayapin-default-on / geo-disambiguation for the lead chain; hints-skip-stages / registry-coverage / partial-results / email-score for company-intel; bulk-of-1 / valid-can-score-low / unknown-not-invalid / slow-by-design / from-email-hello-name-deliverability / status-taxonomy for emailVerify) — starting points, not ground truth; verify against current code.
 - `flows/maps-site-verify-vayapin/scripts/verify-pipeline-complete.sh` — audits a finished lead run against its expected stages.
 - `flows/perplexity-site-companydata-people/scripts/verify-intel-complete.sh` — audits a finished company-intel run against its five stages.
+- `flows/siteScraper/scripts/verify-site-complete.sh` — audits a finished site crawl (pages crawled, contacts, which optional sections landed).
+- `flows/emailVerify/scripts/verify-emails-complete.sh` — audits a finished emailVerify run (per-status breakdown; flags high `unknown` / not-completed).
+- `flows/linkedinProfiles/scripts/verify-people-complete.sh` — audits a finished linkedinProfiles run against the mode it ran (profile / search / company).

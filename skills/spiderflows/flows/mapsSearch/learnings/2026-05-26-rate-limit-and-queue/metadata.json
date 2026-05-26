@@ -1,0 +1,13 @@
+{
+  "title": "Submission rate limit (~10 jobs/min per VPS) + 10,000 queue cap — pace batch loops",
+  "summary": "The SpiderMaps submit route is rate-limited to ~10 jobs/min per VPS and the Maps queue caps at 10,000 jobs. A tight loop of single submissions (the recommended batch path) will hit the rate limit and get 429s. Pace the loop (~6-7s between submits) or honor the X-RateLimit-Reset header. This is separate from Google's ban cooldowns — this limit is SpiderIQ's own submission throttle.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["rate-limit", "queue", "batch", "pacing", "429"],
+  "references": [
+    "app/api/v1/jobs/spidermaps.py:123 — route description: 'Per-VPS rate limit applies (10 jobs/min)'",
+    "app/api/v1/jobs/spidermaps.py:185 — 'Google Maps queue: 10,000 jobs maximum'",
+    "app/api/v1/jobs/common.py:215,267 — X-RateLimit-Reset header on the submit responses",
+    "recipes/run-batch.md"
+  ]
+}

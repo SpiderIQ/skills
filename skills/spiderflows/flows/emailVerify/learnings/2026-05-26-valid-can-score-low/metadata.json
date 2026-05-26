@@ -1,0 +1,13 @@
+{
+  "title": "A 'valid' email can score low — the 0-100 score penalizes catch-all / disposable / role",
+  "summary": "SpiderVerify returns each email with a status (valid/invalid/risky/unknown) AND a 0-100 score. The score starts at 50 and penalizes catch-all (-15), disposable (-30), and role accounts (-10), so a syntactically valid, MX-present, deliverable address on a catch-all domain lands in the 60s and a valid disposable can score ~30. status:valid + a mid score is not a contradiction — explain it from the quality flags (is_catch_all / is_disposable / is_role_account), not by calling the email 'bad'. A catch-all domain in particular caps confidence because the server accepts every address, so SMTP can't prove the specific mailbox exists.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "email-score", "catch-all"],
+  "references": [
+    "docs/services/spiderverifyer/LEARNINGS.md:182-191 — scoring algorithm (base 50, catch-all -15, disposable -30, role -10)",
+    "docs/services/spiderverifyer/CLAUDE.md:278-295 — quality scoring factors",
+    "app/schemas/job.py:194-214 — SpiderVerifyResult (status + quality + score + flags)",
+    "recipes/results-shape.md"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "title": "extract_reviews / extract_photos are honored by the worker but dropped by the typed results transform",
+  "summary": "Setting extract_reviews / extract_photos makes the worker collect reviews[] and photos[] into the RAW job output, but GET /jobs/{id}/results maps each business through SpiderMapsBusiness, which has no reviews/photos field (no extra=allow) and transform_spidermaps_data never passes them — so the arrays are dropped from the records you read back. What survives reliably is reviews_count and image_url (the first photo). Don't promise the user review text or a photo gallery from the standard results endpoint.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["results", "extract_reviews", "extract_photos", "transform", "schema-drop"],
+  "references": [
+    "workers/SpiderBrowser/skills/googlemaps/search.py:392-411 — extract_photos -> place_data['photos']; extract_reviews -> place_data['reviews']",
+    "workers/SpiderBrowser/result_formatter.py:44-52,222-224 — reviews/photos present in worker output when flags set",
+    "app/schemas/spidermaps.py:266-292 — SpiderMapsBusiness has NO reviews/photos field and no extra='allow'",
+    "app/api/v1/jobs/transforms.py:290-313 — transform_spidermaps_data builds SpiderMapsBusiness WITHOUT reviews/photos (only reviews_count + image_url survive)",
+    "recipes/results-shape.md, recipes/per-stage-settings.md"
+  ]
+}

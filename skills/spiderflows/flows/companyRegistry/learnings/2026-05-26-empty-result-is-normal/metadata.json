@@ -1,0 +1,14 @@
+{
+  "title": "A completed lookup with zero records is a valid answer — read the result body, not just status",
+  "summary": "A registry lookup can complete cleanly (status:completed, HTTP 200) and carry no company — usually the correct answer for an out-of-coverage company, not an error. Empty shapes by mode: search -> success:true, results:[], total_results:0; lookup -> success:false, error:'Company not found' (or 'Unsupported country: XX'); vat -> valid:false (invalid) or valid:false+error (couldn't validate). Don't retry an out-of-coverage company (same empty, wasted call) — fix the input (real ID, right country, EL/XI VAT prefix). Exceptions worth ONE retry: a search empty (could be a swallowed upstream API error) and a vat valid:false+error (transient VIES). Empty writes no IDAP company_registry row; vat never writes one. Tell the user 'not in a public registry we can read', not 'failed'.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["partial-results", "empty-result", "results", "idap", "retry"],
+  "references": [
+    "windmill-scripts/spidercompanydata_search.py:284-291 — search success:true + results[]/total_results even when empty",
+    "windmill-scripts/spidercompanydata_lookup.py:428-433 — not-found -> success:false 'Company not found'",
+    "windmill-scripts/spidercompanydata_vat.py:60-84 — valid:false (+error for unsupported/fault)",
+    "app/jobs/crm_sync_worker.py:1166-1199 — record needs name+source_id, else skipped (no IDAP row)",
+    "recipes/read-results.md, recipes/results-shape.md"
+  ]
+}

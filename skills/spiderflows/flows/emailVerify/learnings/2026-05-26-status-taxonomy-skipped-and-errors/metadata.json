@@ -1,0 +1,14 @@
+{
+  "title": "status has FIVE values (incl. skipped) and a bulk row can be a per-email error",
+  "summary": "Agents code for 4 statuses (valid/invalid/risky/unknown) and miss two real shapes. (1) With fuzziq_enabled, a known address returns status:'skipped' (reason:already_verified) — the cached verdict, not a fresh probe — and a fully-deduped batch returns results:[] with summary.skipped + reason:all_already_verified (a SUCCESS, not a failure). (2) A bulk email that errors mid-probe returns status:'unknown' with sub_status:'error: <msg>', score:0, and only 2 flags. Also: sub_status is FIRST-MATCH-WINS in a fixed order (catch_all > disposable > role_account > disabled > full_inbox > smtp_unreachable > deliverable > mailbox_not_found), so a catch-all role account reads 'catch_all' — read the independent flags, not sub_status, to detect role/disposable.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "status", "sub_status", "fuzziq", "skipped"],
+  "references": [
+    "workers/SpiderVerify/worker.py:234-241 — single FuzzIQ duplicate -> status:skipped, reason:already_verified",
+    "workers/SpiderVerify/worker.py:264-275 — all-deduped bulk -> results:[], summary.skipped, reason:all_already_verified",
+    "workers/SpiderVerify/verification_engine.py:220-233 — bulk per-email error row (status:unknown, sub_status:'error: ...')",
+    "workers/SpiderVerify/verification_engine.py:523-549 — _determine_sub_status first-match-wins order",
+    "recipes/results-shape.md"
+  ]
+}

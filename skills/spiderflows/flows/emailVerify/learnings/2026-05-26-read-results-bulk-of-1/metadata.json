@@ -1,0 +1,12 @@
+{
+  "title": "A single-email verify is bulk-of-1 — read results[0], not the top level",
+  "summary": "emailVerify normalizes every submission (one email or a hundred) to the same bulk envelope: {total, summary, billable_count, results[], metadata}. Even when you submitted a single `email`, the verdict is in results[0] — the legacy top-level email/status/score fields were removed because they were always None for single jobs. Agents that read result.status (top level) get nothing and wrongly report 'no result'. Always read results[0] for single, results[] for batch; trust summary for counts (it includes fuzziq_skipped, which results[] does not).",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["verify", "results-shape", "bulk-of-1"],
+  "references": [
+    "app/schemas/job.py:217-228 — SpiderVerifyData docstring: single is bulk-of-1, read results[0]",
+    "app/api/v1/jobs/transforms.py:328-368 — transform_spiderverify_data wraps single→bulk; legacy flat fields dropped",
+    "recipes/read-results.md"
+  ]
+}

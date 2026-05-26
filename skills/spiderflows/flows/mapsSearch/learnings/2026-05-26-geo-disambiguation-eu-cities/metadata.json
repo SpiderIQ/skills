@@ -1,0 +1,14 @@
+{
+  "title": "The worker auto-appends a country to 26 ambiguous European city names",
+  "summary": "The Maps worker's _enhance_query_with_location() rewrites queries for 26 European cities that share a name with a US city — 'cafes in Hamburg' becomes 'cafes in Hamburg, Germany' so you get the German city, not the US namesake. It only fires when no country context is already present (it won't touch '...Hamburg, Germany' or '...Hamburg DE'). Helpful, but it can surprise you if you didn't know it was happening — and it's why a single Maps job rarely needs a country hint for those cities.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["geo-disambiguation", "query", "europe", "search_query"],
+  "references": [
+    "workers/SpiderBrowser/skills/googlemaps/search.py:133 — query = self._enhance_query_with_location(query, country)",
+    "workers/SpiderBrowser/skills/googlemaps/search.py:998 — _enhance_query_with_location() definition",
+    "docs/services/SpiderMaps/CLAUDE.md:381-398 — Geo-Disambiguation (v2.59.2), 26 cities, won't modify if country already present",
+    "docs/services/SpiderMaps/LEARNINGS.md:103-107 — '#11 Geo-Disambiguation May Surprise You'",
+    "recipes/run-single.md"
+  ]
+}

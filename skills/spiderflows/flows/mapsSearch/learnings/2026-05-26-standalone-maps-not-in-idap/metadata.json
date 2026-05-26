@@ -1,0 +1,14 @@
+{
+  "title": "Standalone Maps Search results are NOT in IDAP — read /jobs/{id}/results",
+  "summary": "IDAP's normalized businesses records are written by the campaign / lead-chain path (campaign_service + workflow_orchestrator), not by a standalone spiderMaps job. A standalone Maps Search run stores its businesses in jobs.results (read via GET /jobs/{job_id}/results) and a dual-write to the results table with campaign_id=NULL — it never populates the IDAP businesses table. So GET /idap/businesses for a Maps Search job_id returns nothing. The lead chain uses IDAP; standalone Maps Search uses the job results endpoint.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["read", "idap", "results", "standalone", "lead-chain-difference"],
+  "references": [
+    "app/api/v1/jobs/worker_callbacks.py:649-688 — spiderMaps dual-writes to the results table; campaign_id resolves to NULL for a standalone job",
+    "app/api/v1/jobs/worker_callbacks.py:113-114 — standalone spiderMaps completion only bumps total_spider_maps_jobs (no IDAP businesses ingest)",
+    "app/services/campaign_service.py / app/services/workflow_orchestrator.py — the only writers of IDAP businesses (campaign / workflow path)",
+    "app/api/v1/jobs/status.py:312-455 — GET /jobs/{id}/results runs transform_spidermaps_data → data.businesses[]",
+    "recipes/read-results.md"
+  ]
+}

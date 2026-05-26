@@ -1,0 +1,13 @@
+{
+  "title": "A slow or short Maps run is usually Google throttling, not failure (tiered cooldowns)",
+  "summary": "The Maps worker has tiered ban-detection cooldowns: consent wall=0s, reCAPTCHA=30s, CAPTCHA form / 'unusual traffic'=120s, 403/429/503 error page=300s. CAPTCHAs are auto-solved (2Captcha) when configured. A run that takes minutes or returns fewer than max_results is normally throttling, not a bug — and partial results are persisted incrementally so you keep what was scraped. Set the user's timing expectation and never tight-loop on status.",
+  "created_at": "2026-05-26",
+  "updated_at": "2026-05-26",
+  "tags": ["ban-detection", "cooldowns", "timing", "captcha", "partial-results"],
+  "references": [
+    "docs/services/SpiderMaps/CLAUDE.md:432-442 — Ban Detection (v2.39.0) tiered cooldowns + 2Captcha auto-solve",
+    "docs/services/SpiderBrowser/LEARNINGS.md:273-285 — '#11 Ban Detection Cooldown Levels'",
+    "docs/services/SpiderBrowser/LEARNINGS.md:233-237 — incremental result persistence (avoid losing a partial scrape)",
+    "recipes/run-single.md"
+  ]
+}
