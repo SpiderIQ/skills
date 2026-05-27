@@ -153,6 +153,7 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | extract a company's employees from its LinkedIn page | [flows/linkedinProfiles/recipes/run-company.md](flows/linkedinProfiles/recipes/run-company.md) |
 | read a linkedinProfiles run's people (job results / IDAP) | [flows/linkedinProfiles/recipes/read-results.md](flows/linkedinProfiles/recipes/read-results.md) |
 | understand poll-vs-SSE progress and realistic timing | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
+| watch a run with live events instead of polling — react to the stream, read the sink once on the terminal `campaign.terminal` / `job.completed` event | [recipes/watch-a-run.md](recipes/watch-a-run.md) (event surface: [references/events-stream.md](references/events-stream.md)) |
 
 ## Per-stage settings (quick map — full detail in the reference)
 
@@ -195,6 +196,8 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[references/surfaces-and-auth.md](references/surfaces-and-auth.md)** — surfaces, Bearer PAT, `?format=yaml|md`.
 - **[references/run-modes-and-progress.md](references/run-modes-and-progress.md)** — single vs campaign, poll vs SSE, timing.
 - **[references/reading-results.md](references/reading-results.md)** — the IDAP read surface (resource types, `include`, paging).
+- **[references/events-stream.md](references/events-stream.md)** — the live SSE event stream: endpoint, `?token=`/`?campaign_id=`/`?job_id=`, full event vocabulary (incl. the definitive `campaign.terminal`), framing, JS + Python snippets.
+- **[recipes/watch-a-run.md](recipes/watch-a-run.md)** — listen-don't-poll: open the stream before submit, react, read the durable sink once on the terminal event.
 
 **flow:maps-site-verify-vayapin:**
 - **[flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md)** · **[flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md)** · **[flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md)** — submit.
