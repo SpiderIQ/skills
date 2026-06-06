@@ -1,0 +1,126 @@
+# spideriq-media-catalog — API surface + envelope contract (Initiative A)
+# ONE skill for the SpiderMedia per-tenant DAM catalog. Methods today are the
+# Phase 1.1 read API (assets list / get / search). Future media surfaces
+# (uploads, transforms, video) add methods + recipes here — never a sibling skill.
+#
+# Source of truth for Tier-3 opvsHUB generation. Regenerate the plugin with:
+#   opvs-skills generate --all --external --skills-dir ./skills --bundle ./output/bundle/index.ts
+#
+# Auth: SPIDERIQ_PAT (Bearer client_id:api_key:api_secret) per the SpiderCLI
+# convention — same env var spideriq-meta uses in this opvsHUB skill set.
+# base_url is the /media sub-tree; the catalog routes live under /catalog/*.
+
+name: spideriq-media-catalog
+version: "0.1.0"
+description: >
+  Browse and search a tenant's SpiderMedia asset catalog (DAM) — the read-only
+  discovery layer over every image, video, and doc already ingested across
+  SeaweedFS, Cloudflare R2, and PeerTube. List assets newest-first with
+  kind/folder/tags/status/storage-tier filters, fetch one asset's full metadata
+  row by id, or substring-search keys/folders. Read-only: it reflects assets the
+  workers + content pipeline already produced (Phase 0 backfill + forward-sync) —
+  it does NOT upload, transform, or delete. Per-tenant, PAT-scoped. Agent-friendly
+  ?format=yaml|md on every call.
+category: data-collection
+base_url: /api/v1/media
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - media catalog
+  - media library
+  - media assets
+  - browse media
+  - find an image
+  - list videos
+  - search media
+  - asset library
+  - dam
+  - digital asset management
+  - what media do I have
+  - my images
+  - my videos
+
+guidance:
+  use: >
+    Discover what media a tenant already has — list/filter/search the SpiderMedia
+    asset catalog (images, videos, docs across SeaweedFS/R2/PeerTube) and read one
+    asset's full metadata row. Read-only discovery, not media creation.
+  not:
+    - "spiderflows scrapeSite -> crawl a website (this reads the catalog, it does not produce media)"
+    - "the SpiderPublish content/media tools (@spideriq/mcp-publish) -> UPLOAD or manage media; the catalog is read-only discovery"
+    - "idap_media -> proxy a single screenshot/photo URL out of normalized lead data (a different store; this is the DAM catalog)"
+  intent_aliases: ["q", "query", "search_query"]
+  pitfalls:
+    - "Read-only — there is no upload/delete/transform here; the catalog reflects assets already ingested."
+    - "Scoped to the caller's tenant (norm_cli_<tenant>) via the PAT — it never returns another tenant's assets."
+    - "Asset ids are catalog UUIDs, NOT job ids or PeerTube short-uuids (peertube_uuid is a separate field on the row)."
+    - "listAssets tags = AND (an asset must carry ALL given tags); searchAssets tags = ANY (overlap). Same param name, different semantics."
+    - "An empty result is normal for a tenant with no ingested media — it is a completed read, not a failure."
+
+methods:
+  listAssets:
+    description: >
+      List the tenant's media assets, newest first (soft-delete aware). Filters
+      are AND-combined: kind, folder (exact path), tags (ALL), status, and
+      storage_tier. Paginated via limit/offset. Each asset carries id, kind,
+      status, storage_tier, key, optional bucket/peertube_uuid, mime_type,
+      size_bytes, width/height, duration_s, folder, tags, metadata, and
+      created/updated timestamps.
+    guidance:
+      use: "browse or page the catalog — narrow by kind/folder/tags/status/storage_tier"
+      next: "getAsset for one asset's full row; searchAssets for substring / ANY-tag matching"
+      warn: "tags here is AND (every tag must match). For ANY-tag or a key/folder substring use searchAssets. Max page size is 500."
+      telemetry_signal_default: "warm"
+    http: GET /catalog/assets
+    params:
+      kind:         { type: string,  required: false, description: 'Asset class: image | video | doc' }
+      folder:       { type: string,  required: false, description: 'Exact DAM folder path (<=1024 chars)' }
+      tags:         { type: array,   required: false, description: 'Filter to assets carrying ALL of these tags (AND)' }
+      status:       { type: string,  required: false, description: 'pending | processing | ready | failed' }
+      storage_tier: { type: string,  required: false, description: 'seaweedfs | r2 | peertube' }
+      limit:        { type: integer, required: false, description: 'Page size 1-500 (default 50)' }
+      offset:       { type: integer, required: false, description: 'Pagination offset (>=0, default 0)' }
+      format:       { type: string,  required: false, description: 'json (default) | yaml | md' }
+    response: { format: json }
+
+  getAsset:
+    description: >
+      Fetch one media asset's full metadata row by its catalog UUID. Returns the
+      same shape as a listAssets entry. 404 if the id does not exist in the
+      caller's tenant catalog.
+    guidance:
+      use: "read one asset's full metadata once you have its catalog id (from listAssets / searchAssets)"
+      warn: "asset_id is the catalog UUID (the `id` field), NOT a job id or the peertube_uuid. 404 means it is not in this tenant's catalog."
+      telemetry_signal_default: "warm"
+    http: GET /catalog/assets/{asset_id}
+    params:
+      asset_id: { type: string, required: true,  description: 'Catalog UUID of the asset (the `id` field from a list/search row)' }
+      format:   { type: string, required: false, description: 'json (default) | yaml | md' }
+    response: { format: json }
+
+  searchAssets:
+    description: >
+      Search the tenant's media assets. `q` is a case-insensitive substring match
+      on the asset key/folder; `kind` narrows by type; `tags` overlaps (ANY of the
+      given tags). All optional and AND-combined, newest first. Returns the same
+      asset shape as listAssets plus the query echo.
+    guidance:
+      use: "find assets by a key/folder substring (q) and/or kind, optionally any of some tags"
+      next: "getAsset for the full row of a match"
+      warn: "q matches key/folder ONLY (not metadata or tags). tags here is ANY-overlap, unlike listAssets' ALL. Max page size is 500."
+      telemetry_signal_default: "warm"
+    http: GET /catalog/search
+    params:
+      q:     { type: string,  required: false, description: 'Case-insensitive substring match on key/folder (<=512 chars)' }
+      kind:  { type: string,  required: false, description: 'Asset class: image | video | doc' }
+      tags:  { type: array,   required: false, description: 'Match assets sharing ANY of these tags (overlap)' }
+      limit: { type: integer, required: false, description: 'Page size 1-500 (default 50)' }
+      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+    response: { format: json }
