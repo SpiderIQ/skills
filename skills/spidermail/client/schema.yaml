@@ -15,8 +15,8 @@
 # convention. base_url is /api/v1; every method path carries its own /mail/* (or
 # /jobs/*) segment, so the full URL is e.g. https://spideriq.ai/api/v1/mail/inbox.
 
-name: send-receive-email
-version: "0.3.0"
+name: spidermail
+version: "0.4.0"
 description: >
   Agent-driven email over SpiderMail — read a mailbox (inbox, single message,
   conversation thread, full-text search, one-call session bootstrap), send/reply/

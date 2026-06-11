@@ -1,4 +1,4 @@
-## send-receive-email
+## spidermail
 
 The full SpiderMail surface for agents. 11 tool calls covering inbox browsing, thread reading, sends, replies, and templates.
 

@@ -1,6 +1,6 @@
 {
   "name": "spideriq",
   "version": "0.3.0",
-  "description": "SpiderIQ agent skills — install once, get every SpiderIQ product's procedural knowledge inside Gemini CLI. Multi-skill suite: spiderpublish (multi-tenant CMS + booking runtime), send-receive-email (SpiderMail: run one inbox or a fleet — send/reply/forward, templates, warmup), use-the-gateway (SpiderGate LLM routing), and more. Triggers on phrases like 'create a landing page', 'check my inbox and reply', 'set up a contact form', or a tenant name (sms-chemicals.com, demo.spideriq.ai).",
+  "description": "SpiderIQ agent skills — install once, get every SpiderIQ product's procedural knowledge inside Gemini CLI. Multi-skill suite: spiderpublish (multi-tenant CMS + booking runtime), spidermail (SpiderMail: run one inbox or a fleet — send/reply/forward, templates, warmup), use-the-gateway (SpiderGate LLM routing), and more. Triggers on phrases like 'create a landing page', 'check my inbox and reply', 'set up a contact form', or a tenant name (sms-chemicals.com, demo.spideriq.ai).",
   "contextFileName": "skills/spiderpublish/SKILL.md"
 }

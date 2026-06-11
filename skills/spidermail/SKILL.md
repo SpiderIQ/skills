@@ -1,5 +1,5 @@
 ---
-name: send-receive-email
+name: spidermail
 description: >
   Agent-driven email over SpiderMail. Read a real mailbox (Zoho / Google
   Workspace / Outlook): master inbox, single message, full conversation thread,
@@ -13,11 +13,11 @@ description: >
   as clean structured data (~37x fewer tokens); outbound markdown becomes HTML.
   Per-tenant, PAT-scoped. NOT for FINDING new prospects (use spiderflows /
   lead-search) or validating that an address is deliverable (use spiderVerify).
-version: "0.3.0"
+version: "0.4.0"
 category: communication
 ---
 
-# send-receive-email — SpiderMail
+# spidermail — SpiderMail
 
 Full email for an agent acting on a brand's behalf — over real IMAP/SMTP
 mailboxes, with one read path and one (async) write path.

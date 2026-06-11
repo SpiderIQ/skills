@@ -20,7 +20,7 @@ Skills install into your **agent runtime** — they never touch your project's
 |---|---|---|
 | `spiderflows` | Run SpiderIQ flows (server-side pipelines). Today: the lead / local-business chain — Google Maps → site crawl → email verify → optional VayaPin pin (sold as both leadSearch and localSeo). Single run or multi-location campaign, full lifecycle, results via IDAP. More flows added here as recipes. | ✅ v0.1.0 |
 | `spiderpublish` | Pages, posts, docs, components, navigation, themes, forms, booking flows, custom domains, two-phase deploy | ✅ v0.1.0 |
-| `send-receive-email` | SpiderMail: master inbox across every mailbox, threads, full-text search, send/reply/forward, templates, labels · views · snooze · bulk-triage, attachments, security quarantine, and Smartlead/lemlist/Instantly warmup + deliverability. 45 methods. | ✅ v0.3.0 |
+| `spidermail` | SpiderMail: master inbox across every mailbox, threads, full-text search, send/reply/forward, templates, labels · views · snooze · bulk-triage, attachments, security quarantine, and Smartlead/lemlist/Instantly warmup + deliverability. 45 methods. | ✅ v0.3.0 |
 | `use-the-gateway` | SpiderGate: LLM completions, task-alias routing, usage, traces, cost tracking | ✅ |
 
 Each skill is a folder under [`skills/`](./skills) with its own `SKILL.md`,
