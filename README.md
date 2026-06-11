@@ -1,8 +1,8 @@
 # SpiderIQ Skills
 
 Agent skills for every [SpiderIQ](https://spideriq.ai) product. Install once,
-your agent learns how to author, publish, and deploy on SpiderPublish (and,
-as they ship, SpiderMail and SpiderGate).
+your agent learns how to author, publish, and deploy on SpiderPublish, **run
+email on SpiderMail**, and route LLM calls through SpiderGate.
 
 ## Install
 
@@ -20,12 +20,15 @@ Skills install into your **agent runtime** — they never touch your project's
 |---|---|---|
 | `spiderflows` | Run SpiderIQ flows (server-side pipelines). Today: the lead / local-business chain — Google Maps → site crawl → email verify → optional VayaPin pin (sold as both leadSearch and localSeo). Single run or multi-location campaign, full lifecycle, results via IDAP. More flows added here as recipes. | ✅ v0.1.0 |
 | `spiderpublish` | Pages, posts, docs, components, navigation, themes, forms, booking flows, custom domains, two-phase deploy | ✅ v0.1.0 |
-| `spidermail` | Mailboxes, threads, send, templates, automation | 🔜 |
-| `spidergate` | LLM completions, routing, traces, cost tracking | 🔜 |
+| `send-receive-email` | SpiderMail: master inbox across every mailbox, threads, full-text search, send/reply/forward, templates, labels · views · snooze · bulk-triage, attachments, security quarantine, and Smartlead/lemlist/Instantly warmup + deliverability. 45 methods. | ✅ v0.3.0 |
+| `use-the-gateway` | SpiderGate: LLM completions, task-alias routing, usage, traces, cost tracking | ✅ |
 
 Each skill is a folder under [`skills/`](./skills) with its own `SKILL.md`,
 recipe library, and reference docs. Skills are discovered independently —
-your agent loads the one whose frontmatter matches the task.
+your agent loads the one whose frontmatter matches the task. The table above
+highlights the main product families; additional skills (media catalog,
+workspace/admin, content-platform, events-stream, and more) also live under
+[`skills/`](./skills).
 
 ## Designer kits (a different door)
 
