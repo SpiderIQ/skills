@@ -1,0 +1,12 @@
+{
+  "title": "Free-tier aliases may train on your data — never send client PII through them",
+  "summary": "The cost-biased aliases (spideriq/fast, spideriq/free, spideriq/extraction, spideriq/classification, spideriq/summarization) route to free-tier providers (Groq, Mistral-free, OpenRouter :free) whose terms permit using request data for model training, especially outside the EU. Sending PII (names, emails, phones, account data) through them is a SILENT privacy leak — the call 200s and nothing flags it. Route PII to spideriq/lead-analysis (premium, the designated PII-safe lane) or a BYOK-backed alias, or strip the PII first. When unsure whether a payload carries PII, treat it as if it does. This is the skill's HARD-GATE.",
+  "created_at": "2026-06-10",
+  "updated_at": "2026-06-10",
+  "tags": ["pii", "privacy", "aliases", "free-tier", "hard-gate"],
+  "references": [
+    "docs/services/SpiderGate/LEARNINGS.md #12 — 'Free Tier Data May Be Used for Training' (route spideriq/fast→free, spideriq/lead-analysis→premium)",
+    "app/services/gate/routing/task_config.py — alias → model chain (which aliases are free-tier biased)",
+    "references/pick-an-alias.md — the alias families + the PII lane"
+  ]
+}

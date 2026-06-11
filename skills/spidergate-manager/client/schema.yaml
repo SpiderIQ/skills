@@ -1,0 +1,169 @@
+# SpiderGate Manager Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate spidergate-manager
+
+name: spidergate-manager
+version: "1.0.0"
+description: >
+  SpiderGate V2 LLM gateway — OpenAI-compatible chat completions,
+  model listing, usage analytics, trace inspection, and provider
+  status. Route requests to 100+ LLM providers via task aliases.
+category: ai-gateway
+base_url: /api/v1/spideriq/gate
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: true
+triggers:
+  - llm chat
+  - gate chat
+  - ai completion
+  - spidergate
+  - model usage
+  - trace
+
+methods:
+  # ── Gateway (OpenAI-compatible) ──
+
+  chat:
+    description: >
+      Send a chat completion request. OpenAI-compatible.
+      Use task aliases like spideriq/coding, spideriq/fast, spideriq/chat.
+    http: POST /chat/completions
+    params:
+      model:
+        type: string
+        required: true
+        description: Model name or task alias (e.g. "spideriq/coding")
+      messages:
+        type: array
+        required: true
+        description: Chat messages array [{role, content}]
+        items: object
+    response:
+      format: json
+
+  listModels:
+    description: List available models and task aliases.
+    http: GET /models
+    response:
+      format: json
+
+  listAliases:
+    description: List all task aliases with their model mappings.
+    http: GET /aliases
+    response:
+      format: json
+
+  health:
+    description: SpiderGate health check.
+    http: GET /health
+    response:
+      format: json
+
+  # ── Brand-scoped analytics (/api/v1/brands/{brand_id}/gate/) ──
+
+  getStats:
+    description: Get gateway usage stats for a brand.
+    http: GET /stats
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID (passed as path prefix)
+    response:
+      format: json
+
+  getUsage:
+    description: Get detailed usage breakdown by day.
+    http: GET /usage
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+      days:
+        type: integer
+        required: false
+        description: Number of days to look back (default 30)
+    response:
+      format: json
+
+  listAgents:
+    description: List agents that used the gateway.
+    http: GET /agents
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+    response:
+      format: json
+
+  listProviders:
+    description: List LLM providers and their status.
+    http: GET /providers
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+    response:
+      format: json
+
+  listTraces:
+    description: List request traces with filters.
+    http: GET /traces
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+      agent_id:
+        type: string
+        required: false
+      model:
+        type: string
+        required: false
+      status:
+        type: string
+        required: false
+      limit:
+        type: integer
+        required: false
+      offset:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  getTraceDetail:
+    description: Get full detail of a specific trace.
+    http: GET /traces/{trace_id}
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+      trace_id:
+        type: string
+        required: true
+        description: Trace ID
+    response:
+      format: json
+
+  getTraceStats:
+    description: Get aggregated trace statistics summary.
+    http: GET /traces/stats/summary
+    params:
+      brand_id:
+        type: string
+        required: true
+        description: Brand ID
+    response:
+      format: json

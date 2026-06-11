@@ -1,0 +1,12 @@
+{
+  "title": "The per-call dollar cost is in spidergate_metadata.cost_usd, not the usage block",
+  "summary": "Agents reflexively read response.usage for cost — but usage is token COUNTS only (prompt/completion/total_tokens). The actual dollars for THIS call live in response.spidergate_metadata.cost_usd, priced on the model that actually served (provider_model), which can differ from the alias slot-0 when a fallback fired (fallback_used / original_model). The aggregate /api/v1/brands/{brand_id}/gate/usage rollup is batched and brand-keyed — don't poll it for a call you just made; read the metadata off the response. cache_hit:true → cost_usd:0.",
+  "created_at": "2026-06-10",
+  "updated_at": "2026-06-10",
+  "tags": ["cost", "metadata", "observability"],
+  "references": [
+    "app/api/v1/gate/schemas.py — SpiderGateMetadata (provider, provider_model, cost_usd, latency_ms, cache_hit, fallback_used, original_model) vs TokenUsage (tokens only)",
+    "docs/services/SpiderGate/CLAUDE.md — 'Response carries spidergate_metadata { provider, latency_ms, cache_hit, cost_usd }'",
+    "references/cost-aware-completion.md — WRONG/RIGHT reading cost"
+  ]
+}

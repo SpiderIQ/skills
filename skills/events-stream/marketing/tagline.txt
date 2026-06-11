@@ -1,0 +1,1 @@
+Live SSE stream of agent activity — job submissions, completions, errors

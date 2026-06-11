@@ -1,0 +1,12 @@
+{
+  "title": "RESOLVED (cli@1.25.0/mcp@1.31.0): MCP gate_chat WAS text-only — now forwards cost cap/cache/JSON/tools",
+  "summary": "HISTORICAL + RESOLVED. Until 2026-06-11 the MCP gate_chat (and core.gateChat) forwarded ONLY model + messages — no temperature/max_tokens, no response_format (JSON mode), no tools/tool_choice, no spidergate_options (max_cost_usd, cache_enabled, fallback_models). Those are exactly the features that make SpiderGate worth using over a raw provider, so the gateway's value was MCP-unreachable. FIXED in @spideriq/mcp@1.31.0 / @spideriq/mcp-gate@1.3.0 / @spideriq/core@1.26.0 (SpiderGate tools parity S1): the inputSchema + core method now forward all of them; spideriq gate chat exposes --max-cost/--cache/--json. Lesson that endures: the value of a gateway is in its NON-OpenAI extras (per-request cost cap, cache) — a thin MCP wrapper that forwards only model+messages silently strips exactly that value, and unit tests pass because the basic call still works. Only token-by-token STREAMING remains HTTP-only through the single-response tool.",
+  "created_at": "2026-06-10",
+  "updated_at": "2026-06-11",
+  "tags": ["mcp", "gaps", "http-fallback", "tooling"],
+  "references": [
+    "packages/mcp-tools/src/gate/gate.ts — gate_chat inputSchema {model, messages, workspace}; execute calls client.gateChat(model, messages) only",
+    "app/api/v1/gate/schemas.py — ChatCompletionRequest (the full body gate_chat does NOT expose)",
+    "references/gaps.md — Gap 2 (with the wanted inputSchema widening)"
+  ]
+}

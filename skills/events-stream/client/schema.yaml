@@ -1,0 +1,35 @@
+# Events Stream Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate events-stream
+
+name: events-stream
+version: "1.0.0"
+description: >
+  Real-time job event monitoring via Server-Sent Events.
+  Subscribe to job lifecycle events (queued, started, completed, failed)
+  and check event stream health.
+category: monitoring
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 35000
+requires_brand: true
+triggers:
+  - job events
+  - live stream
+  - event status
+  - real-time monitoring
+
+methods:
+  getEventStatus:
+    description: >
+      Get event stream status — service health, active subscriptions,
+      and whether your client is currently connected.
+    http: GET /events/status
+    response:
+      format: json

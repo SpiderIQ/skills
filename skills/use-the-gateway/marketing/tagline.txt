@@ -1,0 +1,1 @@
+Route your agent's own LLM calls through SpiderGate — one PAT, 100+ providers, cost-capped

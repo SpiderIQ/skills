@@ -1,0 +1,148 @@
+# Use-the-Gateway Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# base_url is the OpenAI-compatible gateway core (/api/gate/v1). Brand analytics
+# (usage/traces) live under a DIFFERENT root (/api/v1/brands/{brand_id}/gate/*) and
+# are surfaced via the gate_usage/gate_traces MCP tools, not generated here — so
+# every method below resolves to a real /api/gate/v1 endpoint (no phantom paths).
+
+name: use-the-gateway
+version: "0.1.0"
+description: >
+  Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
+  100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
+  per-request cost cap, response cache, and per-call cost readback.
+category: ai-gateway
+base_url: /api/gate/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: false
+triggers:
+  - use spidergate as provider
+  - send a chat completion
+  - route my llm call
+  - pick a task alias
+  - cap the cost of an llm call
+  - llm completion
+
+guidance:
+  use: >
+    Reach for this to route your agent's OWN LLM calls through SpiderGate as a
+    provider: pick a task alias, send a completion, cap/cache cost, read what it
+    cost. One PAT replaces juggling OpenRouter/Groq/Mistral keys.
+  not:
+    - "spidergate-manager → administer the key POOL (add provider keys, sync billing, health) — not sending completions"
+    - "events-stream → subscribe to JOB lifecycle events — not streaming completion tokens"
+  # No method takes a free-text search field, so intent_aliases is explicitly empty
+  # (declared, not implicit — the runtime never guesses; Q1).
+  intent_aliases: []
+  pitfalls:
+    - "Free-tier aliases (spideriq/fast,/free,/extraction,/classification,/summarization) may train on request data — never send client PII there; use spideriq/lead-analysis (HARD-GATE)."
+    - "Per-call dollar cost is spidergate_metadata.cost_usd, NOT the usage block (which is tokens only)."
+    - "max_cost_usd, cache_enabled, fallback_models and stream are HTTP-only — the gate_chat MCP tool drops them."
+    - "The served model can differ from the alias slot-0 (a fallback fired) — read spidergate_metadata.provider_model, don't assume."
+
+methods:
+  chat:
+    description: >
+      Send an OpenAI-compatible chat completion. Set `model` to a task alias
+      (spideriq/coding, spideriq/fast, spideriq/lead-analysis, …) or a real model
+      id. Optional `spidergate_options` adds a per-request cost cap (max_cost_usd),
+      response cache (cache_enabled), and an explicit fallback chain
+      (fallback_models). The response carries `spidergate_metadata` with the
+      provider that served, the actual model, and the dollar cost.
+    guidance:
+      use: "Route one LLM call through the gateway as a provider."
+      next: "listAliases (pick the right task), read spidergate_metadata.cost_usd, getUsage (aggregate spend)"
+      warn: "Never send client PII on a free-tier alias (spideriq/fast,/free,/extraction) — it can be used for training (HARD-GATE). For PII use spideriq/lead-analysis."
+      telemetry_signal_default: "warm"
+    http: POST /chat/completions
+    params:
+      model:
+        type: string
+        required: true
+        description: Task alias (e.g. "spideriq/coding") or model id (e.g. "gpt-4o").
+      messages:
+        type: array
+        required: true
+        description: OpenAI messages array [{role, content}]; role ∈ system|user|assistant|tool.
+        items: object
+      temperature:
+        type: number
+        required: false
+        description: Sampling temperature 0.0–2.0 (default 1.0).
+      max_tokens:
+        type: integer
+        required: false
+        description: Max tokens to generate.
+      stream:
+        type: boolean
+        required: false
+        description: Stream the response as SSE chunks (default false).
+      response_format:
+        type: object
+        required: false
+        description: '{type: "json_object"} or {type: "json_schema", json_schema: {...}} for strict structured output.'
+      tools:
+        type: array
+        required: false
+        description: OpenAI tool/function definitions for tool calling.
+      tool_choice:
+        type: string
+        required: false
+        description: '"none" | "auto" | "required" | {type:"function",function:{name}}.'
+      spidergate_options:
+        type: object
+        required: false
+        description: 'SpiderGate extras: {max_cost_usd, cache_enabled, cache_ttl_seconds, fallback_models, preferred_providers, excluded_providers, timeout_ms, retry_count}.'
+    response:
+      format: json
+
+  listModels:
+    description: >
+      List every model SpiderGate can serve, each with its provider, context
+      window, and per-1M-token pricing (in the `spidergate_info` block). Use it to
+      find a specific model id and compare cost before pinning one.
+    guidance:
+      use: "Discover available models + their pricing/context window."
+      next: "chat (send `model: <id>`), listAliases (prefer a task alias over a pinned model)"
+      warn: "The catalog is large + stable — fetch once and cache; don't re-list every turn."
+      telemetry_signal_default: "cold"
+    http: GET /models
+    response:
+      format: json
+
+  listAliases:
+    description: >
+      List the SpiderGate task aliases (spideriq/coding, spideriq/extraction, …)
+      with their ordered model fallback chains, intended use_case, and 30-day
+      usage. This is how you choose WHICH alias fits a task.
+    guidance:
+      use: "Pick the right task alias for a job (and see its fallback chain)."
+      next: "chat (send `model: spideriq/<task>`)"
+      warn: "Cost-biased aliases route to free-tier providers that may train on data — see the chat pitfalls before sending PII."
+      telemetry_signal_default: "cold"
+    http: GET /aliases
+    response:
+      format: json
+
+  health:
+    description: >
+      Gateway liveness check. NOTE: this reports process liveness only, not engine
+      readiness — a 200 here does not guarantee a given provider is healthy.
+    guidance:
+      use: "Confirm the gateway process is up before a batch of calls."
+      next: "chat"
+      warn: "200 ≠ every provider healthy; a specific alias can still fall back."
+      telemetry_signal_default: "hot"
+    http: GET /health
+    response:
+      format: json
