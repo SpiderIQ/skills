@@ -1,0 +1,1 @@
+Manage every content type SpiderPublish supports — pages, posts, docs, components, domains

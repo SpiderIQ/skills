@@ -1,0 +1,1433 @@
+# Content Platform Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate content-platform
+
+name: content-platform
+version: "1.7.0"
+description: >
+  Multi-tenant content management — pages, blog posts, docs,
+  navigation menus, site settings, custom domains, and reusable
+  UI components with 4-tier interactivity (static, scoped JS,
+  CDN libraries, React/Vue/Svelte framework builds) and automatic
+  Shadow DOM isolation.
+  Content is scoped to a PROJECT — one website inside the authenticated
+  WORKSPACE (the brand/account). Omit the project and calls hit the
+  workspace's default project (back-compat); pass an optional `project`
+  (a proj_… id, sent as the X-Project-Id header) to target a specific
+  website. Manage projects with listProjects / createProject.
+category: content
+base_url: /api/v1/spideriq/content
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - content page
+  - blog post
+  - documentation
+  - navigation
+  - custom domain
+  - site settings
+  - blog authors
+  - content tags
+  - blog categories
+  - manage posts
+  - search posts
+  - featured posts
+  - ui component
+  - shadow dom
+  - reusable block
+  - interactive component
+  - javascript component
+  - gsap animation
+  - cdn library
+  - react component
+  - vue component
+  - svelte component
+  - framework build
+  - web component bundle
+  - dynamic component
+  - data source
+  - live collection
+  - live data
+  - bind data
+  - filter posts
+
+guidance:
+  use: "manage a workspace's own content — pages, blog posts, authors, tags, categories, docs, navigation, domains, settings, deploy, and reusable UI components — scoped to one project (website) inside the workspace"
+  not:
+    - "templates-engine → Liquid template customization and theme management"
+    - "capture-landing-page → screenshot/capture a URL as landing page asset"
+    - "scrape-website-extract-leads → extract data FROM external websites"
+  workspace_vs_project: >
+    Projects 4c model — a WORKSPACE (cli_… id) is the account/brand; a PROJECT
+    (proj_… id) is one website inside it. EVERY content method below accepts an
+    OPTIONAL `project` (proj_… id) that scopes the call to that website, sent as
+    the X-Project-Id header. Omit it and the call targets the workspace's default
+    project (so existing single-site agents keep working unchanged). Use
+    listProjects to see the websites in the workspace and createProject to add one.
+  chains:
+    - "listProjects → (pick proj_…) → createPage project=proj_… (author into a specific site)"
+    - "createProject → createPage project=<new proj_…> (build a fresh site)"
+    - "createPost → publishPost (publish when ready)"
+    - "createAuthor → createPost (assign author to post)"
+    - "createCategory → createTag → createPost (set up taxonomy before writing)"
+    - "updateSettings → contentDeploySite (deploy after config changes)"
+    - "createComponent → publishComponent → use in page blocks via component_slug"
+    - "createComponent → listComponentVersions (track version history)"
+    - "listCdnAllowlist → createComponent with dependencies (Tier 3)"
+    - "createComponent with framework → publishComponent → getBuildStatus (poll until success)"
+    - "getBuildStatus → rebuildComponent (if build failed)"
+  pitfalls:
+    - "Omitting `project` writes to the workspace's DEFAULT project — to build a second site, pass project=proj_… or content lands on the wrong website"
+    - "A workspace (cli_…) is NOT a project (proj_…) — the project arg only accepts proj_… ids; a cli_ value is read as the workspace and falls back to its default project"
+    - "Posts need publishPost after createPost — createPost saves as draft"
+    - "Categories support hierarchy via parent_id — create parent first"
+    - "Search and featured endpoints are public (no auth) — use for reader-facing features"
+    - "Always deploy after content changes — contentDeploySite pushes to edge"
+    - "Components need publishComponent before they can be used in page blocks"
+    - "Component CSS is auto-isolated via Shadow DOM — no need for manual namespacing"
+    - "Use props_schema (JSON Schema) so other agents know what data a component accepts"
+    - "Component JS (Tier 2) receives root (shadowRoot) and props — use root.querySelector(), never document.querySelector()"
+    - "CDN dependencies (Tier 3) must reference keys from the allowlist — check listCdnAllowlist first"
+    - "Framework components (Tier 4) build asynchronously on publish — poll getBuildStatus until success"
+    - "Tier 4 publish returns 202 (building), not 200 — poll build-status before using in pages"
+
+methods:
+  # ── Discovery (2026-04-16, @spideriq/mcp@0.8.3 — MT3 Agent-DX Merge Tags) ──
+  # Fetch this BEFORE authoring a dynamic-landing page. Returns the full
+  # Mailchimp-style merge-tag vocabulary ({{firstname}}, {{company_name}},
+  # {{city}}, ~40 tags total) with descriptions, example values, and
+  # selection rules. Single source of truth shared with the Liquid renderer.
+
+  getVariables:
+    description: >
+      **START HERE for personalized landing pages.** Returns the full merge-tag
+      vocabulary ({{firstname}}, {{company_name}}, {{city}}, {{industry}},
+      {{logo}}, {{email}}, ~40 tokens total) for dynamic-landing templates —
+      flat Mailchimp-style tags every LLM already knows. Includes plain-English
+      descriptions, realistic example values from the Mario's Pizzeria demo
+      fixture, and selection rules (e.g. how `{{ email }}` picks the best
+      verified address). No auth required. Fetch once at session start.
+    http: GET /variables
+    params:
+      format:
+        type: enum
+        required: false
+        values: [yaml, json, md]
+        description: Response format (default yaml — token-efficient)
+    response:
+      format: yaml
+
+  # ── Projects (websites inside the workspace — Projects 4c) ──
+  # NOTE: these two live on the workspace API (/api/v1/dashboard/projects),
+  # NOT under this skill's /api/v1/spideriq/content base. Every OTHER method
+  # accepts the optional `project` (proj_…) scope documented in guidance.
+
+  listProjects:
+    description: >
+      List the projects (websites) in the authenticated workspace. Each project
+      is an independent site with its own pages, posts, theme, domains, and
+      deploys. Use the returned proj_… id as the `project` arg on any content
+      method to target that site.
+    guidance:
+      use: "see which websites exist in this workspace before authoring or deploying"
+      next: "createPage / createPost with project=<proj_…> to author into one"
+    http: GET /api/v1/dashboard/projects
+    response:
+      format: json
+
+  createProject:
+    description: >
+      Create a new project (website) inside the workspace. Returns its proj_… id.
+      The workspace's plan caps how many projects it may have (max_deployed_sites)
+      — at the cap this returns a plan-deny with an upgrade CTA, not a 500.
+    guidance:
+      use: "add a second/third website under the same account"
+      warn: "subject to the workspace's max_deployed_sites plan cap"
+    http: POST /api/v1/dashboard/projects
+    params:
+      name:
+        type: string
+        required: true
+        description: Human-readable project name (e.g. "Landing site")
+      slug:
+        type: string
+        required: false
+        description: URL-safe slug (auto-generated from name if omitted)
+    response:
+      format: json
+
+  # ── Pages ──
+
+  listPages:
+    description: List content pages (including drafts).
+    http: GET /pages
+    params:
+      status:
+        type: enum
+        required: false
+        values: [draft, published, archived]
+        description: Filter by status
+      limit:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  createPage:
+    description: Create a new content page with blocks.
+    http: POST /pages
+    params:
+      title:
+        type: string
+        required: true
+        description: Page title
+      slug:
+        type: string
+        required: false
+        description: URL slug (auto-generated from title if omitted)
+      blocks:
+        type: array
+        required: false
+        description: Page content blocks (JSON array)
+        items: object
+      template:
+        type: string
+        required: false
+        description: Page template (landing, about, contact)
+      seo_title:
+        type: string
+        required: false
+      seo_description:
+        type: string
+        required: false
+    response:
+      format: json
+
+  getPage:
+    description: Get a content page by ID (includes blocks, SEO, status).
+    http: GET /pages/{page_id}
+    params:
+      page_id:
+        type: string
+        required: true
+        description: Page UUID
+    response:
+      format: json
+
+  updatePage:
+    description: Update a content page.
+    http: PATCH /pages/{page_id}
+    params:
+      page_id:
+        type: string
+        required: true
+        description: Page UUID
+      title:
+        type: string
+        required: false
+      slug:
+        type: string
+        required: false
+      blocks:
+        type: array
+        required: false
+        items: object
+      seo_title:
+        type: string
+        required: false
+      seo_description:
+        type: string
+        required: false
+    response:
+      format: json
+
+  deletePage:
+    description: >
+      Archive/delete a content page. Phase 11+12 gated — call with dry_run=true
+      first to receive a confirm_token, then call again with that confirm_token
+      to actually delete. Back-compat: no flags = legacy immediate delete.
+    http: DELETE /pages/{page_id}
+    params:
+      page_id:
+        type: string
+        required: true
+        description: Page UUID
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview the change without mutating. Returns confirm_token.
+      confirm_token:
+        type: string
+        required: false
+        description: Token from prior dry_run. Consume to perform delete.
+    response:
+      format: json
+
+  publishPage:
+    description: >
+      Publish a draft page (creates a version snapshot). Phase 11+12 gated —
+      dry_run=true returns preview + confirm_token; follow up with confirm_token.
+    http: POST /pages/{page_id}/publish
+    params:
+      page_id:
+        type: string
+        required: true
+        description: Page UUID
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview the change without publishing.
+      confirm_token:
+        type: string
+        required: false
+        description: Token from prior dry_run. Consume to publish.
+    response:
+      format: json
+
+  unpublishPage:
+    description: >
+      Revert a published page to draft. Phase 11+12 gated — dry_run=true returns
+      preview + confirm_token; follow up with confirm_token.
+    http: POST /pages/{page_id}/unpublish
+    params:
+      page_id:
+        type: string
+        required: true
+        description: Page UUID
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview the change without unpublishing.
+      confirm_token:
+        type: string
+        required: false
+        description: Token from prior dry_run. Consume to unpublish.
+    response:
+      format: json
+
+  # ── Posts ──
+
+  listPosts:
+    description: List blog posts.
+    http: GET /posts
+    params:
+      status:
+        type: enum
+        required: false
+        values: [draft, published]
+      tag:
+        type: string
+        required: false
+        description: Filter by tag
+      limit:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  createPost:
+    description: Create a blog post (Tiptap JSON body, metadata, tags).
+    http: POST /posts
+    params:
+      title:
+        type: string
+        required: true
+        description: Blog post title
+      slug:
+        type: string
+        required: false
+      body:
+        type: object
+        required: false
+        description: Post body (Tiptap JSON)
+      excerpt:
+        type: string
+        required: false
+      tags:
+        type: array
+        required: false
+        items: string
+      cover_image:
+        type: string
+        required: false
+    response:
+      format: json
+
+  publishPost:
+    description: Publish a blog post.
+    guidance:
+      use: "publish a draft post — makes it visible on the public site"
+    http: POST /posts/{post_id}/publish
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+    response:
+      format: json
+
+  getPost:
+    description: Get a blog post by ID (includes body, tags, author, status).
+    http: GET /posts/{post_id}
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+    response:
+      format: json
+
+  updatePost:
+    description: Update a blog post (title, body, excerpt, tags, author, category, featured).
+    http: PATCH /posts/{post_id}
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+      title:
+        type: string
+        required: false
+      slug:
+        type: string
+        required: false
+      body:
+        type: object
+        required: false
+        description: Post body (Tiptap JSON)
+      excerpt:
+        type: string
+        required: false
+      tags:
+        type: array
+        required: false
+        items: string
+      cover_image:
+        type: string
+        required: false
+      author_id:
+        type: string
+        required: false
+        description: Author UUID
+      category_id:
+        type: string
+        required: false
+        description: Category UUID
+      featured:
+        type: boolean
+        required: false
+        description: Mark as featured post
+    response:
+      format: json
+
+  deletePost:
+    description: Delete a blog post.
+    http: DELETE /posts/{post_id}
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+    response:
+      format: json
+
+  unpublishPost:
+    description: Revert a published post to draft.
+    http: POST /posts/{post_id}/unpublish
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+    response:
+      format: json
+
+  updatePostStatus:
+    description: Update post status (draft, published, archived).
+    http: POST /posts/{post_id}/status
+    params:
+      post_id:
+        type: string
+        required: true
+        description: Post UUID
+      status:
+        type: enum
+        required: true
+        values: [draft, published, archived]
+        description: New status
+    response:
+      format: json
+
+  searchPosts:
+    description: Search published posts by keyword (public endpoint).
+    http: GET /posts/search
+    params:
+      q:
+        type: string
+        required: true
+        description: Search query
+      limit:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  featuredPosts:
+    description: Get featured blog posts (public endpoint).
+    http: GET /posts/featured
+    params:
+      limit:
+        type: integer
+        required: false
+        description: Max results (default 5)
+    response:
+      format: json
+
+  # ── Authors ──
+
+  listAuthors:
+    description: List blog authors.
+    http: GET /authors
+    response:
+      format: json
+
+  createAuthor:
+    description: Create a blog author profile.
+    http: POST /authors
+    params:
+      full_name:
+        type: string
+        required: true
+        description: Author full name
+      slug:
+        type: string
+        required: false
+      avatar_url:
+        type: string
+        required: false
+      bio:
+        type: string
+        required: false
+        description: Author biography
+      email:
+        type: string
+        required: false
+      role:
+        type: enum
+        required: false
+        values: [author, editor, contributor, administrator]
+        description: Author role
+      agent_type:
+        type: enum
+        required: false
+        values: [human, ai]
+        description: Human or AI author
+      country:
+        type: string
+        required: false
+      city:
+        type: string
+        required: false
+    response:
+      format: json
+
+  getAuthor:
+    description: Get an author profile by ID.
+    http: GET /authors/{author_id}
+    params:
+      author_id:
+        type: string
+        required: true
+        description: Author UUID
+    response:
+      format: json
+
+  updateAuthor:
+    description: Update an author profile.
+    http: PATCH /authors/{author_id}
+    params:
+      author_id:
+        type: string
+        required: true
+        description: Author UUID
+      full_name:
+        type: string
+        required: false
+      slug:
+        type: string
+        required: false
+      avatar_url:
+        type: string
+        required: false
+      bio:
+        type: string
+        required: false
+      email:
+        type: string
+        required: false
+      role:
+        type: enum
+        required: false
+        values: [author, editor, contributor, administrator]
+      agent_type:
+        type: enum
+        required: false
+        values: [human, ai]
+      country:
+        type: string
+        required: false
+      city:
+        type: string
+        required: false
+    response:
+      format: json
+
+  deleteAuthor:
+    description: Soft-delete an author profile.
+    http: DELETE /authors/{author_id}
+    params:
+      author_id:
+        type: string
+        required: true
+        description: Author UUID
+    response:
+      format: json
+
+  # ── Tags ──
+
+  listTags:
+    description: List blog tags (includes post count).
+    http: GET /tags
+    response:
+      format: json
+
+  createTag:
+    description: Create a blog tag.
+    http: POST /tags
+    params:
+      name:
+        type: string
+        required: true
+        description: Tag name
+      slug:
+        type: string
+        required: false
+      description:
+        type: string
+        required: false
+    response:
+      format: json
+
+  updateTag:
+    description: Update a blog tag.
+    http: PATCH /tags/{tag_id}
+    params:
+      tag_id:
+        type: string
+        required: true
+        description: Tag UUID
+      name:
+        type: string
+        required: false
+      slug:
+        type: string
+        required: false
+      description:
+        type: string
+        required: false
+    response:
+      format: json
+
+  deleteTag:
+    description: Delete a blog tag.
+    http: DELETE /tags/{tag_id}
+    params:
+      tag_id:
+        type: string
+        required: true
+        description: Tag UUID
+    response:
+      format: json
+
+  # ── Categories ──
+
+  listCategories:
+    description: List blog categories (supports hierarchy).
+    http: GET /categories
+    response:
+      format: json
+
+  createCategory:
+    description: Create a blog category (supports hierarchy via parent_id).
+    http: POST /categories
+    params:
+      name:
+        type: string
+        required: true
+        description: Category name
+      slug:
+        type: string
+        required: false
+      description:
+        type: string
+        required: false
+      parent_id:
+        type: string
+        required: false
+        description: Parent category UUID (for hierarchy)
+      sort_order:
+        type: integer
+        required: false
+        description: Display order
+    response:
+      format: json
+
+  updateCategory:
+    description: Update a blog category.
+    http: PATCH /categories/{category_id}
+    params:
+      category_id:
+        type: string
+        required: true
+        description: Category UUID
+      name:
+        type: string
+        required: false
+      slug:
+        type: string
+        required: false
+      description:
+        type: string
+        required: false
+      parent_id:
+        type: string
+        required: false
+        description: Parent category UUID
+      sort_order:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  deleteCategory:
+    description: Delete a blog category.
+    http: DELETE /categories/{category_id}
+    params:
+      category_id:
+        type: string
+        required: true
+        description: Category UUID
+    response:
+      format: json
+
+  # ── Docs ──
+
+  getDocsTree:
+    description: Get documentation tree structure.
+    http: GET /docs/tree
+    response:
+      format: json
+
+  createDoc:
+    description: Create a documentation page.
+    http: POST /docs
+    params:
+      title:
+        type: string
+        required: true
+        description: Documentation page title
+      slug:
+        type: string
+        required: false
+      body:
+        type: object
+        required: false
+        description: Doc body (Tiptap JSON)
+      parent_id:
+        type: string
+        required: false
+        description: Parent doc ID (for nesting)
+    response:
+      format: json
+
+  # ── Navigation ──
+
+  getNavigation:
+    description: Get navigation menu (header, footer, docs_sidebar).
+    http: GET /navigation/{location}
+    params:
+      location:
+        type: enum
+        required: true
+        values: [header, footer, docs_sidebar]
+        description: Navigation location (header, footer, or docs_sidebar)
+    response:
+      format: json
+
+  updateNavigation:
+    description: Update navigation menu items.
+    http: PUT /navigation/{location}
+    params:
+      location:
+        type: enum
+        required: true
+        values: [header, footer, docs_sidebar]
+        description: Navigation location (header, footer, or docs_sidebar)
+      items:
+        type: array
+        required: true
+        description: Navigation items (nested JSON)
+        items: object
+    response:
+      format: json
+
+  # ── Settings ──
+
+  getSettings:
+    description: Get content settings (site name, SEO defaults, analytics, colors).
+    http: GET /settings
+    response:
+      format: json
+
+  updateSettings:
+    description: >
+      Update content settings. Phase 11+12 gated — dry_run=true returns preview
+      + confirm_token; follow up with confirm_token to apply.
+    http: PATCH /settings
+    params:
+      settings:
+        type: object
+        required: true
+        description: Settings to update
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview the change without mutating.
+      confirm_token:
+        type: string
+        required: false
+        description: Token from prior dry_run. Consume to apply.
+    response:
+      format: json
+
+  # ── Custom Domains ──
+
+  listDomains:
+    description: List custom domains configured for the content site.
+    http: GET /domains
+    response:
+      format: json
+
+  addDomain:
+    description: Add a custom domain. Requires DNS verification after adding.
+    http: POST /domains
+    params:
+      domain:
+        type: string
+        required: true
+        description: Domain name (e.g. "blog.mycompany.com")
+    response:
+      format: json
+
+  verifyDomain:
+    description: Verify DNS for a custom domain (checks CNAME/A record).
+    http: POST /domains/{domain}/verify
+    params:
+      domain:
+        type: string
+        required: true
+        description: Domain name to verify
+    response:
+      format: json
+
+  setPrimaryDomain:
+    description: Set a verified domain as the primary domain.
+    http: POST /domains/{domain}/primary
+    params:
+      domain:
+        type: string
+        required: true
+        description: Domain name to set as primary
+    response:
+      format: json
+
+  deleteDomain:
+    description: Remove a custom domain.
+    http: DELETE /domains/{domain}
+    params:
+      domain:
+        type: string
+        required: true
+        description: Domain name to remove
+    response:
+      format: json
+
+  # ── Components (Phase 9.6) ──
+
+  listComponents:
+    description: List UI components (reusable blocks with Shadow DOM isolation).
+    http: GET /components
+    params:
+      category:
+        type: enum
+        required: false
+        values: [hero, cta, faq, pricing, features, testimonials, contact_form, footer, header, gallery, stats, custom]
+        description: Filter by category
+      status:
+        type: enum
+        required: false
+        values: [draft, published, archived]
+        description: Filter by status
+      include_global:
+        type: boolean
+        required: false
+        description: Include global (system) components
+      limit:
+        type: integer
+        required: false
+    response:
+      format: json
+
+  createComponent:
+    description: Create a reusable UI component (auto-wrapped in Shadow DOM for CSS isolation). Tier is auto-detected from fields present.
+    http: POST /components
+    params:
+      slug:
+        type: string
+        required: true
+        description: Component slug (URL-safe identifier)
+      name:
+        type: string
+        required: true
+        description: Display name
+      html_template:
+        type: string
+        required: false
+        description: Liquid HTML template (required for Tier 1-3, omit for Tier 4 framework components)
+      css:
+        type: string
+        required: false
+        description: Component CSS (isolated via Shadow DOM — no leaks)
+      js:
+        type: string
+        required: false
+        description: "Tier 2: Component JavaScript — scoped to shadow root via new Function('root','props', code)"
+      dependencies:
+        type: array
+        required: false
+        items: string
+        description: "Tier 3: CDN allowlist keys (e.g. ['gsap', 'gsap/ScrollTrigger']). Check listCdnAllowlist for available keys"
+      framework:
+        type: enum
+        required: false
+        values: [react, vue, svelte]
+        description: "Tier 4: Framework type. When set, submit source_code instead of html_template"
+      source_code:
+        type: string
+        required: false
+        description: "Tier 4: Framework source code (JSX, Vue SFC, Svelte). Built into Web Component bundle on publish"
+      description:
+        type: string
+        required: false
+      version:
+        type: string
+        required: false
+        description: Semver version (default 1.0.0)
+      category:
+        type: enum
+        required: false
+        values: [hero, cta, faq, pricing, features, testimonials, contact_form, footer, header, gallery, stats, custom]
+      props_schema:
+        type: object
+        required: false
+        description: JSON Schema defining accepted props
+      default_props:
+        type: object
+        required: false
+        description: Default prop values
+      thumbnail_url:
+        type: string
+        required: false
+        description: Preview thumbnail URL
+      is_global:
+        type: boolean
+        required: false
+        description: Make available to all clients
+      tags:
+        type: array
+        required: false
+        items: string
+        description: Tags for discovery
+      kind:
+        type: enum
+        required: false
+        values: [static, interactive, dynamic, extension]
+        description: >
+          Component class (default static). A `dynamic` component binds live CMS
+          collections server-side and exposes the fetched rows as `items` in its
+          template. When kind=dynamic you MUST also pass block_type + js_runtime +
+          a non-empty sources[] (else the backend rejects with 422 chk_components_kind).
+      block_type:
+        type: enum
+        required: false
+        values: [list, item_details, form, calendar, kanban, chart, map, table]
+        description: "Required when kind=dynamic. The render shape of the bound data (e.g. list of cards, single item_details, table)."
+      js_runtime:
+        type: enum
+        required: false
+        values: [none, vanilla, web-component, island]
+        description: "Required when kind=dynamic. Use `none` for a pure-Liquid dynamic component (filtering + render is server-side); the richer runtimes are for client-hydrated blocks."
+      sources:
+        type: array
+        required: false
+        items: object
+        description: >
+          Required (non-empty) when kind=dynamic. Each entry binds one registered
+          data source and is fetched + filtered server-side at render time. Shape:
+          { source_id (e.g. "posts" — from listDataSources), role?, default_filter?
+          (object, e.g. {category:"news"}), default_sort? (e.g. "-published_at"),
+          default_limit? (int) }. The filtered rows arrive in the template as `items`
+          (with data_source / data_total also set). Binding a singleton source like
+          idap.lead to a list is rejected (422) — use it on a /lp/ page as `lead`.
+    response:
+      format: json
+
+  getComponent:
+    description: Get a UI component by ID (includes template, CSS, props schema).
+    http: GET /components/{component_id}
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+    response:
+      format: json
+
+  getComponentBySlug:
+    description: Get a UI component by slug (optionally a specific version).
+    http: GET /components/by-slug/{slug}
+    params:
+      slug:
+        type: string
+        required: true
+        description: Component slug
+      version:
+        type: string
+        required: false
+        description: Specific version (default latest published)
+    response:
+      format: json
+
+  updateComponent:
+    description: Update a UI component (template, CSS, JS, dependencies, framework source, props schema, metadata).
+    http: PATCH /components/{component_id}
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+      name:
+        type: string
+        required: false
+      html_template:
+        type: string
+        required: false
+        description: Liquid HTML template
+      css:
+        type: string
+        required: false
+        description: Component CSS
+      js:
+        type: string
+        required: false
+        description: "Tier 2: Component JavaScript (scoped to shadow root)"
+      dependencies:
+        type: array
+        required: false
+        items: string
+        description: "Tier 3: CDN allowlist keys"
+      framework:
+        type: enum
+        required: false
+        values: [react, vue, svelte]
+        description: "Tier 4: Framework type"
+      source_code:
+        type: string
+        required: false
+        description: "Tier 4: Framework source code"
+      description:
+        type: string
+        required: false
+      category:
+        type: enum
+        required: false
+        values: [hero, cta, faq, pricing, features, testimonials, contact_form, footer, header, gallery, stats, custom]
+      props_schema:
+        type: object
+        required: false
+        description: JSON Schema for props
+      default_props:
+        type: object
+        required: false
+      thumbnail_url:
+        type: string
+        required: false
+      tags:
+        type: array
+        required: false
+        items: string
+    response:
+      format: json
+
+  deleteComponent:
+    description: >
+      Delete a UI component. Phase 11+12 gated — dry_run=true returns preview
+      + confirm_token; follow up with confirm_token to delete.
+    http: DELETE /components/{component_id}
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+      dry_run:
+        type: boolean
+        required: false
+      confirm_token:
+        type: string
+        required: false
+    response:
+      format: json
+
+  publishComponent:
+    description: >
+      Publish a draft component (makes it available for use in page blocks).
+      Phase 11+12 gated — dry_run=true returns preview + confirm_token.
+    http: POST /components/{component_id}/publish
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+      dry_run:
+        type: boolean
+        required: false
+      confirm_token:
+        type: string
+        required: false
+    response:
+      format: json
+
+  archiveComponent:
+    description: >
+      Archive a component (removes from active use, keeps for reference).
+      Phase 11+12 gated — dry_run=true returns preview + confirm_token.
+    http: POST /components/{component_id}/archive
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+      dry_run:
+        type: boolean
+        required: false
+      confirm_token:
+        type: string
+        required: false
+    response:
+      format: json
+
+  listCdnAllowlist:
+    description: "List available CDN libraries for Tier 3 components. Returns keys, names, URLs, and categories."
+    http: GET /cdn-allowlist
+    response:
+      format: json
+
+  getBuildStatus:
+    description: "Get build status for a Tier 4 framework component (none, building, success, failed)."
+    http: GET /components/{component_id}/build-status
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+    response:
+      format: json
+
+  rebuildComponent:
+    description: "Trigger a rebuild for a failed Tier 4 framework component."
+    http: POST /components/{component_id}/rebuild
+    params:
+      component_id:
+        type: string
+        required: true
+        description: Component UUID
+    response:
+      format: json
+
+  listComponentVersions:
+    description: List all versions of a component by slug.
+    http: GET /components/{slug}/versions
+    params:
+      slug:
+        type: string
+        required: true
+        description: Component slug
+    response:
+      format: json
+
+  # ── Scroll-sequence one-shot (v2.87.0+) ──
+
+  videoToScrollSequence:
+    description: >
+      One-shot pipeline — turn a video URL into a scroll-linked image-sequence hero
+      on an existing page. Submits SpiderVideo extract_frames, polls to completion,
+      inserts a sys-scroll-sequence component block into the target page AS A DRAFT.
+      Never auto-publishes; caller still runs deploy_preview -> deploy_production
+      with a confirm_token. Target page must already exist — call createPage first
+      if it doesn't.
+    http: POST /scroll-sequence/from-video
+    params:
+      video_url:
+        type: string
+        required: true
+        description: Source video URL (SpiderMedia URL, di-atomic, or public http/https)
+      page_slug:
+        type: string
+        required: true
+        description: Target page slug — must already exist on this client
+      strategy:
+        type: enum
+        required: false
+        values: [target_frames, fps, duration_fps]
+        description: Frame-count strategy (default target_frames)
+      target_frames:
+        type: integer
+        required: false
+        description: Exact frame count 10-600 (default 120). Required if strategy=target_frames.
+      fps:
+        type: integer
+        required: false
+        description: Sample FPS 1-60. Required if strategy=fps or duration_fps.
+      duration_seconds:
+        type: integer
+        required: false
+        description: Clip duration 1-120 seconds. Required if strategy=duration_fps.
+      output_format:
+        type: enum
+        required: false
+        values: [webp, jpeg]
+        description: Frame output format (default webp — half the bytes of jpeg)
+      output_width:
+        type: integer
+        required: false
+        description: Frame width 320-1920 (default 1280)
+      output_quality:
+        type: integer
+        required: false
+        description: Encoder quality 50-95 (default 80)
+      scroll_distance_vh:
+        type: integer
+        required: false
+        description: Viewport heights for full sequence scroll 200-800 (default 400)
+      preload_strategy:
+        type: enum
+        required: false
+        values: [all, progressive]
+        description: progressive (default ±15-frame window) or all (load everything up front)
+      canvas_width:
+        type: integer
+        required: false
+        description: Canvas width 320-1920 (default 1280)
+      canvas_height:
+        type: integer
+        required: false
+        description: Canvas height 240-1080 (default 720)
+      background_color:
+        type: string
+        required: false
+        description: Hex color painted before frames load (default #ffffff)
+      position:
+        type: string
+        required: false
+        description: "'append' (default), 'prepend', or JSON spec like '{\"before\":\"slug\"}' / '{\"after\":\"slug\"}' / '{\"index\":N}'"
+      priority:
+        type: integer
+        required: false
+        description: Job priority 0-10 (default 5)
+      dry_run:
+        type: boolean
+        required: false
+        description: If true, returns block JSON without touching the page (default false)
+    response:
+      format: json
+
+  # ── Component update-and-propagate one-shot (v2.88.0+) ──
+
+  componentUpdateAndPropagate:
+    description: >
+      One-shot — bump a component's version AND repoint every (or selected) consuming page's
+      block to the new version, gated by a single confirm_token. Replaces the 5-step choreography
+      (PATCH component + iterate pages + PATCH each blocks + confirm_token per page + publish each).
+      Never auto-deploys the tenant site — block-level updates render live via the content API on
+      next request.
+    http: POST /components/{slug}/update-and-propagate
+    params:
+      slug:
+        type: string
+        required: true
+        description: Component slug (must already be published for this client)
+      html_template:
+        type: string
+        required: false
+        description: New HTML template. Inline <style> tags are rejected — put CSS in the css field.
+      css:
+        type: string
+        required: false
+        description: New CSS (injected via Declarative Shadow DOM at render time)
+      js:
+        type: string
+        required: false
+        description: New JS (Tier 2 scoped hydration)
+      props_schema:
+        type: object
+        required: false
+        description: New JSON Schema for prop validation
+      default_props:
+        type: object
+        required: false
+        description: New default prop values
+      dependencies:
+        type: array
+        required: false
+        description: CDN library dependency keys (Tier 3). Validated against allowlist.
+      name:
+        type: string
+        required: false
+        description: Update display name
+      description:
+        type: string
+        required: false
+        description: Update description
+      bump:
+        type: enum
+        required: false
+        values: [patch, minor, major]
+        description: How to bump semver from current version (default patch)
+      pages:
+        type: array
+        required: false
+        description: Comma-separated page slugs to limit propagation. Omit to propagate to every consuming page.
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview mode — returns affected_pages + confirm_token without mutating (default false)
+      confirm_token:
+        type: string
+        required: false
+        description: Token from a prior dry_run. Consume to perform the mutation.
+    response:
+      format: json
+
+  # ── Component rollback one-shot (v2.88.0+) ──
+
+  componentRollback:
+    description: >
+      Restore a component to an earlier version by creating a new published version
+      with the target version's content, and repointing consuming pages. Pairs with
+      componentUpdateAndPropagate for undo flow. Distinct gate action ("component_rollback")
+      so tokens can't cross-consume. Never auto-deploys the tenant KV.
+    http: POST /components/{slug}/rollback
+    params:
+      slug:
+        type: string
+        required: true
+        description: Component slug to roll back
+      target_version:
+        type: string
+        required: true
+        description: Version to restore (e.g. "1.0.3"). Use listComponentVersions to list.
+      bump:
+        type: enum
+        required: false
+        values: [patch, minor, major]
+        description: How to bump the NEW version (which receives the old content). Default patch.
+      pages:
+        type: array
+        required: false
+        description: Comma-separated page slugs to limit repoint. Omit for all.
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview mode — returns confirm_token without mutating (default false)
+      confirm_token:
+        type: string
+        required: false
+        description: Token from a prior dry_run. Consume to apply.
+    response:
+      format: json
+
+  # ── Live Data (Live Data Everywhere) ──
+  # The data sources that drive kind='dynamic' components and the live
+  # `{{ posts }}`/`{{ authors }}`/… collections available in every page + component.
+
+  listDataSources:
+    description: >
+      List every registered content data source you can bind a kind='dynamic'
+      component to, with each source's filterable + sortable fields. Call this
+      BEFORE creating a dynamic component so you know the valid source_id values
+      and field names. v1 sources: posts, authors, categories, tags, changelog.
+      idap.* sources (countries/cities/streets/businesses) are Phase 2 (list → 501
+      today); idap.lead is a singleton that reaches /lp/ templates as `lead`.
+    http: GET /data-sources
+    params:
+      parent_id:
+        type: string
+        required: false
+        description: Optional — scope to child sources of a hierarchical source (e.g. categories under a parent).
+    response:
+      format: json
+
+  listDataSourceItems:
+    description: >
+      Fetch filtered / sorted / paginated rows from one registered source — the
+      same door a kind='dynamic' component binds to, exposed as a tool so you can
+      PREVIEW rows before wiring a component (e.g. "latest 3 posts tagged news").
+      Returns { items: [...], total, source_id }. Filters run SERVER-SIDE — a
+      client-side Liquid {% if %} only filters rows already fetched, it does not
+      re-query. Singleton sources (idap.lead) → 422; idap.* collection lists → 501
+      (Phase 2). Maps to the public GET /content/data-sources/{source_id}/items.
+    http: GET /data-sources/{source_id}/items
+    params:
+      source_id:
+        type: string
+        required: true
+        description: Source to query (e.g. "posts", "authors", "categories", "tags", "changelog"). From listDataSources.
+      filter:
+        type: object
+        required: false
+        description: Field equality filters, e.g. {tag:"news", is_featured:true}. Server-side.
+      sort:
+        type: string
+        required: false
+        description: Sort field; prefix "-" for descending (e.g. "-published_at").
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (default 50).
+      offset:
+        type: integer
+        required: false
+        description: Rows to skip for pagination (default 0).
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field allowlist to trim the payload (e.g. "slug,title").
+    response:
+      format: json

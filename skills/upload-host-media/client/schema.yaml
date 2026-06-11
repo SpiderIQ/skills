@@ -1,0 +1,119 @@
+# Upload/Host Media Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate upload-host-media
+
+name: upload-host-media
+version: "1.0.0"
+description: >
+  Media hosting — upload images, files, and videos to CDN;
+  import videos from URL; check video processing status.
+category: media
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: true
+triggers:
+  - upload
+  - media
+  - image
+  - file
+  - video
+  - cdn
+
+methods:
+  # ── Image Upload ──────────────────────────────────────────
+  uploadImage:
+    description: >
+      Upload an image file via multipart form data. Returns
+      the hosted URL on CDN.
+    http: POST /media/images/upload
+    content_type: multipart/form-data
+    params:
+      file:
+        type: string
+        required: true
+        description: Image file to upload
+    response:
+      format: json
+
+  # ── File Upload ───────────────────────────────────────────
+  uploadFile:
+    description: >
+      Upload a generic file via multipart form data. Returns
+      the hosted URL on CDN.
+    http: POST /media/files/upload
+    content_type: multipart/form-data
+    params:
+      file:
+        type: string
+        required: true
+        description: File to upload
+    response:
+      format: json
+
+  # ── Base64 Upload ─────────────────────────────────────────
+  uploadBase64:
+    description: >
+      Upload a file encoded as base64. Useful for programmatic
+      uploads without multipart form handling.
+    http: POST /media/files/upload-base64
+    params:
+      file_data:
+        type: string
+        required: true
+        description: Base64-encoded file content
+      filename:
+        type: string
+        required: true
+        description: Desired filename including extension
+      folder:
+        type: string
+        required: false
+        description: Optional folder path for organizing files
+    response:
+      format: json
+
+  # ── List Files ────────────────────────────────────────────
+  listFiles:
+    description: >
+      List all uploaded files for the current brand.
+    http: GET /media/files/list
+    response:
+      format: json
+
+  # ── Video Import ──────────────────────────────────────────
+  importVideo:
+    description: >
+      Import a video from an external URL for hosting and
+      processing on CDN.
+    http: POST /media/videos/import
+    params:
+      url:
+        type: string
+        required: true
+        description: URL of the video to import
+      privacy:
+        type: string
+        required: false
+        description: Privacy setting for the hosted video
+    response:
+      format: json
+
+  # ── Video Status ──────────────────────────────────────────
+  getVideoStatus:
+    description: >
+      Check the processing status of an imported video.
+    http: GET /media/videos/{video_id}/status
+    params:
+      video_id:
+        type: string
+        required: true
+        description: The video ID to check status for
+    response:
+      format: json

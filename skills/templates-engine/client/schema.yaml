@@ -1,0 +1,280 @@
+# Templates Engine Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate templates-engine
+
+name: templates-engine
+version: "1.0.0"
+description: >
+  Liquid template engine for content sites — manage custom templates,
+  themes, config, preview rendering, and deploy to Cloudflare edge.
+category: content
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - template
+  - theme
+  - liquid
+  - deploy site
+  - content deploy
+
+methods:
+  # ── Templates CRUD ──
+
+  listTemplates:
+    description: List all custom templates for the site.
+    http: GET /templates
+    response:
+      format: json
+
+  getTemplate:
+    description: Get template source code by path (e.g. "pages/home.liquid").
+    http: GET /templates/{path}
+    params:
+      path:
+        type: string
+        required: true
+        description: Template path (e.g. "pages/home.liquid", "partials/header.liquid")
+    response:
+      format: json
+
+  upsertTemplate:
+    description: >
+      Create or update a custom template. Provide Liquid source code.
+      Overrides the theme default for this path.
+    http: PUT /templates/{path}
+    params:
+      path:
+        type: string
+        required: true
+        description: Template path
+      content:
+        type: string
+        required: true
+        description: Liquid template source code
+      theme:
+        type: string
+        required: false
+        description: Theme name (if creating from theme base)
+    response:
+      format: json
+
+  deleteTemplate:
+    description: Delete a custom template (reverts to theme default).
+    http: DELETE /templates/{path}
+    params:
+      path:
+        type: string
+        required: true
+        description: Template path to delete
+    response:
+      format: json
+
+  # ── Themes ──
+
+  listThemes:
+    description: List available pre-built themes.
+    http: GET /templates/themes
+    response:
+      format: json
+
+  applyTheme:
+    description: >
+      Apply a theme to the content site. Phase 11+12 gated — dry_run=true
+      returns preview (list of files that would be overwritten) + confirm_token;
+      follow up with confirm_token to actually apply.
+    http: POST /templates/apply-theme
+    params:
+      theme:
+        type: string
+        required: true
+        description: Theme name to apply
+      dry_run:
+        type: boolean
+        required: false
+        description: Preview the change without mutating.
+      confirm_token:
+        type: string
+        required: false
+        description: Token from prior dry_run. Consume to apply.
+    response:
+      format: json
+
+  # ── Config ──
+
+  getConfig:
+    description: Get template configuration (theme, routes, settings, data_sources).
+    http: GET /templates/config
+    response:
+      format: json
+
+  updateConfig:
+    description: Update template configuration — theme, routes, settings, or data_sources.
+    http: PATCH /templates/config
+    params:
+      theme:
+        type: string
+        required: false
+        description: Theme name
+      routes:
+        type: object
+        required: false
+        description: Route-to-template mapping
+      settings:
+        type: object
+        required: false
+        description: Template settings (colors, fonts, etc.)
+      data_sources:
+        type: object
+        required: false
+        description: Data source configuration
+    response:
+      format: json
+
+  # ── Preview ──
+
+  preview:
+    description: >
+      Render a template with mock data. Returns HTML preview.
+      Use for testing templates before deploying.
+    http: POST /templates/preview
+    params:
+      template_path:
+        type: string
+        required: true
+        description: Template path to render
+      data:
+        type: object
+        required: false
+        description: Mock data to inject into template variables
+    response:
+      format: json
+
+  # ── Deploy ──
+
+  deploySite:
+    description: >
+      Deploy content site to Cloudflare edge. Phase 11+12: prefer
+      deploySitePreview + deploySiteProduction for the safe two-step flow.
+      Back-compat: no flags = legacy immediate deploy. Set dry_run=true for a
+      preview, or pass confirm_token to consume a prior preview.
+    http: POST /content/deploy
+    params:
+      dry_run:
+        type: boolean
+        required: false
+        description: Issue a preview + confirm_token without deploying.
+      confirm_token:
+        type: string
+        required: false
+        description: Consume a prior preview token and deploy.
+    response:
+      format: json
+
+  deploySitePreview:
+    description: >
+      Phase 11+12 Stage 2 — issue a preview URL + confirm_token without
+      deploying. Returns `{ preview_url, confirm_token, expires_at, preview,
+      snapshot_hash }`. Call deploySiteProduction with the returned token to
+      actually deploy.
+    http: POST /content/deploy/preview
+    response:
+      format: json
+
+  deploySiteProduction:
+    description: >
+      Phase 11+12 Stage 2 — consume a confirm_token from a prior
+      deploySitePreview call and run the real deploy (Lock 4). 410 if expired,
+      409 if already consumed, 403 on mismatch.
+    http: POST /content/deploy/production
+    params:
+      confirm_token:
+        type: string
+        required: true
+        description: Token returned by deploySitePreview
+    response:
+      format: json
+
+  getDeployStatus:
+    description: Get status of the latest deployment.
+    http: GET /content/deploy/status
+    response:
+      format: json
+
+  getDeployHistory:
+    description: List recent deployments with status and timing.
+    http: GET /content/deploy/history
+    params:
+      limit:
+        type: integer
+        required: false
+        description: Number of deploys to return (default 10)
+    response:
+      format: json
+
+  # ── Chrome override convenience (2026-04-16, @spideriq/mcp@0.8.2) ──
+  # Intent-based wrappers that translate `section: "footer"` into the
+  # correct content_templates path (sections/footer.liquid) so agents
+  # don't have to know the path convention. Pair with deploySitePreview
+  # + deploySiteProduction to ship. See /content/help#chrome_override.
+
+  getSectionSource:
+    description: >
+      Read the current Liquid source for a theme section. Returns
+      { path, source, is_override } — is_override=true if this client
+      has uploaded a custom version. Use this before overrideSection to
+      read-modify-write the default theme source.
+    http: GET /templates/{path}
+    params:
+      section:
+        type: string
+        required: true
+        description: >
+          Which chrome section. Maps to content_templates path:
+          header→sections/header.liquid, footer→sections/footer.liquid,
+          hero→sections/hero.liquid, layout→layout/theme.liquid,
+          head→snippets/head.liquid.
+    response:
+      format: json
+
+  overrideSection:
+    description: >
+      Upload a custom Liquid source for a theme section (header, footer,
+      layout, head, hero). Takes precedence over the default theme for
+      this client. THE supported path for site chrome customization — do
+      NOT use JavaScript Shadow-DOM-escape hacks. Used in production by
+      danmagi, sms-chemicals, mail.spideriq.ai.
+    http: PUT /templates/{path}
+    params:
+      section:
+        type: string
+        required: true
+        description: header | footer | layout | head | hero
+      liquid:
+        type: string
+        required: true
+        description: Full Liquid template source (inherits nothing — provide a complete replacement)
+    response:
+      format: json
+
+  applyLayoutPreset:
+    description: >
+      Apply a canned layout/theme.liquid wrapper preset. "default" = full
+      chrome (header + footer). "blank" = no chrome at all (full canvas).
+      "landing" = header only, no footer. Saves authoring a custom layout
+      from scratch.
+    http: PUT /templates/layout/theme.liquid
+    params:
+      preset:
+        type: string
+        required: true
+        description: default | blank | landing
+    response:
+      format: json
