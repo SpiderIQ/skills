@@ -1,0 +1,14 @@
+{
+  "title": "A SpiderMail send is an async job: 201 = queued, not delivered, and there is no idempotency key",
+  "summary": "Unlike Resend/Postmark/SendGrid, sendEmail does not return a message id synchronously — POST /jobs/spiderMail/submit enqueues a job and returns a job_id with status 'queued'. The SMTP send happens in a worker seconds later and can still fail (auth, timeout, bad recipient). Reporting 'sent' off the 201 is a silent lie; poll get_job_status until completed/failed. There is no idempotency key (Postmark has none either) — a retried submit double-sends, so submit once and check list_jobs before re-submitting.",
+  "created_at": "2026-06-10",
+  "updated_at": "2026-06-10",
+  "tags": ["spidermail", "send", "async", "job-queue", "idempotency"],
+  "references": [
+    "app/api/v1/jobs/spidermail.py (POST /spiderMail/submit → 201 queued)",
+    "packages/mcp-tools/src/mail/mail.ts send_email (returns job_id + next_step: poll get_job_status)",
+    "docs/services/SpiderMail/CLAUDE.md §1 Data Flow: Write = API → RabbitMQ → Worker → SMTP (async)",
+    "docs/services/SpiderMail/CLAUDE.md §6 Dispatcher Contract: worker heartbeats, real exception on SMTP failure",
+    "Postmark support: 'What is an Idempotency Key?' — Postmark does not support idempotency keys (https://postmarkapp.com/support/article/what-is-an-idempotency-key)"
+  ]
+}

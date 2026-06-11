@@ -1,0 +1,14 @@
+{
+  "title": "Attachment text is an inline preview on getMessage — there is no PAT route to the full text",
+  "summary": "The poller extracts inbound attachment text (PDF/DOCX/image-OCR/CSV/code via LiteParse) and stores preview + full_text in email_attachments. Over a PAT, the agent only gets the metadata + ~500-char preview INLINE on GET /mail/messages/{id}?include_attachments=true. The YAML output emits retrieve_via: /api/v1/mail/attachments/{id}, but that route is NOT served (grep of app/ finds no such decorator) — it 404s. By design only summary+preview reach the agent (token economy); plan around the preview, and treat the retrieve_via URL as a known dead link to fix in SpiderMail.",
+  "created_at": "2026-06-10",
+  "updated_at": "2026-06-10",
+  "tags": ["spidermail", "attachments", "preview", "gap"],
+  "references": [
+    "app/api/v1/mail.py:112 (_format_message_yaml emits retrieve_via: /api/v1/mail/attachments/{att['id']})",
+    "app/api/v1/mail.py:1121-1160 (GET /messages/{id} include_attachments → inline attachment summaries)",
+    "app/api/v1/mail.py route grep 2026-06-10: NO @router.get('.../attachments/{id}') exists publicly",
+    "docs/services/SpiderMail/CLAUDE.md §3 Attachment Processing: preview (first 1500 chars) + full_text (inline <1MB or CDN)",
+    "docs/services/SpiderMail/LEARNINGS.md #8: send summary+preview only, agent requests full content when needed"
+  ]
+}
