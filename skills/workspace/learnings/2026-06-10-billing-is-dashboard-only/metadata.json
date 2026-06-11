@@ -1,0 +1,13 @@
+{
+  "title": "Billing is dashboard-only — there is no PAT endpoint that changes a subscription",
+  "summary": "Every billing capability (plan, usage, invoices, subscribe/change/cancel, Stripe portal) lives behind session-auth /dashboard/plans/* routes (require_tenant_member), NOT the PAT path brands.py uses. A workspace agent therefore cannot read or mutate billing programmatically — it must READ the read-only subscription signal on getBrand and REDIRECT to app.spideriq.ai/dashboard/plans. Enforcement of spend happens in the Dispatcher: 429 (cost_ceiling_usd_per_24h, has Retry-After) and 402 (monthly_spend_cap_usd, no Retry-After).",
+  "created_at": "2026-06-10T00:00:00Z",
+  "updated_at": "2026-06-10T00:00:00Z",
+  "tags": ["billing", "stripe", "dispatcher", "402", "429", "gap"],
+  "references": [
+    "app/api/v1/dashboard_plans.py — prefix=/dashboard/plans, all routes require_tenant_member (session, not PAT)",
+    "docs/services/fastapi/dispatcher/dispatcher_master_plan.md — unified_24h ceiling → 429+Retry-After; monthly_spend_cap_usd → 402",
+    "skills/workspace/references/gaps.md — RFC B1–B4 for client billing-VIEW PAT endpoints (follow-up)",
+    "Stripe Agent Toolkit — billing via portal sessions, read-first/write-narrow — https://docs.stripe.com/mcp"
+  ]
+}

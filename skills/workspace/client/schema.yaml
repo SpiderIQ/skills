@@ -1,0 +1,354 @@
+# Workspace-Admin Skill — API Surface Definition
+# Source of truth for Tier 3 client generation + the gateway guidance envelope.
+# Regenerate plugin with: opvs-skills generate workspace
+#
+# SCOPE: CLIENT SELF-SERVICE ONLY. Every method below is callable with the
+# caller's own PAT and acts ONLY on brands the caller is a member of. There is
+# NO cross-tenant / fleet / all-tenant surface here — that lives in the separate
+# `opvs-admin` super-admin skill (superadmin.* entitlements / X-Admin-Key).
+#
+# brand_id is an INTEGER (server expects int — app/api/v1/brands.py:59
+# `_verify_api_client_brand_access(..., brand_id: int)`), NOT the cli_ public id.
+# Mutations are gated to brand owner/admin server-side; client_user is read-only.
+
+name: workspace
+version: "0.1.0"
+description: >
+  Manage your own SpiderIQ workspace — the brands you belong to, their team
+  (members + invitations with brand_admin/client_user roles), brand profile,
+  settings, logo, and per-brand API-key integrations. Billing is view-and-redirect
+  (subscriptions are managed in the dashboard portal, not via PAT — see
+  references/billing.md).
+category: admin
+base_url: /api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false   # listBrands works with no brand; the rest take brand_id
+triggers:
+  - workspace
+  - account
+  - team
+  - members
+  - invite
+  - brand
+  - settings
+  - billing
+  - subscription
+  - integration
+  - api key
+  - provider key
+
+guidance:                                      # ← skill-level envelope (Initiative A)
+  use: >
+    Reach for this when the user wants to administer THEIR OWN workspace —
+    add/remove teammates, send or revoke invitations, change roles, rename a
+    brand, edit brand profile/settings/logo, or check their plan & usage.
+  not:
+    - "opvs-admin → cross-tenant / fleet / all-client operations (super-admin only; this skill never leaves the caller's own brands)"
+    - "auth → the signed-in person's OWN identity (profile, OAuth connectors, sessions, switch active brand)"
+    - "integrations → per-brand third-party API keys (LLM providers, Smartlead) — a sibling skill in this same package"
+  intent_aliases: ["workspace", "account", "organization", "org", "team", "members", "seats", "invite", "brand", "tenant"]
+  pitfalls:
+    - "brand_id is the INTEGER brand id, not the cli_ public client id — call listBrands first to get it."
+    - "All mutations require the caller to be brand owner/admin; a client_user gets 403. Check membership_role from listBrands/getMe before mutating."
+    - "Subscriptions/invoices/payment-method are NOT PAT-mutable — there is no programmatic billing write. Surface the dashboard portal link instead (references/billing.md)."
+    - "An invitation can be SENT by PAT but only ACCEPTED in a logged-in session — never promise an agent can auto-accept on the invitee's behalf."
+    - "Integration api_key values are secrets — never echo them back; verify with testIntegration after createIntegration."
+
+methods:
+  # ── Brands (the workspaces you belong to) ────────────────────────────────
+  listBrands:
+    description: >
+      List every brand the caller is a member of, with the caller's
+      membership_role (owner / brand_admin / client_user) per brand. The
+      entry point — gives you the integer brand_id every other method needs.
+    guidance:
+      use: "First call in any workspace task — resolves brand_id + your role."
+      next: "getBrand, listBrandMembers, listBrandInvitations"
+      warn: "Returns ONLY your brands; an empty list means the PAT's client has no brand membership, not an error."
+      telemetry_signal_default: hot
+    http: GET /brands
+    response: { format: json }
+
+  createBrand:
+    description: >
+      Create a new brand/workspace; the caller becomes its owner with a fresh
+      brand_settings + brand_information record.
+    guidance:
+      use: "Spin up a second workspace under the same account."
+      next: "updateBrandSettings, sendBrandInvitation"
+      warn: "Rarely needed — most accounts have exactly one brand. Confirm intent before creating."
+      telemetry_signal_default: cold
+    http: POST /brands
+    params:
+      name: { type: string, required: true, description: Brand/organization name }
+      description: { type: string, required: false, description: Short description }
+    response: { format: json }
+
+  getBrand:
+    description: Get one brand's details (name, slug, billing_email, member count, subscription status).
+    guidance:
+      use: "Read a single workspace's headline info."
+      next: "getBrandSettings, listBrandMembers"
+      warn: "subscription status here is read-only signal; manage the plan via the dashboard (references/billing.md)."
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id from listBrands }
+    response: { format: json }
+
+  updateBrand:
+    description: Update a brand's name, slug, or billing_email. Owner/admin only.
+    guidance:
+      use: "Rename the workspace or change the billing-contact email."
+      next: "getBrand"
+      warn: "billing_email here is only the CONTACT address — it does not move the Stripe subscription."
+      telemetry_signal_default: cold
+    http: PATCH /brands/{brand_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      name: { type: string, required: false, description: New brand name }
+      slug: { type: string, required: false, description: New URL slug }
+      billing_email: { type: string, required: false, description: Billing contact email }
+    response: { format: json }
+
+  # ── Settings / profile / logo ────────────────────────────────────────────
+  getBrandSettings:
+    description: Get brand settings — voice, tone, primary color, logo_url, feature flags.
+    guidance:
+      use: "Read the brand's presentation/voice settings."
+      next: "updateBrandSettings"
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}/settings
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  updateBrandSettings:
+    description: Update brand settings (partial — send only the keys you change). Owner/admin only.
+    guidance:
+      use: "Change brand voice/tone/color or feature toggles."
+      next: "getBrandSettings"
+      warn: "Partial PATCH — omitted keys are left untouched, not cleared."
+      telemetry_signal_default: cold
+    http: PATCH /brands/{brand_id}/settings
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      settings: { type: object, required: true, description: Key-value settings to merge }
+    response: { format: json }
+
+  getBrandInformation:
+    description: Get the brand's business profile — city, country, website, contact details.
+    guidance:
+      use: "Read the brand's business/location profile."
+      next: "updateBrandInformation"
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}/information
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  updateBrandInformation:
+    description: Update the brand business profile (city, country, website, etc.). Owner/admin only.
+    guidance:
+      use: "Edit business address / website / contact info."
+      next: "getBrandInformation"
+      telemetry_signal_default: cold
+    http: PATCH /brands/{brand_id}/information
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  uploadBrandLogo:
+    description: Upload/replace the brand logo. Converted to WebP and stored in R2; sets logo_url in settings. Owner/admin only.
+    guidance:
+      use: "Set or change the workspace logo."
+      next: "getBrandSettings"
+      warn: "Multipart file upload — pass an image path/bytes, not a URL."
+      telemetry_signal_default: cold
+    http: POST /brands/{brand_id}/logo
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      file: { type: string, required: true, description: Image file path or bytes (PNG/JPG/WebP) }
+    response: { format: json }
+
+  deleteBrandLogo:
+    description: Remove the brand logo and clean up the stored R2 file. Owner/admin only.
+    guidance:
+      use: "Clear the workspace logo."
+      next: "getBrandSettings"
+      telemetry_signal_default: cold
+    http: DELETE /brands/{brand_id}/logo
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  # ── Members (the team) ───────────────────────────────────────────────────
+  listBrandMembers:
+    description: List active members of a brand with their role (owner/brand_admin/client_user), position and status.
+    guidance:
+      use: "See who's on the team and what role they hold."
+      next: "updateBrandMember, removeBrandMember, sendBrandInvitation"
+      telemetry_signal_default: hot
+    http: GET /brands/{brand_id}/members
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  updateBrandMember:
+    description: Update a member's role / position / status (e.g. promote client_user → brand_admin). Owner/admin only.
+    guidance:
+      use: "Promote/demote a teammate or change their status."
+      next: "listBrandMembers"
+      warn: "You cannot change the owner's role; only owner/admin may call this."
+      telemetry_signal_default: cold
+    http: PATCH /brands/{brand_id}/members/{member_user_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      member_user_id: { type: string, required: true, description: The member's user id (from listBrandMembers) }
+      role: { type: string, required: false, description: "New role: brand_admin or client_user" }
+      position: { type: string, required: false, description: Job title / position }
+      status: { type: string, required: false, description: Member status (active/suspended) }
+    response: { format: json }
+
+  removeBrandMember:
+    description: Remove a member from the brand. Owner/admin only; cannot remove the brand owner.
+    guidance:
+      use: "Off-board a teammate (revokes their access to the workspace)."
+      next: "listBrandMembers"
+      warn: "Removing a member does NOT free a billing seat automatically — check the plan in the dashboard."
+      telemetry_signal_default: cold
+    http: DELETE /brands/{brand_id}/members/{member_user_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      member_user_id: { type: string, required: true, description: The member's user id to remove }
+    response: { format: json }
+
+  # ── Invitations ──────────────────────────────────────────────────────────
+  listBrandInvitations:
+    description: List a brand's invitations (pending / accepted / expired / canceled). Owner/admin only.
+    guidance:
+      use: "See who's been invited and the status of each invite."
+      next: "sendBrandInvitation, resendBrandInvitation, cancelBrandInvitation"
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}/invitations
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  sendBrandInvitation:
+    description: Invite someone to the brand by email with a role. Sends an invitation email; status stays pending until they sign in and accept. Owner/admin only.
+    guidance:
+      use: "Add a teammate by email."
+      next: "listBrandInvitations"
+      warn: "PAT can SEND but not ACCEPT — the invitee must log in to accept (references/manage-team.md). Default role is client_user."
+      telemetry_signal_default: cold
+    http: POST /brands/{brand_id}/invitations
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      email: { type: string, required: true, description: Invitee email address }
+      role: { type: string, required: false, description: "brand_admin or client_user (default: client_user)" }
+    response: { format: json }
+
+  resendBrandInvitation:
+    description: Resend a pending invitation email and reset its 7-day expiry. Owner/admin only.
+    guidance:
+      use: "Nudge an invitee whose invite is going stale."
+      next: "listBrandInvitations"
+      telemetry_signal_default: cold
+    http: POST /brands/{brand_id}/invitations/{invitation_id}/resend
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      invitation_id: { type: string, required: true, description: Invitation id (from listBrandInvitations) }
+    response: { format: json }
+
+  cancelBrandInvitation:
+    description: Revoke a pending invitation. Owner/admin only.
+    guidance:
+      use: "Cancel an invite that was sent in error or is no longer needed."
+      next: "listBrandInvitations"
+      telemetry_signal_default: cold
+    http: DELETE /brands/{brand_id}/invitations/{invitation_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      invitation_id: { type: string, required: true, description: Invitation id to revoke }
+    response: { format: json }
+
+  getPendingInvitations:
+    description: List invitations addressed to the CALLER's own email across all brands (the "invites waiting for me" view). PAT-callable.
+    guidance:
+      use: "Show the signed-in user which brands have invited them."
+      next: "auth.acceptInvite (accept happens in the auth skill / a signed-in session)"
+      warn: "This lists invites TO you; accepting them is an auth-skill / dashboard action, not a workspace write."
+      telemetry_signal_default: warm
+    http: GET /brands/invitations/pending
+    response: { format: json }
+
+  # ── Integrations (per-brand provider API keys) ───────────────────────────
+  # Migrated from the former publish-skills `manage-brands` skill. Client-facing
+  # LLM-provider key management (OpenRouter, Mistral, …) on the caller's own brand.
+  listIntegrations:
+    description: List the brand's API-key integrations (provider keys with usage/limits).
+    guidance:
+      use: "See which provider keys are configured on the brand."
+      next: "createIntegration, testIntegration, deleteIntegration"
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}/integrations
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+    response: { format: json }
+
+  createIntegration:
+    description: Add a provider API key (OpenRouter, Mistral, etc.) to the brand, optionally with a daily limit. Owner/admin only.
+    guidance:
+      use: "Connect a new LLM-provider API key for the brand."
+      next: "testIntegration"
+      warn: "api_key is a SECRET — never echo it back; always testIntegration after creating."
+      telemetry_signal_default: cold
+    http: POST /brands/{brand_id}/integrations
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      provider: { type: string, required: true, description: "Provider name (e.g. openrouter, mistral)" }
+      api_key: { type: string, required: true, description: API key value (secret — do not echo) }
+      label: { type: string, required: false, description: Human-readable label }
+      daily_limit: { type: integer, required: false, description: Daily usage cap }
+    response: { format: json }
+
+  testIntegration:
+    description: Test connectivity/validity of a provider API key. Run after createIntegration to confirm.
+    guidance:
+      use: "Verify a key works right after adding it (or when debugging failures)."
+      next: "listIntegrations"
+      telemetry_signal_default: warm
+    http: POST /brands/{brand_id}/integrations/{integration_id}/test
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      integration_id: { type: string, required: true, description: Integration id (from listIntegrations) }
+    response: { format: json }
+
+  deleteIntegration:
+    description: Remove a provider API-key integration from the brand. Owner/admin only.
+    guidance:
+      use: "Decommission a provider key (e.g. rotated/leaked)."
+      next: "listIntegrations"
+      warn: "Active campaigns/agents using this key will lose it — confirm before deleting."
+      telemetry_signal_default: cold
+    http: DELETE /brands/{brand_id}/integrations/{integration_id}
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      integration_id: { type: string, required: true, description: Integration id to delete }
+    response: { format: json }
+
+  # ── Billing ──────────────────────────────────────────────────────────────
+  # INTENTIONALLY NO billing WRITE methods. Subscriptions, invoices, and the
+  # payment method are managed only through the dashboard's Stripe portal
+  # (session-auth `/dashboard/plans/*`, NOT PAT). The skill's billing job is
+  # READ + REDIRECT — surface the plan/usage state and the portal link.
+  # See references/billing.md and references/gaps.md for the full gap analysis
+  # and the RFC for the missing PAT billing-status endpoint.

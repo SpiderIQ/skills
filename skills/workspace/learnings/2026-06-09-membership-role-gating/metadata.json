@@ -1,0 +1,13 @@
+{
+  "title": "membership_role is the gate for every workspace mutation — read it first",
+  "summary": "Every workspace write (rename, settings, member role, invite, cancel) requires owner/brand_admin; a client_user gets 403. The caller's role rides on listBrands/getMe as membership_role. A real incident (WR1, 2026-06-09) had GET /brands silently DROP membership_role, so brand-admins read as plain members and couldn't edit anything role-gated — proof that the field is load-bearing and must be checked, not assumed.",
+  "created_at": "2026-06-09T00:00:00Z",
+  "updated_at": "2026-06-10T00:00:00Z",
+  "tags": ["roles", "rbac", "brands", "403", "membership_role"],
+  "references": [
+    "docs/services/fastapi/LEARNINGS.md — 'GET /api/v1/brands silently dropped membership_role' (WR1, 2026-06-09)",
+    "PR #1582 — brand-admin RBAC: membership_role restored on GET /brands",
+    "app/api/v1/brands.py — owner/admin gate on PATCH/DELETE brand/members/invitations routes",
+    "Clerk Organizations roles model (org:admin vs org:member) — https://clerk.com/docs/guides/organizations/control-access/roles-and-permissions"
+  ]
+}
