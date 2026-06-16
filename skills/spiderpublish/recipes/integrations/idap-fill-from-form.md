@@ -285,6 +285,36 @@ form_create({
 
 Each field with a `crm_target` writes into the matched CRM column on submit. Fields without a `crm_target` (`kickoff_when`, `monthly_budget` above) still land in the raw submissions audit (`public.results.data->'answers'`) — they're just not dual-written.
 
+## Dedupe before write — using `/duplicates` and `/resolve`
+
+Wave D (2026-05-24) added two ways to surface duplicates before a form writes to a `crm_target`:
+
+### Pattern A — pre-check `/resolve` (single-key surface)
+
+If the form has a field that maps to a stable identifier (e.g. `crm_target: { resource_type: "businesses", column: "google_place_id" }` from a `place` field), check whether that identifier already exists before writing:
+
+```typescript
+// In your form-publish handler, BEFORE dual-write
+const existing = await idap.resolve("businesses", { place_id: form.answers.business.place_id });
+if (existing) {
+  // Surface a "link to existing record" affordance to the user.
+  // OR: write the form answers to the existing row (UPSERT-style), not a new one.
+}
+```
+
+Available resolve keys on `businesses` after Wave D: `place_id`, `domain`, `pin_name`, `account_id`, `pin_subscription_id`, `pin_data_set_id`.
+
+### Pattern B — `/duplicates` cluster discovery
+
+For data cleanup before bulk operations, ask "are there any duplicate clusters on this key?":
+
+```bash
+GET /api/v1/idap/businesses/duplicates?key=google_place_id
+# Returns: {clusters: [{key_value, count, business_ids: [...]}, ...]}
+```
+
+Available keys: `google_place_id`, `domain`, `vat`, `registration_number`, `phone_e164`. Empty result `{"clusters": []}` means the tenant is clean on that key.
+
 ## What happens on submit
 
 ```
@@ -299,6 +329,16 @@ POST /api/v1/booking/{flow_id}/submit
 
 Downstream workers (SpiderMail outreach, SpiderVerify, VayaPin) see the updated row on their next pass — same as any other CRM mutation.
 
+**Caveat — Wave D.2 hard-delete (2026-05-24):**
+
+`DELETE /api/v1/idap/businesses/{id}` removes the row and cascades across 11 tables with **no soft-delete safety net**. If a tenant deletes a business between form-submit-time and downstream-worker-pickup-time, the worker's `idap://businesses/<id>` fetch returns 404. This is intentional (the data is genuinely gone), but designers of long-running outreach flows should:
+
+1. Use `/resolve` to re-validate the business exists at the start of each worker run.
+2. Treat 404 as "tenant cleaned this up — drop the work item" rather than retrying.
+3. If the form is the source of truth for a brand-new business, consider running a brief idempotency window (e.g. submit dedupes by `place_id` for 24h) so user-double-submits don't create new orphans.
+
+VayaPin pins are **permanent** on cs.vayapin.com per VayaPin §10 — `DELETE /businesses/{id}` removes the local `pins` rows but does NOT delete the public VayaPin profile. If the deleted business had pins, the API response carries `vayapin_pins_remain_external: true` — surface this to the end-user as "your VayaPin profile pages stay live; talk to support if you need them removed."
+
 ## Anti-patterns
 
 - **Don't use `text` for a structured column.** A free-text "Country" answer landing in `country_code varchar(2)` will publish-fail at the `FIELD_TYPE_COLUMN_COMPAT` gate. Use `country`.
@@ -306,6 +346,7 @@ Downstream workers (SpiderMail outreach, SpiderVerify, VayaPin) see the updated 
 - **Don't store a `place` payload's `formatted_address` into `businesses.address`** — wire the typed payload (or its `place_id`) and let the CRM sync cron unpack it. `place` carries `lat/lng/address_components` the CRM uses to enrich downstream.
 - **Don't assume `place` autocomplete is on every deployment.** When `GOOGLE_PLACES_API_KEY` is not provisioned the field falls back to free text — design the form so the downstream CRM column accepts both shapes (or accept that on those deployments the column gets the user's typed string).
 - **Don't use `currency_mode: "amount_only"` against a `jsonb` column.** The dual-write writes a bare number; the CRM ends up with a JSON number instead of `{amount, currency}`. Pair `amount_only` with `numeric`, `with_picker` with `jsonb`.
+- **Don't assume `crm_target: { resource_type: "businesses", column: "categories" }` accepts a string only.** Pre-2026-05-25, the downstream VayaPin enrich path crashed (F-9) when `categories` came in as a list (e.g. from a multi-select form field). The fix at `windmill-scripts/vayapin_enrich.py:534` now accepts both list and comma-string shapes. Authoring a multi-select that writes to `categories` is now safe — use field type `select` with `multiple: true`.
 
 ## See also
 
