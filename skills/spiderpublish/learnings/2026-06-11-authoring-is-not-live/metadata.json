@@ -1,0 +1,13 @@
+{
+  "title": "Authoring is not live: publishPost/publishPage flips a row to published, but the live site only changes on deploy — two separate steps",
+  "summary": "SpiderPublish splits MANAGE (author in STORE), the published flag (visible to the API), and SERVE (the Cloudflare edge render). createPost/createPage write a draft row; publishPost/publishPage flip it to published; neither touches the live site. The live site updates only when you deploy (deploySite, or deployPreview->deployProduction, ~2-5s). Agents new to SpiderPublish routinely report 'live' after a create/publish without deploying, which is a silent lie. Destructive ops on production tenants (delete, applyTheme, deployProduction, updateSettings) are additionally two-phase: dry_run -> confirm_token -> mutate.",
+  "created_at": "2026-06-11",
+  "updated_at": "2026-06-11",
+  "tags": ["spiderpublish", "deploy", "publish", "lifecycle", "two-phase", "confirm-token"],
+  "references": [
+    "docs/services/catalog/CLAUDE.md — STORE/SERVE/MANAGE three-layer architecture; 'Authoring lands in STORE; nothing publicly visible until SERVE redeploys'",
+    "app/api/v1/dashboard_content.py — POST /posts/{id}/publish, POST /pages/{id}/publish (the published flag) vs POST /deploy, POST /deploy/preview, POST /deploy/production (the edge push)",
+    "docs/services/catalog/CLAUDE.md — Preview->confirm (Lock 4): deploy/preview returns confirm_token; deploy/production consumes it; 410 expired / 409 consumed / 403 mismatch",
+    "marketplace/spideriq-publish-skills/skills/spiderpublish/references/templates-deploy.md + references/deploy-protocol.md — the two-phase flow"
+  ]
+}

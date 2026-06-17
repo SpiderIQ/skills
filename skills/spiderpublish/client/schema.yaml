@@ -1,0 +1,1110 @@
+# SpiderPublish skill — API surface + envelope contract (OPVS marketplace, Tier-3 client)
+#
+# ONE skill for the whole SpiderPublish agent surface: pages, blog posts, docs,
+# authors, tags, categories, navigation, settings, media, custom domains,
+# redirects, reusable components, Liquid templates/themes, two-phase deploy, and
+# public discovery (search / featured / marketplace / vayapin). Author into a
+# brand's own content over a PAT; the public site is served by the Cloudflare
+# Liquid renderer at request time.
+#
+# Source of truth for marketplace Tier-3 client generation. Every method maps to
+# a route VERIFIED served on 2026-06-11 against:
+#   app/api/v1/dashboard_content.py            -> /api/v1/dashboard/content/*
+#   app/api/v1/dashboard_content_components.py -> /api/v1/dashboard/content/components/*
+#   app/api/v1/dashboard_templates.py          -> /api/v1/dashboard/templates/*
+#   app/api/v1/content.py                      -> /api/v1/content/*   (public reads)
+#   app/main.py mounts (router prefixes)
+# NO phantom endpoints, NO /api/v1/spideriq/* prefix (that was a dead opvsHUB
+# proxy path — fixed 2026-06-11; see references/gaps.md + learnings/).
+#
+# AUTH + PATHS — two surfaces, one PAT:
+#   * AUTHORING (create/update/delete/publish, and reads that must see DRAFTS):
+#     /dashboard/content/* and /dashboard/templates/*  — Bearer PAT, tenant
+#     resolved FROM THE TOKEN (no workspace id needed in the URL).
+#   * PUBLIC DISCOVERY (search, featured, marketplace browse, vayapin, /help):
+#     /content/*  — unauthenticated, returns PUBLISHED content only.
+#   base_url is /api/v1; every method path carries its own segment, so the full
+#   URL is e.g. https://spideriq.ai/api/v1/dashboard/content/posts.
+
+name: spiderpublish
+version: "0.4.1"
+description: >
+  Author, publish, and deploy on SpiderPublish — SpiderIQ's multi-tenant CMS +
+  Liquid site runtime. Build pages, blog posts, docs, reusable components,
+  navigation, themes, and custom domains for a brand's own website, then deploy
+  to the Cloudflare edge. Trigger on: "add a page", "write a blog post", "edit
+  the header/nav", "create an author", "set up categories/tags", "apply a theme",
+  "connect a custom domain", "publish the blog", "deploy the site", or a tenant
+  name (sms-chemicals.com, demo.spideriq.ai). Authoring lives in STORE
+  (PostgreSQL, tenant-isolated); nothing reaches end users until you DEPLOY.
+  Per-tenant, PAT-scoped. Agent-friendly ?format=yaml|md on every read. NOT for
+  sending email (use SpiderMail) or finding prospects (use spiderflows /
+  lead-search).
+category: content
+base_url: /api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - add a page
+  - create page
+  - blog post
+  - write a post
+  - publish the blog
+  - edit the header
+  - navigation menu
+  - create author
+  - blog category
+  - tag
+  - apply a theme
+  - custom domain
+  - deploy the site
+  - publish the site
+  - content
+  - cms
+  - landing page
+  - reusable component
+  - site settings
+
+guidance:
+  use: >
+    Manage a brand's own website content on SpiderPublish — pages, blog posts,
+    docs, authors, tags, categories, navigation, settings, media, custom domains,
+    reusable components, Liquid templates/themes — then deploy to the edge. Reads
+    that must show drafts + every write go through /dashboard/content (PAT,
+    tenant from the token); public discovery (search/featured/marketplace) is on
+    /content.
+  not:
+    - "SpiderMail (send-receive-email) -> send/read EMAIL on a brand's behalf (this is web content, not 1:1 mail)"
+    - "spiderflows / lead-search -> FIND new prospects + their data (this publishes pages, it does not scrape leads)"
+    - "spiderVerify -> validate an email address is deliverable (unrelated to content)"
+    - "workspace skill -> manage brands / team / billing (this manages a brand's CONTENT, not the account)"
+  intent_aliases: ["q", "query", "search_query", "search"]   # searchPosts takes a textual query
+  pitfalls:
+    - "AUTHORING IS NOT LIVE: creating/updating a page or post only changes STORE. Nothing appears on the public site until you DEPLOY (deploySite / deploy/production). The two are separate steps."
+    - "PUBLISH != DEPLOY: publishPost/publishPage flips a row draft->published (visible to the API); deploy pushes the rendered site to the Cloudflare edge. You usually need BOTH."
+    - "POST FIELD NAMES: prefer `cover_image_url` (MUST end in _url), `is_featured`, `category_ids` (a LIST of UUIDs). The API now also accepts the aliases `cover_image`/`featured`/`category_id` (folded server-side), but canonical names are clearest — any OTHER misnamed field is still silently dropped. See learnings/."
+    - "cover_image_url is HOST-ALLOWLISTED: pass a uploadMedia CDN url (e.g. media.cdn.spideriq.ai). Arbitrary hosts (files.opvs.ai) -> 422. Upload the image via uploadMedia first, then use the url it returns."
+    - "vayapin_pins wants the public CODE (COUNTRY:CODE, e.g. DE:KAIMUL — the `vayapin` field from vayapinCards), NOT the pin UUID. A UUID is silently dropped. Resolve codes via vayapinCards (pinned or query mode) first."
+    - "createPost saves a DRAFT — call publishPost after. createPost does not publish."
+    - "Writes live on /dashboard/content (Bearer, drafts visible). The PUBLIC /content/* paths are READ-ONLY (POST there -> 405) and return only PUBLISHED content. Do not POST to /content/*."
+    - "Destructive ops on a production tenant are two-phase: a dry_run preview returns a confirm_token you pass back to actually mutate (deploy/delete/publish/apply-theme). Default behaviour previews first."
+    - "Tiptap body: page/post/doc `body` is a Tiptap JSON document object, not an HTML string."
+
+methods:
+
+  # ─────────────────────────── PROJECTS (workspace) ───────────────────────────
+  # A workspace (the PAT's brand) can hold multiple projects (websites). Omit
+  # `project` on any content call to target the workspace's default project.
+  listProjects:
+    description: List the websites (projects) in this workspace.
+    guidance:
+      use: "see which websites exist in this workspace before authoring or deploying"
+      next: "createPage / createPost (omit `project` for the default site, or pass a proj_… id)"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/projects
+    params:
+      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+    response: { format: json }
+
+  createProject:
+    description: Create a new website (project) inside this workspace.
+    http: POST /dashboard/projects
+    params:
+      name: { type: string, required: true, description: 'Website name' }
+    response: { format: json }
+
+  # ──────────────────────────────── PAGES ─────────────────────────────────────
+  listPages:
+    description: List this brand's pages (drafts + published). Paginate with limit/offset.
+    guidance:
+      use: "see existing pages (including drafts) before creating or editing"
+      next: "getPage to read one; createPage to add; updatePage to edit"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/pages
+    params:
+      limit:  { type: integer, required: false, description: 'Page size (default 20)' }
+      offset: { type: integer, required: false, description: 'Pagination offset' }
+      format: { type: string,  required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  createPage:
+    description: >
+      Create a marketing page (block-based). Saves as a DRAFT. `template` picks
+      the Liquid template (default | blank | landing | about | contact |
+      dynamic_list | dynamic_item). For dynamic_list/dynamic_item you MUST set
+      collection_type (posts | docs | directory_listings).
+    guidance:
+      use: "add a new page to the site (starts as a draft)"
+      next: "publishPage -> deploySite to make it live; insertSection to add components"
+      warn: "Draft only — not visible until publishPage AND deploy. dynamic_list/dynamic_item REQUIRE collection_type; any other template must NOT set it."
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/pages
+    params:
+      title:           { type: string,  required: true,  description: 'Page title' }
+      slug:            { type: string,  required: false, description: 'URL slug — kebab-case, no leading slash, no nested path' }
+      template:        { type: string,  required: false, description: 'default | blank | landing | about | contact | dynamic_list | dynamic_item' }
+      collection_type: { type: string,  required: false, description: 'REQUIRED for dynamic_list/dynamic_item: posts | docs | directory_listings; else omit' }
+      blocks:          { type: array,   required: false, description: 'Block list — each {type, component_slug?, data?, props?}' }
+      seo_title:       { type: string,  required: false }
+      seo_description: { type: string,  required: false }
+      project:         { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
+    response: { format: json }
+
+  getPage:
+    description: Get one page by id (blocks, SEO, template, status).
+    http: GET /dashboard/content/pages/{page_id}
+    params:
+      page_id: { type: string, required: true }
+      format:  { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  updatePage:
+    description: Update a page (title, slug, blocks, template, SEO). PATCH semantics — send only changed fields.
+    guidance:
+      use: "edit an existing page's content, SEO, or template"
+      next: "publishPage -> deploySite to push changes live"
+      warn: "blocks REPLACES the block list — send the full intended array, not a partial."
+    http: PATCH /dashboard/content/pages/{page_id}
+    params:
+      page_id:         { type: string, required: true }
+      title:           { type: string, required: false }
+      slug:            { type: string, required: false }
+      blocks:          { type: array,  required: false, description: 'Full replacement block list' }
+      template:        { type: string, required: false }
+      seo_title:       { type: string, required: false }
+      seo_description: { type: string, required: false }
+    response: { format: json }
+
+  deletePage:
+    description: Delete a page. Destructive — supports dry_run/confirm_token two-phase gate.
+    http: DELETE /dashboard/content/pages/{page_id}
+    params:
+      page_id:       { type: string,  required: true }
+      dry_run:       { type: boolean, required: false, description: 'true -> preview + confirm_token (default safe)' }
+      confirm_token: { type: string,  required: false, description: 'cft_… from a prior dry_run to actually delete' }
+    response: { format: json }
+
+  publishPage:
+    description: Publish a page (draft -> published). Two-phase gated on production tenants.
+    guidance:
+      use: "make a drafted page publishable; still need deploySite to push to the edge"
+      next: "deploySite (or deployProduction) to make it live"
+      warn: "publish != deploy. The page is published in STORE but the live site only updates on deploy."
+    http: POST /dashboard/content/pages/{page_id}/publish
+    params:
+      page_id:       { type: string,  required: true }
+      dry_run:       { type: boolean, required: false }
+      confirm_token: { type: string,  required: false }
+    response: { format: json }
+
+  unpublishPage:
+    description: Revert a published page to draft.
+    http: POST /dashboard/content/pages/{page_id}/unpublish
+    params:
+      page_id: { type: string, required: true }
+    response: { format: json }
+
+  duplicatePage:
+    description: Duplicate a page as a new draft.
+    http: POST /dashboard/content/pages/{page_id}/duplicate
+    params:
+      page_id: { type: string, required: true }
+    response: { format: json }
+
+  insertSection:
+    description: >
+      Insert a component block into a page at a position. Position is
+      "start" | "end" (default) | "before"/"after" (+ anchor_block_id) | an int.
+    guidance:
+      use: "add a marketplace/reusable component as a section on an existing page"
+      next: "previewPage to see it; publishPage -> deploySite to ship"
+    http: POST /dashboard/content/pages/{page_id}/insert-section
+    params:
+      page_id:           { type: string,  required: true }
+      component_slug:    { type: string,  required: true,  description: 'Slug of the component to insert' }
+      component_version: { type: string,  required: false }
+      props:             { type: object,  required: false, description: 'Props passed to the component' }
+      position:          { type: string,  required: false, description: 'start | end | before | after | <int>' }
+      anchor_block_id:   { type: string,  required: false, description: 'Required when position is before/after' }
+    response: { format: json }
+
+  previewPage:
+    description: Render a page to a preview URL/HTML without publishing.
+    http: POST /dashboard/content/pages/{page_id}/preview
+    params:
+      page_id: { type: string, required: true }
+    response: { format: json }
+
+  exportPage:
+    description: Export a self-contained page envelope (page + inlined components + settings + audit).
+    http: GET /dashboard/content/pages/{page_id}/export
+    params:
+      page_id: { type: string, required: true }
+      format:  { type: string, required: false, description: 'json | md | archive' }
+    response: { format: json }
+
+  # ──────────────────────────────── POSTS ─────────────────────────────────────
+  listPosts:
+    description: List this brand's blog posts (drafts + published).
+    guidance:
+      use: "see existing posts (incl. drafts) before creating or editing"
+      next: "getPost; createPost; updatePost"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/posts
+    params:
+      limit:  { type: integer, required: false }
+      offset: { type: integer, required: false }
+      format: { type: string,  required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  createPost:
+    description: >
+      Create a blog post. Saves as a DRAFT — call publishPost to make it
+      publishable. Body is a Tiptap JSON document. Cover image MUST be
+      cover_image_url; featured flag is is_featured; categories is category_ids
+      (a LIST of UUIDs).
+    guidance:
+      use: "write a new blog post (draft) with author, tags, categories, cover image"
+      next: "publishPost -> deploySite to make it live"
+      warn: "Field names matter: cover_image_url (NOT cover_image), is_featured (NOT featured), category_ids (LIST, NOT category_id). The backend silently drops wrong names."
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/posts
+    params:
+      title:             { type: string,  required: true,  description: 'Post title' }
+      slug:              { type: string,  required: false, description: 'URL slug (kebab-case)' }
+      body:              { type: object,  required: false, description: 'Post body — Tiptap JSON document' }
+      excerpt:           { type: string,  required: false, description: 'Short summary' }
+      tldr_summary:      { type: string,  required: false, description: 'TL;DR shown above the body' }
+      tags:              { type: array,   required: false, items: string, description: 'Legacy string tags' }
+      tag_ids:           { type: array,   required: false, items: string, description: 'Tag entity UUIDs (preferred over `tags`)' }
+      category_ids:      { type: array,   required: false, items: string, description: 'Category UUIDs (LIST). Use [] to clear.' }
+      cover_image_url:   { type: string,  required: false, description: 'Cover image URL. MUST end in _url. Host-ALLOWLISTED — use a uploadMedia CDN url (e.g. media.cdn.spideriq.ai); arbitrary hosts (files.opvs.ai) are rejected with 422. Upload first via uploadMedia.' }
+      featured_image_alt: { type: string, required: false, description: 'Alt text for the cover image' }
+      author_id:         { type: string,  required: false, description: 'Author UUID (create one first via createAuthor)' }
+      author_name:       { type: string,  required: false, description: 'Free-text author name (used when no author_id)' }
+      is_featured:       { type: boolean, required: false, description: 'Mark as featured (field is is_featured, NOT featured)' }
+      related_post_ids:  { type: array,   required: false, items: string, description: 'Related post UUIDs (order preserved)' }
+      seo_title:         { type: string,  required: false }
+      seo_description:   { type: string,  required: false }
+      vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). Resolve via vayapinCards first." }
+      project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
+    response: { format: json }
+
+  getPost:
+    description: Get a blog post by id (body, tags, author, category, status).
+    http: GET /dashboard/content/posts/{post_id}
+    params:
+      post_id: { type: string, required: true }
+      format:  { type: string, required: false }
+    response: { format: json }
+
+  updatePost:
+    description: >
+      Update a blog post. PATCH semantics. Same field-name rules as createPost:
+      cover_image_url, is_featured, category_ids (LIST).
+    guidance:
+      use: "edit a post — title, body, author, categories, cover image, featured"
+      next: "publishPost -> deploySite"
+      warn: "cover_image_url / is_featured / category_ids — wrong names (cover_image, featured, category_id) are silently dropped."
+    http: PATCH /dashboard/content/posts/{post_id}
+    params:
+      post_id:           { type: string,  required: true }
+      title:             { type: string,  required: false }
+      slug:              { type: string,  required: false }
+      body:              { type: object,  required: false, description: 'Tiptap JSON document' }
+      excerpt:           { type: string,  required: false }
+      tldr_summary:      { type: string,  required: false }
+      tags:              { type: array,   required: false, items: string }
+      tag_ids:           { type: array,   required: false, items: string }
+      category_ids:      { type: array,   required: false, items: string, description: 'Category UUIDs (LIST). Use [] to clear.' }
+      cover_image_url:   { type: string,  required: false, description: 'MUST end in _url; host-allowlisted (uploadMedia CDN url) — non-allowlisted hosts 422' }
+      featured_image_alt: { type: string, required: false }
+      author_id:         { type: string,  required: false, description: 'Author UUID' }
+      is_featured:       { type: boolean, required: false, description: 'NOT featured' }
+      related_post_ids:  { type: array,   required: false, items: string }
+      seo_title:         { type: string,  required: false }
+      seo_description:   { type: string,  required: false }
+    response: { format: json }
+
+  deletePost:
+    description: Delete a blog post.
+    http: DELETE /dashboard/content/posts/{post_id}
+    params:
+      post_id: { type: string, required: true }
+    response: { format: json }
+
+  publishPost:
+    description: Publish a post (draft -> published). Still needs deploySite to go live.
+    guidance:
+      use: "make a drafted post publishable"
+      next: "deploySite to push the live site"
+      warn: "publish != deploy."
+    http: POST /dashboard/content/posts/{post_id}/publish
+    params:
+      post_id: { type: string, required: true }
+    response: { format: json }
+
+  unpublishPost:
+    description: Revert a published post to draft.
+    http: POST /dashboard/content/posts/{post_id}/unpublish
+    params:
+      post_id: { type: string, required: true }
+    response: { format: json }
+
+  schedulePost:
+    description: Schedule a post to publish at a future time.
+    http: POST /dashboard/content/posts/{post_id}/schedule
+    params:
+      post_id:      { type: string, required: true }
+      publish_at:   { type: string, required: true, description: 'ISO-8601 datetime' }
+    response: { format: json }
+
+  updatePostStatus:
+    description: Set a post's status directly (draft | published | archived).
+    http: POST /dashboard/content/posts/{post_id}/status
+    params:
+      post_id: { type: string, required: true }
+      status:  { type: enum,   required: true, values: [draft, published, archived] }
+    response: { format: json }
+
+  setRelatedPosts:
+    description: Set the related-posts list for a post (order preserved).
+    http: PUT /dashboard/content/posts/{post_id}/related
+    params:
+      post_id:          { type: string, required: true }
+      related_post_ids: { type: array,  required: true, items: string }
+    response: { format: json }
+
+  searchPosts:
+    description: Full-text search published posts (PUBLIC — no auth, published only).
+    guidance:
+      use: "reader-facing search across PUBLISHED posts"
+      warn: "Public endpoint: returns published posts only; needs X-Content-Domain for the tenant."
+    http: GET /content/posts/search
+    params:
+      q:         { type: string,  required: true, description: 'Search query' }
+      page:      { type: integer, required: false }
+      page_size: { type: integer, required: false }
+    response: { format: json }
+
+  featuredPosts:
+    description: List featured published posts (PUBLIC — no auth).
+    http: GET /content/posts/featured
+    params:
+      limit: { type: integer, required: false }
+    response: { format: json }
+
+  # ─────────────────────────────── AUTHORS ────────────────────────────────────
+  listAuthors:
+    description: List blog authors.
+    guidance:
+      use: "see existing authors before assigning one to a post"
+      next: "createAuthor if missing; then createPost author_id=<uuid>"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/authors
+    params:
+      page:      { type: integer, required: false }
+      page_size: { type: integer, required: false }
+      format:    { type: string,  required: false }
+    response: { format: json }
+
+  createAuthor:
+    description: Create a blog author profile (human or AI).
+    guidance:
+      use: "add an author so posts can be attributed; returns the author_id"
+      next: "createPost / updatePost with author_id=<the new uuid>"
+    http: POST /dashboard/content/authors
+    params:
+      name:       { type: string, required: true,  description: 'Author display name' }
+      slug:       { type: string, required: false }
+      role:       { type: enum,   required: false, values: [author, editor, contributor, administrator] }
+      bio:        { type: string, required: false }
+      avatar_url: { type: string, required: false, description: 'Avatar URL (ends in _url)' }
+      is_ai:      { type: boolean, required: false, description: 'Human or AI author' }
+    response: { format: json }
+
+  getAuthor:
+    description: Get an author profile by id.
+    http: GET /dashboard/content/authors/{author_id}
+    params:
+      author_id: { type: string, required: true }
+    response: { format: json }
+
+  updateAuthor:
+    description: Update an author profile.
+    http: PATCH /dashboard/content/authors/{author_id}
+    params:
+      author_id:  { type: string, required: true }
+      name:       { type: string, required: false }
+      role:       { type: enum,   required: false, values: [author, editor, contributor, administrator] }
+      bio:        { type: string, required: false }
+      avatar_url: { type: string, required: false }
+    response: { format: json }
+
+  deleteAuthor:
+    description: Soft-delete an author profile.
+    http: DELETE /dashboard/content/authors/{author_id}
+    params:
+      author_id: { type: string, required: true }
+    response: { format: json }
+
+  # ──────────────────────────────── TAGS ──────────────────────────────────────
+  listTags:
+    description: List tags with post counts.
+    http: GET /dashboard/content/tags
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  createTag:
+    description: Create a tag entity. Returns the tag_id used by createPost.tag_ids.
+    guidance:
+      use: "create a tag entity (preferred over legacy string tags)"
+      next: "createPost tag_ids=[<the new uuid>]"
+    http: POST /dashboard/content/tags
+    params:
+      name: { type: string, required: true }
+      slug: { type: string, required: false }
+    response: { format: json }
+
+  updateTag:
+    description: Update a tag.
+    http: PATCH /dashboard/content/tags/{tag_id}
+    params:
+      tag_id: { type: string, required: true }
+      name:   { type: string, required: false }
+      slug:   { type: string, required: false }
+    response: { format: json }
+
+  deleteTag:
+    description: Delete a tag.
+    http: DELETE /dashboard/content/tags/{tag_id}
+    params:
+      tag_id: { type: string, required: true }
+    response: { format: json }
+
+  # ────────────────────────────── CATEGORIES ──────────────────────────────────
+  listCategories:
+    description: List blog categories (hierarchical).
+    guidance:
+      use: "see existing categories before creating one or assigning to a post"
+      next: "createCategory if missing; createPost category_ids=[<uuid>]"
+      warn: "This is /dashboard/content/categories (auth, drafts). The PUBLIC /content/categories needs X-Content-Domain and returns only published taxonomy."
+    http: GET /dashboard/content/categories
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  createCategory:
+    description: Create a blog category (supports hierarchy via parent_id). Returns category_id.
+    guidance:
+      use: "create a category; returns the UUID for createPost.category_ids"
+      next: "createPost category_ids=[<the new uuid>]"
+    http: POST /dashboard/content/categories
+    params:
+      name:      { type: string, required: true }
+      slug:      { type: string, required: false }
+      parent_id: { type: string, required: false, description: 'Parent category UUID for hierarchy' }
+    response: { format: json }
+
+  updateCategory:
+    description: Update a blog category.
+    http: PATCH /dashboard/content/categories/{category_id}
+    params:
+      category_id: { type: string, required: true }
+      name:        { type: string, required: false }
+      slug:        { type: string, required: false }
+      parent_id:   { type: string, required: false }
+    response: { format: json }
+
+  deleteCategory:
+    description: Delete a blog category.
+    http: DELETE /dashboard/content/categories/{category_id}
+    params:
+      category_id: { type: string, required: true }
+    response: { format: json }
+
+  # ──────────────────────────────── DOCS ──────────────────────────────────────
+  getDocsTree:
+    description: Get the brand's full nested documentation tree.
+    http: GET /dashboard/content/docs/tree
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  createDoc:
+    description: Create a documentation page (Tiptap body). Supports nesting via parent_id.
+    guidance:
+      use: "add a docs page (draft)"
+      next: "publishDoc -> deploySite"
+    http: POST /dashboard/content/docs
+    params:
+      title:     { type: string, required: true }
+      slug:      { type: string, required: false }
+      body:      { type: object, required: false, description: 'Tiptap JSON document' }
+      parent_id: { type: string, required: false, description: 'Parent doc id (for nesting)' }
+    response: { format: json }
+
+  getDoc:
+    description: Get a doc by id (includes rendered body_text + Tiptap body).
+    http: GET /dashboard/content/docs/{doc_id}
+    params:
+      doc_id: { type: string, required: true }
+      format: { type: string, required: false }
+    response: { format: json }
+
+  updateDoc:
+    description: Update a doc page.
+    http: PATCH /dashboard/content/docs/{doc_id}
+    params:
+      doc_id: { type: string, required: true }
+      title:  { type: string, required: false }
+      slug:   { type: string, required: false }
+      body:   { type: object, required: false, description: 'Tiptap JSON document' }
+    response: { format: json }
+
+  deleteDoc:
+    description: Delete a doc page.
+    http: DELETE /dashboard/content/docs/{doc_id}
+    params:
+      doc_id: { type: string, required: true }
+    response: { format: json }
+
+  publishDoc:
+    description: Publish a doc (draft -> published).
+    http: POST /dashboard/content/docs/{doc_id}/publish
+    params:
+      doc_id: { type: string, required: true }
+    response: { format: json }
+
+  unpublishDoc:
+    description: Revert a published doc to draft.
+    http: POST /dashboard/content/docs/{doc_id}/unpublish
+    params:
+      doc_id: { type: string, required: true }
+    response: { format: json }
+
+  importMarkdownDoc:
+    description: Create or replace a doc from a Markdown body (:::component{...} blocks supported). Size-capped at 256 KB.
+    http: POST /dashboard/content/docs/import
+    params:
+      markdown: { type: string, required: true, description: 'Markdown body' }
+      slug:     { type: string, required: false }
+      title:    { type: string, required: false }
+    response: { format: json }
+
+  # ────────────────────────────── NAVIGATION ──────────────────────────────────
+  getNavigation:
+    description: Get a navigation menu (location = header | footer | docs_sidebar).
+    http: GET /dashboard/content/navigation/{location}
+    params:
+      location: { type: string, required: true, description: 'header | footer | docs_sidebar' }
+      format:   { type: string, required: false }
+    response: { format: json }
+
+  updateNavigation:
+    description: Replace a navigation menu's items (nested JSON list).
+    guidance:
+      use: "edit the header/footer/sidebar menu"
+      next: "deploySite to push the new nav"
+      warn: "REPLACES the menu — send the full intended items list."
+    http: PUT /dashboard/content/navigation/{location}
+    params:
+      location: { type: string, required: true }
+      items:    { type: array,  required: true, description: 'Full nested menu items list' }
+    response: { format: json }
+
+  # ─────────────────────────────── SETTINGS ───────────────────────────────────
+  getSettings:
+    description: Get site-wide settings (name, SEO defaults, analytics, colors, logos, custom head code).
+    http: GET /dashboard/content/settings
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  updateSettings:
+    description: Update site settings (UPSERT — singleton per brand). Two-phase gated.
+    guidance:
+      use: "change site name, SEO defaults, analytics, theme colors, custom head code"
+      next: "deploySite to apply"
+      warn: "Settings are a singleton — PATCH merges; deploy to take effect on the live site."
+    http: PATCH /dashboard/content/settings
+    params:
+      site_name:       { type: string,  required: false }
+      seo_title:       { type: string,  required: false }
+      seo_description: { type: string,  required: false }
+      primary_color:   { type: string,  required: false }
+      logo_url:        { type: string,  required: false }
+      favicon_url:     { type: string,  required: false }
+      custom_head:     { type: string,  required: false, description: 'Custom <head> HTML (analytics, meta)' }
+      dry_run:         { type: boolean, required: false }
+      confirm_token:   { type: string,  required: false }
+    response: { format: json }
+
+  # ──────────────────────────────── MEDIA ─────────────────────────────────────
+  listMedia:
+    description: List the brand's uploaded media (R2-backed).
+    http: GET /dashboard/content/media
+    params:
+      limit:  { type: integer, required: false }
+      offset: { type: integer, required: false }
+      format: { type: string,  required: false }
+    response: { format: json }
+
+  uploadMedia:
+    description: >
+      Upload an image/video/asset (multipart). Returns a permanent CDN URL to
+      drop into a page/post (use it as cover_image_url, logo_url, etc.).
+    guidance:
+      use: "host an image/video and get a permanent CDN URL"
+      next: "use the returned url as cover_image_url / logo_url / in a block"
+    http: POST /dashboard/content/media/upload
+    params:
+      file: { type: file, required: true, description: 'Multipart file (image/video/asset)' }
+    response: { format: json }
+
+  updateMedia:
+    description: Update media metadata (alt text, title) — replace-without-changing-URL.
+    http: PATCH /dashboard/content/media/{media_id}
+    params:
+      media_id: { type: string, required: true }
+      alt:      { type: string, required: false }
+      title:    { type: string, required: false }
+    response: { format: json }
+
+  deleteMedia:
+    description: Delete a media asset.
+    http: DELETE /dashboard/content/media/{media_id}
+    params:
+      media_id: { type: string, required: true }
+    response: { format: json }
+
+  # ──────────────────────────────── DOMAINS ───────────────────────────────────
+  listDomains:
+    description: List the brand's custom domains + verification/SSL status.
+    http: GET /dashboard/content/domains
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  addDomain:
+    description: Add a custom domain (CF custom-hostname registration; client CNAMEs to sites.spideriq.ai).
+    guidance:
+      use: "connect a customer's own domain"
+      next: "client sets CNAME -> verifyDomain -> setPrimaryDomain -> deploySite"
+      warn: "Counts against the brand's max_domains quota (402 when exceeded)."
+    http: POST /dashboard/content/domains
+    params:
+      host: { type: string, required: true, description: 'The custom domain, e.g. acme.com' }
+    response: { format: json }
+
+  addSubdomain:
+    description: Claim a free {label}.sites.spideriq.ai subdomain.
+    http: POST /dashboard/content/domains/subdomain
+    params:
+      label: { type: string, required: true, description: 'The subdomain label (left of .sites.spideriq.ai)' }
+    response: { format: json }
+
+  checkSubdomainAvailability:
+    description: Live uniqueness check for a subdomain label.
+    http: GET /dashboard/content/domains/subdomain/availability
+    params:
+      label: { type: string, required: true }
+    response: { format: json }
+
+  verifyDomain:
+    description: Verify a custom domain's DNS/ownership.
+    http: POST /dashboard/content/domains/{domain}/verify
+    params:
+      domain: { type: string, required: true }
+    response: { format: json }
+
+  setPrimaryDomain:
+    description: Set a verified domain as the brand's primary host.
+    http: POST /dashboard/content/domains/{domain}/primary
+    params:
+      domain: { type: string, required: true }
+    response: { format: json }
+
+  deleteDomain:
+    description: Remove a custom domain (cleans up CF hostname + KV).
+    http: DELETE /dashboard/content/domains/{domain}
+    params:
+      domain: { type: string, required: true }
+    response: { format: json }
+
+  # ─────────────────────────────── REDIRECTS ──────────────────────────────────
+  listRedirects:
+    description: List URL redirects (301/302).
+    http: GET /dashboard/content/redirects
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  createRedirect:
+    description: Create a URL redirect.
+    http: POST /dashboard/content/redirects
+    params:
+      from_path:   { type: string,  required: true,  description: 'Source path' }
+      to_path:     { type: string,  required: true,  description: 'Destination path or URL' }
+      status_code: { type: integer, required: false, description: '301 (default) or 302' }
+    response: { format: json }
+
+  deleteRedirect:
+    description: Delete a redirect.
+    http: DELETE /dashboard/content/redirects/{redirect_id}
+    params:
+      redirect_id: { type: string, required: true }
+    response: { format: json }
+
+  # ──────────────────────── COMPONENTS (reusable blocks) ───────────────────────
+  listComponents:
+    description: List the brand's reusable components (+ global library).
+    guidance:
+      use: "find a component to insert on a page"
+      next: "insertSection with the component_slug"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/components
+    params:
+      category: { type: string, required: false }
+      format:   { type: string, required: false }
+    response: { format: json }
+
+  createComponent:
+    description: >
+      Create a reusable component (auto-wrapped in a Shadow DOM). For a
+      kind='dynamic' component you MUST also pass `sources` (a DB CHECK rejects a
+      dynamic component without a source binding).
+    guidance:
+      use: "author a reusable UI block (static, interactive, or dynamic)"
+      next: "publishComponent -> insertSection on a page -> deploySite"
+      warn: "kind='dynamic' REQUIRES `sources` (data bindings). Use CSS :host {} + var(--primary) — Tailwind classes do not pierce the shadow boundary."
+    http: POST /dashboard/content/components
+    params:
+      slug:          { type: string, required: true,  description: 'Component slug' }
+      name:          { type: string, required: true }
+      html_template: { type: string, required: true,  description: 'Liquid/HTML template body' }
+      css:           { type: string, required: false }
+      js:            { type: string, required: false }
+      kind:          { type: enum,   required: false, values: [static, interactive, dynamic, extension] }
+      block_type:    { type: string, required: false, description: 'Required for some dynamic kinds (e.g. list, item_details)' }
+      js_runtime:    { type: string, required: false, description: 'vanilla | web-component | …' }
+      props_schema:  { type: object, required: false, description: 'JSON Schema for the component props' }
+      sources:       { type: array,  required: false, description: 'REQUIRED for kind=dynamic — data-source bindings [{source_id,...}]' }
+      category:      { type: string, required: false }
+    response: { format: json }
+
+  getComponent:
+    description: Get a component by id.
+    http: GET /dashboard/content/components/{component_id}
+    params:
+      component_id: { type: string, required: true }
+    response: { format: json }
+
+  getComponentBySlug:
+    description: Get a component by slug (optionally a specific version).
+    http: GET /dashboard/content/components/by-slug/{slug}
+    params:
+      slug:    { type: string, required: true }
+      version: { type: string, required: false }
+    response: { format: json }
+
+  updateComponent:
+    description: Update a component (template, css, js, props, metadata). Creates a new version.
+    http: PATCH /dashboard/content/components/{component_id}
+    params:
+      component_id:  { type: string, required: true }
+      html_template: { type: string, required: false }
+      css:           { type: string, required: false }
+      js:            { type: string, required: false }
+      props_schema:  { type: object, required: false }
+    response: { format: json }
+
+  deleteComponent:
+    description: Delete a component. Two-phase gated.
+    http: DELETE /dashboard/content/components/{component_id}
+    params:
+      component_id:  { type: string,  required: true }
+      dry_run:       { type: boolean, required: false }
+      confirm_token: { type: string,  required: false }
+    response: { format: json }
+
+  publishComponent:
+    description: Publish a draft component.
+    http: POST /dashboard/content/components/{component_id}/publish
+    params:
+      component_id: { type: string, required: true }
+    response: { format: json }
+
+  archiveComponent:
+    description: Archive a component.
+    http: POST /dashboard/content/components/{component_id}/archive
+    params:
+      component_id: { type: string, required: true }
+    response: { format: json }
+
+  listComponentVersions:
+    description: List all versions of a component.
+    http: GET /dashboard/content/components/{slug}/versions
+    params:
+      slug: { type: string, required: true }
+    response: { format: json }
+
+  rollbackComponent:
+    description: Roll a component back to a prior version.
+    http: POST /dashboard/content/components/{slug}/rollback
+    params:
+      slug:    { type: string, required: true }
+      version: { type: string, required: true, description: 'Target version to restore' }
+    response: { format: json }
+
+  # ───────────────────────── TEMPLATES + THEMES + DEPLOY ───────────────────────
+  listTemplates:
+    description: List the brand's custom Liquid templates.
+    http: GET /dashboard/templates
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  getTemplate:
+    description: Get a Liquid template's source by path.
+    http: GET /dashboard/templates/{path}
+    params:
+      path: { type: string, required: true, description: 'Template path, e.g. templates/page.liquid' }
+    response: { format: json }
+
+  upsertTemplate:
+    description: Create or update a custom Liquid template (overrides the theme default).
+    guidance:
+      use: "customise a page/section template in Liquid"
+      next: "previewTemplate to render with mock data; deploySite to ship"
+      warn: "Server-side-picked templates (forms-standalone, booking-standalone) are chosen by flow kind, not by this field — override templates/<basename>.liquid to customise them."
+    http: PUT /dashboard/templates/{path}
+    params:
+      path:    { type: string, required: true, description: 'e.g. templates/page.liquid' }
+      content: { type: string, required: true, description: 'Liquid source' }
+    response: { format: json }
+
+  deleteTemplate:
+    description: Delete a custom template (reverts to the theme default).
+    http: DELETE /dashboard/templates/{path}
+    params:
+      path: { type: string, required: true }
+    response: { format: json }
+
+  getTemplateConfig:
+    description: Get template config (theme, routes, data sources).
+    http: GET /dashboard/templates/config
+    params: {}
+    response: { format: json }
+
+  updateTemplateConfig:
+    description: Update template config (theme, routes, data sources).
+    http: PATCH /dashboard/templates/config
+    params:
+      config: { type: object, required: true, description: 'Config patch' }
+    response: { format: json }
+
+  listThemes:
+    description: List available pre-built themes.
+    http: GET /dashboard/templates/themes
+    params: {}
+    response: { format: json }
+
+  applyTheme:
+    description: Apply a theme to the site. Two-phase gated.
+    guidance:
+      use: "switch the site to a pre-built theme"
+      next: "deploySite to push the themed site"
+      warn: "Destructive on production tenants — dry_run returns a confirm_token."
+    http: POST /dashboard/templates/apply-theme
+    params:
+      theme:         { type: string,  required: true, description: 'Theme name (from listThemes)' }
+      dry_run:       { type: boolean, required: false }
+      confirm_token: { type: string,  required: false }
+    response: { format: json }
+
+  applySiteTemplate:
+    description: Clone a curated starter site (pages + nav + theme settings) into this brand as drafts. Two-phase gated.
+    http: POST /dashboard/templates/apply-site-template/{slug}
+    params:
+      slug:          { type: string,  required: true, description: 'Starter-site slug (from listSiteTemplates)' }
+      dry_run:       { type: boolean, required: false }
+      confirm_token: { type: string,  required: false }
+    response: { format: json }
+
+  applyPageTemplate:
+    description: Clone ONE single-page template (opt-in/thank-you/VSL/sales/…) into this brand as a draft page. Two-phase gated. Same endpoint as applySiteTemplate — a page template is a single-page site template.
+    guidance:
+      use: "add a ready-made single page you'll ADAPT (edit copy/images/colors) — the default, faster + safer than authoring a page from scratch"
+      next: "edit the cloned draft, then publishPage, then deployPreview->deployProduction; run a visual check on the live URL"
+      warn: "Two-phase: dry_run:true first → cft_… token → pass it back. The cloned page is a DRAFT — not live until you deploy."
+    http: POST /dashboard/templates/apply-site-template/{slug}
+    params:
+      slug:          { type: string,  required: true, description: 'Page-template slug (from listPageTemplates)' }
+      dry_run:       { type: boolean, required: false }
+      confirm_token: { type: string,  required: false }
+    response: { format: json }
+
+  previewTemplate:
+    description: Render a template with mock data and return HTML (no publish).
+    http: POST /dashboard/templates/preview
+    params:
+      path: { type: string, required: false, description: 'Template path to preview' }
+      mock: { type: object, required: false, description: 'Mock data for the render' }
+    response: { format: json }
+
+  deployPreview:
+    description: Preview a deploy — returns a preview_url + confirm_token + snapshot_hash (phase 1 of 2).
+    guidance:
+      use: "phase 1 of the safe deploy — see what will change"
+      next: "deployProduction with the returned confirm_token"
+    http: POST /dashboard/content/deploy/preview
+    params: {}
+    response: { format: json }
+
+  deployProduction:
+    description: Deploy the site to the Cloudflare edge (phase 2 — consumes a confirm_token from deployPreview). ~2-5s.
+    guidance:
+      use: "make all published content live on the edge"
+      warn: "Pass the confirm_token from deployPreview. This is the step that actually changes the live site."
+    http: POST /dashboard/content/deploy/production
+    params:
+      confirm_token: { type: string, required: true, description: 'cft_… from deployPreview' }
+    response: { format: json }
+
+  deploySite:
+    description: One-shot deploy (trigger build + edge upload). Use deployPreview->deployProduction for the safe two-phase flow on production.
+    guidance:
+      use: "deploy the site in one call (non-interactive); prefer deployPreview->deployProduction on production tenants"
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/deploy
+    params: {}
+    response: { format: json }
+
+  deployStatus:
+    description: Latest deploy status.
+    http: GET /dashboard/content/deploy/status
+    params: {}
+    response: { format: json }
+
+  deployReadiness:
+    description: Pre-deploy readiness report (broken links, unpublished refs).
+    http: GET /dashboard/content/deploy/readiness
+    params: {}
+    response: { format: json }
+
+  # ─────────────────────────────── CHANGELOG ──────────────────────────────────
+  listChangelog:
+    description: List product changelog / release-note entries.
+    http: GET /dashboard/content/changelog
+    params:
+      format: { type: string, required: false }
+    response: { format: json }
+
+  createChangelog:
+    description: Create a changelog entry (draft).
+    http: POST /dashboard/content/changelog
+    params:
+      title:   { type: string, required: true }
+      body:    { type: object, required: false, description: 'Tiptap JSON' }
+      version: { type: string, required: false }
+    response: { format: json }
+
+  publishChangelog:
+    description: Publish a changelog entry (fires the changelog.published notification).
+    http: POST /dashboard/content/changelog/{entry_id}/publish
+    params:
+      entry_id: { type: string, required: true }
+    response: { format: json }
+
+  # ─────────────────────── PUBLIC DISCOVERY + AGENT HELP ───────────────────────
+  getHelp:
+    description: >
+      YAML agent reference (~2,867 tokens) — all content types, block types,
+      Liquid filters/tags, the build-a-site recipes, live_collections. Read this
+      FIRST when authoring a site you don't know the shape of.
+    guidance:
+      use: "FIRST call when building a site from scratch — the full authoring reference"
+      next: "createPage / applyTheme / insertSection per the recipes it returns"
+    http: GET /content/help
+    params: {}
+    response: { format: yaml }
+
+  listMarketplaceComponents:
+    description: Browse the global section library (PUBLIC).
+    http: GET /content/marketplace/components
+    params:
+      category:    { type: string,  required: false }
+      is_featured: { type: boolean, required: false }
+      tag:         { type: string,  required: false }
+    response: { format: json }
+
+  listBgVideos:
+    description: Browse the curated background-video catalog (PUBLIC).
+    http: GET /content/marketplace/bg-videos
+    params:
+      category: { type: string, required: false }
+    response: { format: json }
+
+  listSiteTemplates:
+    description: List curated WHOLE-SITE starter kits (PUBLIC). Apply one with applySiteTemplate. For a single page, use listPageTemplates.
+    http: GET /content/site-templates
+    params:
+      industry:    { type: string,  required: false }
+      use_case:    { type: string,  required: false }
+      is_featured: { type: boolean, required: false }
+    response: { format: json }
+
+  listPageTemplates:
+    description: List curated SINGLE-PAGE templates (PUBLIC) — opt-in/thank-you/VSL/sales/webinar/pricing/coming-soon/404. The clone-and-adapt catalog. Apply one with applyPageTemplate.
+    guidance:
+      use: "find a ready-made single page to clone+adapt instead of authoring one from scratch — reach here FIRST for landing/opt-in/thank-you/VSL pages"
+      next: "applyPageTemplate with the chosen slug (dry_run:true first)"
+    http: GET /content/site-templates
+    params:
+      industry:    { type: string,  required: false }
+      use_case:    { type: string,  required: false, description: 'opt-in | thank-you | vsl | webinar | sales | pricing | coming-soon | 404' }
+      is_featured: { type: boolean, required: false }
+      is_single_page: { type: boolean, required: false, description: 'Always sent true by this method — narrows to page templates.' }
+    response: { format: json }
+
+  vayapinCards:
+    description: >
+      Resolve VayaPin "cards" (PUBLIC, global — not tenant-scoped). TWO modes:
+      pinned mode (`pins=DE:KAIMUL,BB:TAPAS` — exact card per named pin, in order,
+      with unresolved names reported back) OR query mode (`q`/`country`/`city`/
+      `category`). Each card's `vayapin` field is the public CODE you pass to a
+      post's `vayapin_pins` — NOT a UUID. Call this BEFORE setting vayapin_pins.
+    guidance:
+      use: "look up the public COUNTRY:CODE pin ids to put in a post's vayapin_pins"
+      next: "createPost/updatePost vayapin_pins=[<the `vayapin` code(s) from here>]"
+      warn: "Pass the `vayapin` CODE (e.g. DE:KAIMUL) to vayapin_pins, never the pin's UUID — the UUID is silently dropped."
+    http: GET /content/vayapin/cards
+    params:
+      pins:     { type: string,  required: false, description: 'Pinned mode — comma-separated CODES, e.g. DE:KAIMUL,BB:TAPAS' }
+      q:        { type: string,  required: false, description: 'Query mode — full-text search' }
+      country:  { type: string,  required: false, description: 'Query mode — 2-letter pin namespace, e.g. de' }
+      city:     { type: string,  required: false, description: 'Query mode — city/settlement filter' }
+      category: { type: string,  required: false, description: 'Query mode — category slug, e.g. restaurant' }
+      limit:    { type: integer, required: false, description: 'Query mode — max cards (1-50, default 12)' }
+    response: { format: json }
+
+  resolveLead:
+    description: >
+      Resolve a lead by an external id for a dynamic landing page (exactly one of
+      place_id / domain / email / pin_name / vat / lei / tax_id / …).
+    http: GET /content/leads/resolve
+    params:
+      place_id: { type: string, required: false }
+      domain:   { type: string, required: false }
+      email:    { type: string, required: false }
+      include:  { type: string, required: false, description: 'Comma list of extra includes' }
+    response: { format: json }

@@ -1,243 +1,205 @@
 ---
 name: spiderpublish
 description: >
-  Author, publish, deploy on SpiderPublish — SpiderIQ's multi-tenant CMS +
-  booking runtime. Trigger on: "add a page", "edit the header", "create a
-  contact form", "publish the blog", "embed this form", "set up booking",
-  "connect a custom domain", "deploy the tenant site", or a tenant name
-  (sms-chemicals.com, demo.spideriq.ai). Covers pages, posts, docs,
-  components, navigation, themes, forms/booking (kind='form' OR 'booking'
-  — both render at /f/<id>), site cloning, two-phase deploy gate.
-  SpiderPublish has a five-lock tenant defense; generic web knowledge
-  gets it wrong.
+  Author, publish, and deploy on SpiderPublish — SpiderIQ's multi-tenant CMS +
+  Liquid site runtime. Build pages, blog posts, docs, reusable components,
+  navigation, themes, media, and custom domains for a brand's own website, then
+  deploy to the Cloudflare edge. Trigger on: "add a page", "write a blog post",
+  "edit the header", "create an author", "set up categories/tags", "apply a
+  theme", "connect a custom domain", "publish the blog", "deploy the site", or a
+  tenant name (sms-chemicals.com, demo.spideriq.ai). Authoring lives in STORE
+  (PostgreSQL, tenant-isolated); nothing reaches end users until you DEPLOY.
+  SpiderPublish is a runtime, not a generic CMS — generic web knowledge gets the
+  five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
+  PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
+  spiderflows / lead-search).
+version: "0.5.0"
+category: content
 ---
 
 # SpiderPublish
 
 SpiderPublish is a **runtime**, not a generic CMS. Three layers:
 
-- **STORE** — FastAPI + PostgreSQL. Every authored thing (page, post,
-  component, form, setting, template) lives here in a tenant-isolated row.
-  Nothing is "on disk."
-- **SERVE** — Cloudflare Workers (`dispatch` → `liquid-renderer`) reads
-  templates from per-tenant KV and fetches content from STORE at request
-  time. Forms render at `/f/<flow_id>` (same URL for `kind='form'` AND
-  `kind='booking'` — disambiguated by the `kind` column).
-- **MANAGE** — dashboard, MCP (87 atomic or 134+ kitchen-sink), CLI
-  (`spideriq`), VSCode extension. All four call the same STORE API; pick by
-  ergonomics.
+- **STORE** — FastAPI + PostgreSQL. Every authored thing (page, post, doc,
+  component, setting, template) lives here in a tenant-isolated row. Nothing is
+  "on disk."
+- **SERVE** — Cloudflare Workers (`dispatch` → `liquid-renderer`) read templates
+  from per-tenant KV and fetch content from STORE at request time. Forms render
+  at `/f/<flow_id>`.
+- **MANAGE** — this skill (over a PAT), plus the dashboard, MCP, CLI, and VSCode
+  extension. All call the same STORE API.
 
-The agent's job is to land changes in STORE correctly, then trigger SERVE
-via deploy.
+Your job: land changes in STORE correctly, then trigger SERVE via **deploy**.
 
----
-
-<HARD-GATE name="tenant-scope">
-
-**Before any mutation, run the tenant-scope verifier and paste its output.**
-
-```bash
-./scripts/verify-tenant-scope.sh
-# {"ok":true,"project_id":"cli_xxx","spideriq_json":"...","exit":0}
+```
+  AUTHOR (this skill, PAT) ──▶ STORE (Postgres, tenant rows) ──deploy──▶ SERVE (CF edge) ──▶ visitors
+   createPage/createPost        draft|published                          live site
+   publishPost flips a flag     (still not live)                         (only updates on deploy)
 ```
 
-Exit `0` → safe. Exit `1` (mismatch), `2` (no `spideriq.json`), `3` (no PAT) → **STOP and fix**.
+## Auth + two URL surfaces (one PAT)
 
-**Why a script, not prose:** language-only "remember to check scope" rules
-get skipped under ship pressure (Hyperframes commit `190f1ec` proved this
-empirically). Running the script + pasting output makes the check auditable
-and unmissable. Same pattern Hyperframes uses for their `w2h-verify.mjs`,
-`lint_source.py`, `contrast-report.mjs`.
+`SPIDERIQ_PAT` = Bearer `client_id:api_key:api_secret`. The token identifies the
+brand — you do **not** put a workspace id in the URL.
 
-</HARD-GATE>
-
-<HARD-GATE name="deploy-protocol">
-
-**Authoring lives in STORE; nothing reaches end users until you deploy.**
-
-For destructive ops on **production tenants**, wrap in the two-phase
-confirm flow:
-
-```bash
-./scripts/dry-run-then-confirm.py \
-  --url https://spideriq.ai/api/v1/dashboard/projects/$PID/content/deploy \
-  --method POST \
-  --description "Deploy <tenant> to production" \
-  --body '{}'
-```
-
-The wrapper handles `?dry_run=true` → preview → `?confirm_token=cft_…`,
-plus the 410 (expired), 409 (consumed), 403 (mismatch) envelopes. Distinct
-exit codes — see [`scripts/README.md`](../../scripts/README.md).
-
-**Honest framing:** Phase 11+12 is **OPT-IN**, not mandatory. The dashboard
-wraps it automatically; the CLI's interactive prompts do the same; direct
-API/MCP callers must choose. On dev tenants, skipping it is fine. On prod
-tenants, always opt in.
-
-For every recipe's last step → [`reference/deploy-protocol.md`](reference/deploy-protocol.md).
-
-</HARD-GATE>
-
----
-
-## Intent → recipe (cheap lookup, no LLM cycles)
-
-Don't read the full decision tree if you already know roughly what the user
-wants. Run:
-
-```bash
-./scripts/find-tool-for-intent.sh "<user's intent in plain English>"
-```
-
-Returns top 3 candidate recipes by keyword overlap. ~50 tokens vs. ~3000
-for re-reading this whole file.
-
----
-
-## Decision tree — pick a recipe
-
-| The user wants to… | Read |
-|---|---|
-| create + publish a landing page | `recipes/content/landing-page.md` |
-| publish a blog post | `recipes/content/blog-post.md` |
-| add a page to the docs tree | `recipes/content/docs-page.md` |
-| apply a curated starter site (browse + clone) | `recipes/content/apply-site-template.md` |
-| add a dynamic LIST page (iterates posts/docs/listings) | `recipes/content/dynamic-list-page.md` |
-| add a dynamic ITEM page (`/blog/<slug>` pattern) | `recipes/content/dynamic-item-page.md` |
-| change site-wide settings (SEO defaults, colors, analytics) | `recipes/content/update-site-settings.md` |
-| add a scroll-linked video hero | `recipes/content/scroll-video-hero.md` |
-| iterate on a page with live preview | `recipes/content/preview-iteration.md` |
-| lock a page while a human reviews | `recipes/content/lock-page-during-review.md` |
-| **roll back one page to a historical version** | `recipes/content/restore-page-version.md` |
-| **export the full page envelope (round-trip via VSCode ext)** | `recipes/content/export-page-roundtrip.md` |
-| **duplicate a page as a fresh draft** | `recipes/content/duplicate-page.md` |
-| **duplicate one block in-place on the same page** | `recipes/content/duplicate-block.md` |
-| import a site from Tilda | `recipes/content/import-tilda-site.md` |
-| connect a custom domain | `recipes/content/custom-domain.md` |
-| apply a theme | `recipes/content/apply-theme.md` |
-| edit the navigation menus | `recipes/content/navigation.md` |
-| override a single section without forking the theme | `recipes/content/section-override.md` |
-| edit header/footer once, propagate site-wide | `recipes/components/update-and-propagate.md` |
-| iterate a component safely with rollback | `recipes/components/rollback-component.md` |
-| find a component without paginating | `recipes/components/find-component.md` |
-| create a new library component (Tier 1–4) | `recipes/components/create-component.md` |
-| upload a preview thumbnail / MP4 for a component | `recipes/components/upload-component-preview.md` |
-| browse marketplace + insert a section into a page | `recipes/marketplace/browse-and-insert-section.md` |
-| **browse CRO components (urgency, scarcity, social proof, capture popups, sticky bars, timers, GEO primitives)** | `recipes/marketplace/browse-cro-components.md` |
-| **pick + insert a background video from the curated catalog** | `recipes/marketplace/pick-bg-video.md` |
-| publish a curated site template to the marketplace (super_admin) | `recipes/marketplace/author-site-template.md` |
-| publish a bg-video clip to the marketplace (super_admin) | `recipes/marketplace/author-bg-video.md` |
-| suggest agent-meta tags for a marketplace asset | `recipes/marketplace/suggest-agent-meta.md` |
-| design a form's look + per-question media | `recipes/booking/build-form.md` |
-| build a full lead-gen form end-to-end | `recipes/booking/build-lead-gen-form.md` |
-| clone an existing form template | `recipes/booking/clone-form-template.md` |
-| set up a booking flow (calendar slots) | `recipes/booking/clone-booking-template.md` |
-| invite staff to connect their calendar | `recipes/booking/invite-staff-calendar.md` |
-| embed a form on an external site (inline / popup) | `recipes/booking/embed-form.md` |
-| **embed a form INSIDE a SpiderPublish page** | `recipes/booking/form-as-page-section.md` |
-| **share a form via standalone URL (QR / bio / reviewer link)** | `recipes/booking/share-form-standalone.md` |
-| **add conditional logic + variables to a form** | `recipes/booking/add-logic-and-variables.md` |
-| **freeze a form during review (lock/unlock)** | `recipes/booking/lock-form-for-review.md` |
-| **submit a test answer to verify a form end-to-end** | `recipes/booking/test-form-submission.md` |
-| import directory listings from IDAP | `recipes/directory/import-listings.md` |
-| bulk upload media to SpiderMedia | `recipes/media/bulk-upload.md` |
-| **import a file from a URL into SpiderMedia** | `recipes/media/import-from-url.md` |
-| **tighten the media budget (sweep unused, orphan detection, free quota)** | `recipes/media/tighten-media-budget.md` |
-| fill IDAP records from form submissions | `recipes/integrations/idap-fill-from-form.md` |
-| **sync an Airtable view → directory listings** | `recipes/integrations/airtable/sync-to-directory.md` |
-| **mirror a Stripe price catalog → pricing_table block** | `recipes/integrations/stripe/pricing-table.md` |
-| **mirror a HubSpot form → SpiderForms flow (with webhook back)** | `recipes/integrations/hubspot/form-mirror.md` |
-| **wire a cal.com event type → SpiderPublish booking flow** | `recipes/integrations/cal/booking-flow.md` |
-| **connect a custom domain via Cloudflare for SaaS (end-to-end)** | `recipes/integrations/cloudflare/custom-domain.md` |
-| clone a public URL into a Liquid template (SpiderClone) | `recipes/clone/url-to-template.md` |
-| **import a Tailwind site (config + HTML) → theme + components** | `recipes/clone/import-tailwind.md` |
-| run a content audit before shipping | `recipes/audit/audit-driven-edit.md` |
-| audit + fix all internal links | `recipes/audit/link-audit.md` |
-| audit + fix a content issue end-to-end | `recipes/audit/audit-and-fix.md` |
-| **visual-check a deployed page (Playwright sidecar; Rule 62)** | `recipes/audit/visual-check-a-page.md` |
-| **pre-flight deploy readiness checklist** | `recipes/audit/deploy-readiness.md` |
-| **preview a deploy without going live (`*.sites.spideriq.ai`)** | `recipes/deploy/deploy-preview-only.md` |
-| **roll back a bad deploy (per-page restore + redeploy)** | `recipes/deploy/rollback-deploy.md` |
-
-All recipes are authored. The 16 ported from the public starter kit
-(designer-kit) — proven in production by HeyGen-class agent runs — were
-joined in v0.3.0 (2026-05-24) by 14 new recipes + 5 reference docs, then
-v0.4.0 (2026-05-24) added 14 more, and v0.5.0 (2026-05-24) closed the
-inventory with **12 Lane-A recipes + 5 vendor integrations** + full
-VERIFY-marker resolution:
-
-- **content/** — `restore-page-version`, `export-page-roundtrip`, `duplicate-page`, `duplicate-block`
-- **booking/** — `lock-form-for-review`, `test-form-submission`
-- **marketplace/** — `pick-bg-video`
-- **media/** — `import-from-url`, `tighten-media-budget`
-- **clone/** — `import-tailwind`
-- **deploy/** (new directory) — `deploy-preview-only`, `rollback-deploy`
-- **integrations/** vendor seeds — `airtable/sync-to-directory`, `stripe/pricing-table`,
-  `hubspot/form-mirror`, `cal/booking-flow`, `cloudflare/custom-domain`
-
-All 16 in-context `<!-- VERIFY -->` markers from v0.3.0/v0.4.0 are
-resolved with explicit source-of-truth citations or product-gap flags.
-
----
-
-## Tool surface — pointer only
-
-**Three discovery endpoints** (call once per session, cache):
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/v1/content/help` | ~2,867-token YAML reference (block types, 14 Liquid filters, 4 tags) |
-| `GET /api/v1/content/help/block-fields` | Accepted shapes per block-type |
-| `GET /api/v1/dashboard/idap/merge-tags?page_id={id}` | Merge-tag variables for dynamic pages |
-
-**Two MCP packages** — pick by runtime ceiling:
-
-| Package | Tools | Runtime |
+| Surface | Path | Use for |
 |---|---|---|
-| `@spideriq/mcp-publish` | 87 atomic (content+media+booking minus form_*) | Antigravity, Claude Desktop, any 128-tool ceiling |
-| `@spideriq/mcp` | 134+ kitchen sink (adds form_*) | Claude Code, Cursor, Codex |
+| **Authoring** | `/api/v1/dashboard/content/*`, `/api/v1/dashboard/templates/*` | every create/update/delete/publish, and reads that must show **drafts** |
+| **Public discovery** | `/api/v1/content/*` | search, featured, marketplace browse, vayapin, `/help` — published only, no auth |
 
-Prefer one-shot tools over multi-step choreography
-(`content_get_component_by_slug` over `list_components` + filter;
-`form_create_from_template` over `form_create` + N × `form_add_field`).
+> **There is NO `/api/v1/spideriq/content` path.** That was a dead proxy prefix
+> the old skill used → every call 404'd. The schema in `client/schema.yaml` now
+> carries the correct paths. (See `references/gaps.md` + `learnings/`.)
 
-Full map: [`reference/tool-surface.md`](reference/tool-surface.md).
+Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — for
+40–76% fewer tokens.
 
----
+<HARD-GATE name="authoring-is-not-live--two-phase-on-prod">
+
+**Two rules that bite every agent new to SpiderPublish:**
+
+1. **AUTHORING IS NOT LIVE.** Creating/editing a page or post only changes
+   STORE. `publishPost`/`publishPage` flips a row to *published* (visible to the
+   API) — the **live site does not change until you `deploySite`** (or
+   `deployPreview` → `deployProduction`). Publishing and deploying are two
+   separate steps; you usually need both. Telling the user "it's live" after a
+   create/publish, without a deploy, is a silent lie.
+
+2. **DESTRUCTIVE OPS ON A PRODUCTION TENANT ARE TWO-PHASE.** `deletePage`,
+   `applyTheme`, `deployProduction`, `deletePage`, `updateSettings`, and the
+   deploy itself accept `dry_run: true` → you get a **preview + `confirm_token`
+   (`cft_…`)**; pass that token back to actually mutate. On a production tenant,
+   ALWAYS preview first. (Envelopes: 410 expired · 409 consumed · 403 mismatch.)
+
+**Why a hard gate, not a footnote:** the publish-vs-deploy confusion and
+"delete looked safe" are the two highest-frequency SpiderPublish mistakes.
+Confirm the deploy step happened before reporting a change as live.
+
+</HARD-GATE>
+
+## Approach
+
+1. **Orient** — `getHelp` (the full authoring reference) if you don't know the
+   site shape; `listPages` / `listPosts` / `listComponents` to see what exists
+   (including drafts).
+2. **Author** — `createPage` / `createPost` / `createDoc` (+ `createAuthor`,
+   `createTag`, `createCategory` to set up taxonomy first). Body is **Tiptap
+   JSON**, not HTML.
+3. **Assemble** — `insertSection` to drop components onto a page; `applyTheme`
+   for look; `updateNavigation` / `updateSettings` for chrome.
+4. **Publish** — `publishPost` / `publishPage` / `publishDoc` (draft →
+   published).
+5. **Deploy** — `deployPreview` → `deployProduction` (safe), or `deploySite`
+   (one-shot). THIS is the step that makes it live.
+6. **Verify** — `deployStatus`; on a published URL, a visual check asserting on
+   `dom.shadow_hosts` (NOT `body_text_preview`) for embedded components/forms.
+
+## Decision tree — pick a method (→ reference)
+
+| The user wants to… | Method(s) | Read |
+|---|---|---|
+| Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
+| Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
+| Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
+| Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
+| Change site settings / SEO / colors | `getSettings` · `updateSettings` | `references/content.md` |
+| Connect a custom domain | `addDomain`→`verifyDomain`→`setPrimaryDomain` (or `addSubdomain`) | `references/content.md` |
+| Make/edit a reusable component | `createComponent` · `updateComponent` · `publishComponent` · `rollbackComponent` | `references/components.md` |
+| Apply a theme / starter site | `listThemes`→`applyTheme` · `listSiteTemplates`→`applySiteTemplate` | `references/templates-deploy.md` |
+| Add a landing/opt-in/thank-you/VSL page (clone + adapt — the default) | `listPageTemplates`→`applyPageTemplate` | `references/templates-deploy.md` |
+| Customise a Liquid template | `getTemplate` · `upsertTemplate` · `previewTemplate` | `references/templates-deploy.md` |
+| Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
+| Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
+| Host an image/video → CDN URL | `uploadMedia` · `listMedia` | `references/media.md` |
+| Browse + insert a marketplace section / bg-video | `listMarketplaceComponents` · `listBgVideos`→`insertSection` | `references/marketplace.md` |
+| Sync an external source (Airtable/Stripe/HubSpot/cal/CF) / clone a URL | (integration recipes) | `references/integrations.md` |
+| Audit links / readiness / visual-check before shipping | `deployReadiness` · audit recipes | `references/audit.md` |
+| Block types, Liquid filters/tags, the css-field rule | — | `references/block-types.md` |
+| Two-phase deploy + five-lock defense in depth | `deployPreview`/`deployProduction` | `references/deploy-protocol.md` |
+| Forms/booking data model (`flow.json`, cal.com, OAuth-by-invite) | — | `references/booking-model.md` |
+| CLI vs MCP map + discovery endpoints | — | `references/tool-surface.md` |
+
+## Post field names (read before any post write)
+
+Use the canonical names on `createPost` / `updatePost`:
+
+| Want to set | Canonical (use this) | Alias now folded server-side |
+|---|---|---|
+| cover image | **`cover_image_url`** (must end in `_url`) | `cover_image` |
+| featured flag | **`is_featured`** | `featured` |
+| categories | **`category_ids`** (a LIST of UUIDs) | `category_id` (single → list) |
+
+The API now **accepts the three aliases** (folded into the canonical field, 0.4.1
++ the backend change) — but **any OTHER misnamed field is still silently dropped
+with no error**, so prefer the canonical names. Two more post-write gotchas:
+
+- **`cover_image_url` is host-allowlisted** → 422 on an arbitrary host
+  (`files.opvs.ai`). Upload via **`uploadMedia`** first and use the CDN url it
+  returns (e.g. `media.cdn.spideriq.ai`).
+- **`vayapin_pins` wants the public CODE** (`COUNTRY:CODE`, e.g. `DE:KAIMUL` — the
+  `vayapin` field from **`vayapinCards`**), NOT the pin UUID (UUID is silently
+  dropped). Resolve codes via `vayapinCards` (pinned or query mode) first.
+
+This was the real cause of the "createPost ignores cover_image/author/category"
+report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 
 ## Anti-patterns (always relevant)
 
-- **Constructing `/book/<id>` for a `kind='form'` flow.** Canonical URL for
-  both kinds is `/f/<id>`. Legacy `/book/<id>` 301-redirects for
-  `kind='booking'` but silent-fails for `kind='form'` (the W13 production
-  incident). Always call `form_preview_url` / `form_get_embed_snippet`;
-  never compose URLs by hand.
-- **Asserting on `body_text_preview` after `content_visual_check` for a
-  form.** Cross-origin iframe body is opaque. Assert on
-  `dom.shadow_hosts.includes("spideriq-form")` instead. Same rule for any
-  shadow-host custom element.
-- **Inlining `<style>` blocks inside `html_template`.** Custom component CSS
-  goes in the separate `css` field; the renderer wraps it in Shadow DOM and
-  Tailwind classes don't pierce the boundary.
-- **Paginating `list_components` to find one by slug.** Use
-  `content_get_component_by_slug` — one call, no pagination.
-- **Skipping `?dry_run=true` on destructive ops in production.** Opt-in by
-  design, but in production always opt in (use the wrapper script above).
+- **Reporting a change as "live" without a deploy.** Publish ≠ deploy. The live
+  site only updates on `deploySite` / `deployProduction`.
+- **POSTing to `/api/v1/content/*`.** Those are public READ paths (POST → 405).
+  Writes go to `/api/v1/dashboard/content/*`.
+- **Using `/api/v1/spideriq/content/...`.** Dead prefix → 404. The base is
+  `/api/v1`; method paths in the schema are already correct.
+- **Wrong post field names** (`cover_image` / `featured` / `category_id`) →
+  silently dropped. Use `cover_image_url` / `is_featured` / `category_ids`.
+- **Constructing `/book/<id>` for a `kind='form'` flow.** Canonical URL for both
+  kinds is `/f/<id>`; never compose form URLs by hand.
+- **Asserting on `body_text_preview` after a visual check of a form/component.**
+  The shadow/iframe body is opaque — assert on `dom.shadow_hosts` (the tag name).
+- **Inlining `<style>` in a component's `html_template`.** Component CSS goes in
+  the `css` field; Tailwind classes don't pierce the Shadow DOM — use
+  `:host {}` + `var(--primary)`.
 - **Treating SpiderPublish like a generic CMS.** Authoring lands in STORE;
   nothing is publicly visible until SERVE redeploys.
-- **Confusing Forms / SpiderFlow / Funnels.** Forms = `kind='form'` rows in
-  `booking_flows`. SpiderFlow is the public attribute namespace
-  (`data-spiderflow-*`) — same product, code-level identifier. Funnels
-  (future) is `kind='funnel'`. Don't conflate the names.
 
----
+## References (loaded on demand)
+
+- `references/content.md` — pages, posts, docs, authors/tags/categories, nav,
+  settings, domains. **Read before any content write.**
+- `references/components.md` — reusable components: create, the css-field rule,
+  versions, rollback, update-and-propagate.
+- `references/templates-deploy.md` — themes, starter sites, Liquid template
+  overrides, the two-phase deploy.
+- `references/forms-booking.md` — forms + booking flows (build, embed, logic,
+  test, share, cal.com calendar invite).
+- `references/media.md` — upload/host media, import-from-url, media budget.
+- `references/marketplace.md` — browse + insert sections / bg-videos, author
+  marketplace assets.
+- `references/integrations.md` — Airtable / Stripe / HubSpot / cal.com /
+  Cloudflare, clone-a-URL, directory import.
+- `references/audit.md` — link audit, deploy readiness, visual-check a page.
+- `references/block-types.md` · `references/booking-model.md` ·
+  `references/deploy-protocol.md` · `references/tool-surface.md` — reference docs.
+- `references/gaps.md` — what the CLI/MCP surfaces do or don't yet expose (read
+  if you're on the CLI/MCP path, not this marketplace client).
+
+## Learnings (starting points — verify against current behaviour)
+
+- `learnings/2026-06-11-post-field-names-silently-dropped/` — `cover_image_url`
+  / `is_featured` / `category_ids` are the names the backend keeps; wrong names
+  vanish silently.
+- `learnings/2026-06-11-authoring-is-not-live/` — publish flips a flag; only
+  deploy pushes the live site. Two steps.
+- `learnings/2026-06-11-dead-spideriq-content-prefix/` — the marketplace base is
+  `/api/v1`, writes are on `/dashboard/content`, reads on `/content`; the old
+  `/api/v1/spideriq/content` prefix 404'd.
 
 ## See also
 
-- [`scripts/README.md`](../../scripts/README.md) — full script inventory + the "why scripts not prose" rationale
-- [`reference/deploy-protocol.md`](reference/deploy-protocol.md) — full two-phase pipeline + five-lock defense
-- [`reference/block-types.md`](reference/block-types.md) — block model + the `css`-field rule + validators
-- [`reference/tool-surface.md`](reference/tool-surface.md) — CLI vs MCP map + discovery endpoints
-- [`reference/booking-model.md`](reference/booking-model.md) — `flow.json` / `schema.json`, cal.com, OAuth-by-invite
-- [`../_shared/auth.md`](../../_shared/auth.md) — the PAT auth pattern (shared with `spidermail`, `spidergate`)
+- **SpiderMail (`send-receive-email`)** — send/read email on a brand's behalf.
+- **spiderflows / lead-search** — find new prospects + their data.
+- **workspace skill** — manage brands / team / billing (this manages a brand's
+  CONTENT, not the account).
+- Token economy: `?format=yaml|md` on every read, or `SPIDERIQ_FORMAT=yaml`.

@@ -1,0 +1,14 @@
+{
+  "title": "The marketplace base path is /api/v1 (writes on /dashboard/content, reads on /content) — the old /api/v1/spideriq/content prefix is a dead opvsHUB proxy path and 404s",
+  "summary": "An agent test (2026-06-10) reported the schema base '/api/v1/spideriq/content' did not match the real API '/api/v1/content', and that categories/settings/navigation '404' and writes returned 403/Not authenticated. Verified 2026-06-11: the '/spideriq/' segment was the OLD opvsHUB OPVS-proxy prefix and is NOT served by the direct API (the marketplace provider_config points SPIDERIQ_API_URL at https://spideriq.ai directly, with no proxy). With the correct paths the '404/403' symptoms disappear: public reads GET /api/v1/content/{settings,navigation/header,authors,categories} all return 200; authenticated writes work on /api/v1/dashboard/content/* with the Bearer PAT (GET /api/v1/dashboard/content/posts -> 200). The endpoints were never missing and auth was never disabled — the base path was wrong. Fixed in publish-skills 0.4.0.",
+  "created_at": "2026-06-11",
+  "updated_at": "2026-06-11",
+  "tags": ["spiderpublish", "routing", "base-url", "opvshub", "auth", "marketplace"],
+  "references": [
+    "app/main.py — router mounts: content.router prefix /api/v1/content (line ~1865 area); dashboard_content.router prefix /api/v1/dashboard/content (1942) AND /api/v1/dashboard/projects/{project_id}/content (1943); dashboard_templates.router prefix /api/v1/dashboard/templates (1952)",
+    "app/api/v1/content.py router = APIRouter(prefix='/content') — public reads, no /spideriq segment anywhere in app/",
+    "Live probes 2026-06-11: GET /api/v1/content/settings -> 200, /content/navigation/header -> 200, /content/authors -> 200; GET /api/v1/spideriq/content/categories -> 404; GET /api/v1/dashboard/content/posts (Bearer) -> 200; POST /api/v1/content/posts -> 405 (public path is read-only)",
+    "docs/services/SpiderCLI/LEARNINGS.md 'opvsHUB base_url Routing — OPVS Proxy vs Direct Access' — /api/v1/spideriq is the OPVS-proxy path, only forwards a subset; the marketplace uses the direct API instead",
+    "Agent test report (Lola Garcia, 2026-06-10): 'Schema says /api/v1/spideriq/content/*; Actually works: /api/v1/content/*' + the false '404 missing' / '403 not authenticated' claims that traced back to it"
+  ]
+}

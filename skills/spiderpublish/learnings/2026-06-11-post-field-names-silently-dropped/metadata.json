@@ -1,0 +1,14 @@
+{
+  "title": "createPost/updatePost silently drop cover_image, featured, and category_id — the backend keeps cover_image_url, is_featured, and category_ids (a LIST)",
+  "summary": "The SpiderPublish content write endpoints ignore unknown keys with no error, so a wrong field name vanishes silently. A real agent test (2026-06-10) reported 'createPost ignores cover_image_url, author_id, category_id' and 'updatePost ignores cover_image_url, category_id, featured'. Root cause: the OLD skill schema declared cover_image (backend wants cover_image_url — must end in _url), featured (backend wants is_featured), category_id singular (backend wants category_ids, a LIST of UUIDs), and omitted author_id/author_name entirely on createPost. The MCP tool content_create_post already used the correct names; only the marketplace skill schema was wrong. Fixed in publish-skills 0.4.0 by mirroring the MCP tool's field set on createPost/updatePost.",
+  "created_at": "2026-06-11",
+  "updated_at": "2026-06-11",
+  "tags": ["spiderpublish", "content", "blog", "schema", "field-mapping", "silent-drop"],
+  "references": [
+    "packages/mcp-tools/src/publish/content.ts content_create_post (lines ~569-645) — the CORRECT field set: cover_image_url, author_id, author_name, category_ids, is_featured, tag_ids, seo_title, seo_description, tldr_summary, related_post_ids, featured_image_alt, vayapin_pins",
+    "packages/mcp-tools/src/publish/content.ts comment: 'cover_image_url. Field name MUST end with _url to persist.' and 'field name is is_featured, not featured'",
+    "app/api/v1/dashboard_content.py POST /posts (line ~1066) + PATCH /posts/{post_id} (line ~1144) — the write endpoints that drop unknown keys",
+    "Agent test report (Lola Garcia, 2026-06-10): 'createPost ignores cover_image_url, author_id, category_id; updatePost ignores cover_image_url, category_id, featured, body'",
+    "marketplace/spideriq-publish-skills/skills/spiderpublish/client/schema.yaml createPost/updatePost (the fix — correct names + missing fields added)"
+  ]
+}
