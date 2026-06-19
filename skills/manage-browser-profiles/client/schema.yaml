@@ -1,0 +1,112 @@
+# Manage Browser Profiles Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate manage-browser-profiles
+
+name: manage-browser-profiles
+version: "1.0.0"
+description: >
+  Browser profile management — create anti-detect browser
+  profiles, start/stop browser sessions, export cookies,
+  and monitor the browser pool.
+category: automation
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - browser
+  - profile
+  - camoufox
+  - anti-detect
+
+methods:
+  # ── Create Profile ────────────────────────────────────────
+  createProfile:
+    description: >
+      Create a new browser profile with anti-detect
+      fingerprinting configuration.
+    http: POST /browser/profiles
+    response:
+      format: json
+
+  # ── List Profiles ─────────────────────────────────────────
+  listProfiles:
+    description: >
+      List all browser profiles, optionally filtered by
+      platform or status.
+    http: GET /browser/profiles
+    params:
+      platform:
+        type: string
+        required: false
+        description: Filter by platform (e.g. "linkedin", "google")
+      status:
+        type: string
+        required: false
+        description: Filter by profile status (e.g. "active", "idle")
+    response:
+      format: json
+
+  # ── Start Browser ─────────────────────────────────────────
+  startBrowser:
+    description: >
+      Launch a browser session using the specified profile.
+      Optionally run headless or navigate to a URL on start.
+    http: POST /browser/profiles/{profile_id}/start
+    params:
+      profile_id:
+        type: string
+        required: true
+        description: The profile ID to start a browser session for
+      headless:
+        type: boolean
+        required: false
+        description: Run the browser in headless mode
+      navigate_to:
+        type: string
+        required: false
+        description: URL to navigate to after browser launch
+    response:
+      format: json
+
+  # ── Stop Browser ──────────────────────────────────────────
+  stopBrowser:
+    description: >
+      Stop a running browser session for the specified profile.
+    http: POST /browser/profiles/{profile_id}/stop
+    params:
+      profile_id:
+        type: string
+        required: true
+        description: The profile ID to stop the browser for
+    response:
+      format: json
+
+  # ── Export Cookies ────────────────────────────────────────
+  exportCookies:
+    description: >
+      Export all cookies from the specified browser profile's
+      current session.
+    http: POST /browser/profiles/{profile_id}/cookies/export
+    params:
+      profile_id:
+        type: string
+        required: true
+        description: The profile ID to export cookies from
+    response:
+      format: json
+
+  # ── Pool Status ───────────────────────────────────────────
+  getPoolStatus:
+    description: >
+      Get the current status of the browser pool, including
+      active sessions, available slots, and resource usage.
+    http: GET /browser/pool/status
+    response:
+      format: json

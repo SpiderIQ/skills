@@ -1,0 +1,626 @@
+# opvs-admin Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate opvs-admin
+
+name: opvs-admin
+version: "1.0.0"
+description: >
+  Full admin control over the OPVS agent platform — gateway config,
+  cron scheduling, skills management, channel bindings, and gateway operations.
+category: admin
+base_url: /api/v1
+auth:
+  type: api_key
+  header: X-API-Key
+  env_var: MANAGEMENT_API_KEY
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - admin
+  - gateway
+  - cron
+  - config
+  - skills
+  - channels
+
+methods:
+  # ── Agents (Moltbot Config) ──────────────────────────────
+  listAgents:
+    description: >
+      List agent defaults and per-agent runtime config from moltbot.json.
+      Returns defaults (model, memorySearch, contextPruning, compaction)
+      and a map of agent_id to per-agent overrides.
+    http: GET /moltbot/agents
+    response:
+      format: yaml
+
+  getAgent:
+    description: >
+      Get a single agent's runtime config from moltbot.json.
+    http: GET /moltbot/agents/{agent_id}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent identifier
+    response:
+      format: yaml
+
+  updateAgent:
+    description: >
+      Update a single agent's runtime config in moltbot.json.
+      Supports model override, contextTokens, subagents, etc.
+      Reload gateway afterward for changes to take effect.
+    http: PATCH /moltbot/agents/{agent_id}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent identifier
+      model:
+        type: string
+        required: false
+        description: Model override for this agent
+      contextTokens:
+        type: integer
+        required: false
+        description: Context token limit override
+    response:
+      format: json
+
+  updateAgentDefaults:
+    description: >
+      Update agent defaults (model, memorySearch, contextPruning,
+      compaction) that apply to all agents unless overridden.
+    http: PATCH /moltbot/agents/defaults
+    params:
+      model:
+        type: string
+        required: false
+        description: Default model for all agents
+      memorySearch:
+        type: object
+        required: false
+        description: Memory search config (provider, model, query)
+      contextPruning:
+        type: object
+        required: false
+        description: Context pruning config (mode, ttl, keepLastAssistants)
+      compaction:
+        type: object
+        required: false
+        description: Compaction config (mode, reserveTokensFloor, memoryFlush)
+    response:
+      format: json
+
+  # ── Skills (Workspace-Level) ─────────────────────────────
+  listSkills:
+    description: >
+      List all skill files on disk. Returns both product-specific
+      and shared skills. Use ?include_shared=false to filter.
+    http: GET /skills
+    response:
+      format: yaml
+
+  createSkill:
+    description: >
+      Create a new skill by writing a SKILL.md file to disk.
+    http: POST /skills
+    params:
+      name:
+        type: string
+        required: true
+        description: Skill name (becomes directory name)
+      shared:
+        type: boolean
+        required: false
+        default: true
+        description: Whether the skill is shared across products
+      frontmatter:
+        type: object
+        required: false
+        description: YAML frontmatter fields (description, homepage, etc.)
+      context:
+        type: string
+        required: false
+        description: Background context for the skill
+      operations:
+        type: array
+        items: string
+        required: false
+        description: List of operations the skill supports
+      commands:
+        type: array
+        items: string
+        required: false
+        description: List of API commands (e.g., "GET /api/v1/items")
+    response:
+      format: json
+
+  deleteSkill:
+    description: >
+      Delete a skill file from disk.
+    http: DELETE /skills/{name}
+    params:
+      name:
+        type: string
+        required: true
+        description: Skill name to delete
+    response:
+      format: json
+
+  assignSkills:
+    description: >
+      Assign skills to an agent's whitelist in config.yaml.
+      Reload the gateway afterward for the change to take effect.
+    http: POST /agents/{agent_id}/skills
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent to assign skills to
+      skills:
+        type: array
+        items: string
+        required: true
+        description: List of skill names to assign
+    response:
+      format: json
+
+  # ── Gateway Operations ───────────────────────────────────
+  reloadGateway:
+    description: >
+      Hot-reload the gateway config. Always call after making
+      moltbot config changes. No container restart needed.
+    http: POST /gateway/reload
+    response:
+      format: json
+
+  getGatewayHealth:
+    description: >
+      Check gateway health and connectivity. Returns status,
+      gateway details, and product_id.
+    http: GET /gateway/health
+    response:
+      format: json
+
+  pingGateway:
+    description: >
+      Quick connectivity check for the gateway.
+    http: GET /gateway/ping
+    response:
+      format: json
+
+  listGatewayAgents:
+    description: >
+      List agents registered in the gateway's internal view.
+      Useful for verifying config changes after a reload.
+    http: GET /gateway/agents
+    response:
+      format: yaml
+
+  # ── Cron Jobs ─────────────────────────────────────────────
+  listCronJobs:
+    description: >
+      List all cron jobs. Supports ?agent_id= filter (client-side).
+    http: GET /cron/jobs
+    params:
+      agent_id:
+        type: string
+        required: false
+        description: Filter by agent ID (client-side filtering)
+    response:
+      format: yaml
+
+  createCronJob:
+    description: >
+      Create a scheduled cron job for an agent. Supports cron
+      expressions, intervals, and one-shot timestamps.
+    http: POST /cron/jobs
+    params:
+      name:
+        type: string
+        required: true
+        description: Job name
+      agentId:
+        type: string
+        required: true
+        description: Agent to run the job
+      schedule:
+        type: object
+        required: true
+        description: >
+          Schedule config: {kind: "cron"|"every"|"at", expr/everyMs/at,
+          tz (optional), staggerMs (optional)}
+      sessionTarget:
+        type: enum
+        values: [main, isolated]
+        required: true
+        description: Session type — main for persistent, isolated for one-off
+      payload:
+        type: object
+        required: true
+        description: >
+          Payload config: {kind: "agentTurn"|"systemEvent",
+          message/text}
+      delivery:
+        type: object
+        required: false
+        description: >
+          Delivery config: {mode: "announce"|"webhook"|"none",
+          channel, to}
+      enabled:
+        type: boolean
+        required: false
+        default: true
+        description: Whether the job is active
+      deleteAfterRun:
+        type: boolean
+        required: false
+        default: false
+        description: Remove job after it runs once
+    response:
+      format: json
+
+  runCronJob:
+    description: >
+      Force-run a cron job immediately, regardless of schedule.
+      Useful for testing.
+    http: POST /cron/jobs/{jobId}/run
+    params:
+      jobId:
+        type: string
+        required: true
+        description: Job ID to run
+    response:
+      format: json
+
+  updateCronJob:
+    description: >
+      Update a cron job. Any field from the create schema can be
+      updated except agentId.
+    http: PATCH /cron/jobs/{jobId}
+    params:
+      jobId:
+        type: string
+        required: true
+        description: Job ID to update
+      enabled:
+        type: boolean
+        required: false
+        description: Enable or disable the job
+    response:
+      format: json
+
+  deleteCronJob:
+    description: >
+      Delete a cron job.
+    http: DELETE /cron/jobs/{jobId}
+    params:
+      jobId:
+        type: string
+        required: true
+        description: Job ID to delete
+    response:
+      format: json
+
+  getCronJobRuns:
+    description: >
+      Get run history for a cron job. Returns run records with
+      status, timestamps, and error details.
+    http: GET /cron/jobs/{jobId}/runs
+    params:
+      jobId:
+        type: string
+        required: true
+        description: Job ID to get run history for
+    response:
+      format: yaml
+
+  # ── Moltbot Config ───────────────────────────────────────
+  getMoltbotConfig:
+    description: >
+      Get gateway settings including auth, port, and HTTP endpoint config.
+    http: GET /moltbot/gateway
+    response:
+      format: yaml
+
+  updateMoltbotConfig:
+    description: >
+      Update gateway settings (auth, network, HTTP endpoint config).
+    http: PATCH /moltbot/gateway
+    params:
+      http:
+        type: object
+        required: false
+        description: HTTP endpoint settings
+    response:
+      format: json
+
+  # ── Channels ──────────────────────────────────────────────
+  listChannels:
+    description: >
+      List all channel configurations (telegram, discord, slack, web).
+    http: GET /moltbot/channels
+    response:
+      format: yaml
+
+  getChannelConfig:
+    description: >
+      Get a single channel's configuration and settings.
+    http: GET /moltbot/channels/{channel}
+    params:
+      channel:
+        type: string
+        required: true
+        description: Channel name (telegram, discord, slack, web)
+    response:
+      format: yaml
+
+  # ── Bindings ──────────────────────────────────────────────
+  listBindings:
+    description: >
+      List all channel-to-agent bindings. Each binding maps a
+      channel+account to an agent.
+    http: GET /moltbot/bindings
+    response:
+      format: yaml
+
+  createBinding:
+    description: >
+      Add a new channel-to-agent binding.
+    http: POST /moltbot/bindings
+    params:
+      channel:
+        type: string
+        required: true
+        description: Channel name (telegram, discord, etc.)
+      account:
+        type: string
+        required: true
+        description: Account identifier within the channel
+      agent:
+        type: string
+        required: true
+        description: Agent ID to handle this binding
+    response:
+      format: json
+
+  # ── Skill Entries (Gateway-Level) ────────────────────────
+  listSkillEntries:
+    description: >
+      List all skill entries in moltbot.json. Shows which skills
+      are enabled and their env vars.
+    http: GET /moltbot/skills
+    response:
+      format: yaml
+
+  updateSkillEntry:
+    description: >
+      Update or create a skill entry in moltbot.json.
+      Controls enabled state and env var injection.
+    http: PATCH /moltbot/skills/{name}
+    params:
+      name:
+        type: string
+        required: true
+        description: Skill name
+      enabled:
+        type: boolean
+        required: false
+        description: Whether the skill is enabled
+      env:
+        type: object
+        required: false
+        description: Environment variables to inject for this skill
+    response:
+      format: json
+
+  # ── Agent Workspace Files ─────────────────────────────────
+  readFile:
+    description: >
+      Read an agent workspace file by key. Valid keys: soul,
+      agents-md, tools-md, identity-md, memory-md, user-md,
+      heartbeat-md, learnings-md.
+    http: GET /agents/{agent_id}/{file_key}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID
+      file_key:
+        type: enum
+        values: [soul, agents-md, tools-md, identity-md, memory-md, user-md, heartbeat-md, learnings-md]
+        required: true
+        description: Workspace file to read
+    response:
+      format: text
+
+  writeFile:
+    description: >
+      Write/update an agent workspace file. Valid keys same as readFile.
+    http: PUT /agents/{agent_id}/{file_key}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID
+      file_key:
+        type: enum
+        values: [soul, agents-md, tools-md, identity-md, memory-md, user-md, heartbeat-md, learnings-md]
+        required: true
+        description: Workspace file to write
+      content:
+        type: string
+        required: true
+        description: File content (markdown)
+    response:
+      format: json
+
+  # ── Agent CRUD ────────────────────────────────────────────
+  createAgent:
+    description: >
+      Create a new agent from a template. Atomic single-call operation that
+      handles workspace files, config.yaml, moltbot.json, and gateway reload.
+    http: POST /agents/from-template
+    params:
+      id:
+        type: string
+        required: true
+        description: Agent ID (kebab-case, e.g. "support-brand-15")
+      name:
+        type: string
+        required: true
+        description: Display name (e.g. "Maya — Brand Support")
+      template:
+        type: string
+        required: true
+        description: Template name (admin, brand-sales, brand-support, content-creator, lead-researcher, planner, sdr, workspace-agent)
+      placeholders:
+        type: object
+        required: false
+        description: Template variables — brand_name, brand_id, persona_name, persona_code, industry, onboarded_date
+      moltbot_overrides:
+        type: object
+        required: false
+        description: Runtime config overrides — model, tools (profile, alsoAllow)
+    response:
+      format: json
+
+  deleteAgent:
+    description: >
+      Delete an agent and all its workspace files. Destructive, cannot be undone.
+    http: DELETE /agents/{agent_id}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID to delete
+    response:
+      format: json
+
+  # ── Skill Detail ──────────────────────────────────────────
+  getSkill:
+    description: >
+      Get the full SKILL.md content for a specific skill.
+    http: GET /skills/{skill_name}/content
+    params:
+      skill_name:
+        type: string
+        required: true
+        description: Skill name
+    response:
+      format: text
+
+  # ── Agent Skills ──────────────────────────────────────────
+  getAgentSkills:
+    description: >
+      Get the list of skills assigned to a specific agent.
+    http: GET /agents/{agent_id}/skills
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID
+    response:
+      format: yaml
+
+  # ── Moltbot Agent Config ──────────────────────────────────
+  getMoltbotAgent:
+    description: >
+      Get the moltbot.json runtime config for a specific agent —
+      model, skills, tools profile, and other runtime settings.
+    http: GET /moltbot/agents/{agent_id}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID
+    response:
+      format: json
+
+  updateMoltbotAgent:
+    description: >
+      Update the moltbot.json runtime config for an agent — skills,
+      tools profile, model settings.
+    http: PATCH /moltbot/agents/{agent_id}
+    params:
+      agent_id:
+        type: string
+        required: true
+        description: Agent ID
+      skills:
+        type: array
+        items: string
+        required: false
+        description: Skill names to assign
+      tools_profile:
+        type: string
+        required: false
+        description: Tools profile (messaging, coding)
+      also_allow:
+        type: array
+        items: string
+        required: false
+        description: Additional tool groups to allow
+    response:
+      format: json
+
+  # ── Channel Accounts ──────────────────────────────────────
+  addChannelAccount:
+    description: >
+      Add a new account to a channel (e.g., add a Telegram bot token).
+    http: POST /moltbot/channels/{channel}/accounts
+    params:
+      channel:
+        type: string
+        required: true
+        description: Channel name (telegram, discord, slack)
+      account_id:
+        type: string
+        required: true
+        description: Account identifier
+      config:
+        type: object
+        required: true
+        description: Account configuration (token, webhook, etc.)
+    response:
+      format: json
+
+  updateChannelAccount:
+    description: >
+      Update an existing channel account configuration.
+    http: PATCH /moltbot/channels/{channel}/accounts/{account_id}
+    params:
+      channel:
+        type: string
+        required: true
+        description: Channel name
+      account_id:
+        type: string
+        required: true
+        description: Account identifier
+      updates:
+        type: object
+        required: true
+        description: Fields to update
+    response:
+      format: json
+
+  deleteChannelAccount:
+    description: >
+      Remove a channel account.
+    http: DELETE /moltbot/channels/{channel}/accounts/{account_id}
+    params:
+      channel:
+        type: string
+        required: true
+        description: Channel name
+      account_id:
+        type: string
+        required: true
+        description: Account to remove
+    response:
+      format: json

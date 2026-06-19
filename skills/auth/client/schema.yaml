@@ -1,0 +1,228 @@
+# Auth Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate auth
+
+name: auth
+version: "1.0.0"
+description: >
+  Multi-brand authentication and session management — user profile,
+  brand memberships, OAuth connectors, and profile photo upload.
+category: auth
+base_url: /api/v1/auth
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 15000
+requires_brand: false
+triggers:
+  - auth
+  - login
+  - session
+  - brand
+  - switch
+
+methods:
+  # -- PAT Bootstrap (no auth required) -------------------------------------
+  requestAccess:
+    description: >
+      Request a PAT token for API access. No authentication required —
+      this is the bootstrap entry point. Sends an approval email to
+      the workspace admin. Returns a request_id and poll_token for
+      polling approval status.
+    http: POST /pat/request
+    params:
+      workspace_slug:
+        type: string
+        required: true
+        description: Workspace slug (brand identifier, e.g. "spideriq")
+      owner_email:
+        type: string
+        required: true
+        description: Email of the workspace admin who will approve the request
+      project_name:
+        type: string
+        required: false
+        description: Name of the project requesting access
+      requested_scopes:
+        type: array
+        items: string
+        required: false
+        description: Scopes to request (default board:read, board:write)
+      ttl_hours:
+        type: integer
+        required: false
+        default: 72
+        description: Token lifetime in hours (1-8760, default 72)
+    response:
+      format: json
+
+  requestAccessByEmail:
+    description: >
+      Simplified PAT request — email only, auto-discovers all brands
+      the admin belongs to. No authentication required.
+    http: POST /pat/request-by-email
+    params:
+      owner_email:
+        type: string
+        required: true
+        description: Email of the admin who will approve
+      project_name:
+        type: string
+        required: false
+        description: Name of the project requesting access
+      requested_scopes:
+        type: array
+        items: string
+        required: false
+        description: Scopes to request
+      ttl_hours:
+        type: integer
+        required: false
+        default: 72
+        description: Token lifetime in hours
+    response:
+      format: json
+
+  checkAccessStatus:
+    description: >
+      Poll for PAT request approval status. When approved, auto-stores
+      the token in OPVS_PAT so all subsequent tool calls are authenticated.
+      Returns status: pending, approved, denied, or expired.
+    http: GET /pat/request/{request_id}/status
+    auth_override:
+      type: bearer
+      from_param: poll_token
+    store_token:
+      env_var: OPVS_PAT
+      json_path: workspaces.0.token
+    params:
+      request_id:
+        type: string
+        required: true
+        description: Request ID from requestAccess response
+      poll_token:
+        type: string
+        required: true
+        description: Poll token from requestAccess response
+
+  # -- Current User ----------------------------------------------------------
+  getMe:
+    description: >
+      Get the current user's profile including all brand memberships.
+      Returns user details (name, email, photo, role) and a list of
+      brands the user belongs to with their role and position.
+    http: GET /me
+    response:
+      format: json
+
+  # -- Signup Complete -------------------------------------------------------
+  completeSignup:
+    description: >
+      Complete signup by creating a user profile, brand, and membership.
+      Called after Better Auth signup succeeds. Creates the user record,
+      a new brand, brand_settings, brand_information, and brand_membership.
+    http: POST /signup/complete
+    params:
+      brand_name:
+        type: string
+        required: true
+        description: Name for the new brand/organization
+      firstname:
+        type: string
+        required: false
+        description: User's first name
+      lastname:
+        type: string
+        required: false
+        description: User's last name
+    response:
+      format: json
+
+  # -- Signup with Invite ----------------------------------------------------
+  signupWithInvite:
+    description: >
+      Complete signup using an invitation token. Creates the user profile
+      and adds them to the inviting brand as a client member.
+    http: POST /signup/with-invite
+    params:
+      invite_token:
+        type: string
+        required: true
+        description: The invitation token from the invite link
+    response:
+      format: json
+
+  # -- Accept Invite (existing user) ----------------------------------------
+  acceptInvite:
+    description: >
+      Accept a brand invitation as an already-authenticated user.
+      Adds the user to the inviting brand without re-authentication.
+    http: POST /accept-invite
+    params:
+      invite_token:
+        type: string
+        required: true
+        description: The invitation token to accept
+    response:
+      format: json
+
+  # -- Update Profile --------------------------------------------------------
+  updateProfile:
+    description: >
+      Update the current user's profile. Supports partial updates for
+      first name, last name, and mobile number. Automatically recomputes
+      full_name from first + last.
+    http: PATCH /profile
+    params:
+      firstname:
+        type: string
+        required: false
+        description: Updated first name
+      lastname:
+        type: string
+        required: false
+        description: Updated last name
+      mobile:
+        type: string
+        required: false
+        description: Updated mobile/phone number
+    response:
+      format: json
+
+  # -- Upload Profile Photo --------------------------------------------------
+  uploadProfilePhoto:
+    description: >
+      Upload a profile picture. Resizes to 256x256 JPEG and stores in
+      Cloudflare R2. Accepts PNG, JPG, or GIF up to 5MB.
+    http: POST /profile/photo
+    params:
+      file:
+        type: string
+        required: true
+        description: Image file path or base64 data (PNG, JPG, or GIF, max 5MB)
+    response:
+      format: json
+
+  # -- Remove Profile Photo --------------------------------------------------
+  removeProfilePhoto:
+    description: >
+      Remove the current user's profile picture. Cleans up the R2 file
+      if stored there.
+    http: DELETE /profile/photo
+    response:
+      format: json
+
+  # -- OAuth Connectors ------------------------------------------------------
+  getConnectors:
+    description: >
+      List connected OAuth providers for the current user. Returns
+      provider name, connection date, and associated email for each
+      linked social login (GitHub, Google, etc.). Excludes credential
+      (email/password) entries.
+    http: GET /connectors
+    response:
+      format: json

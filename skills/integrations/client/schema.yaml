@@ -1,0 +1,286 @@
+# Integrations Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate integrations
+
+name: integrations
+version: "1.0.0"
+description: >
+  Manage API integrations for third-party services (SpiderIQ, Smartlead,
+  SpiderMail, etc.) — create, update, delete keys, check health and spend.
+category: integration
+base_url: /api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - integrations
+  - api key
+  - credentials
+  - connect
+  - provider
+
+methods:
+  # -- Overview (aggregated provider stats) ----------------------------------
+  getOverview:
+    description: >
+      Get an aggregated overview of all configured providers for the brand.
+      Returns per-provider key counts, active/healthy counts, daily capacity
+      and spend totals.
+    http: GET /brands/{brand_id}/integrations
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+    response:
+      format: json
+
+  # -- Provider Templates ----------------------------------------------------
+  listProviders:
+    description: >
+      List available provider templates with their required credential
+      fields and default limits.
+    http: GET /brands/{brand_id}/integrations/providers
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+    response:
+      format: json
+
+  # -- List All Keys ---------------------------------------------------------
+  listIntegrations:
+    description: >
+      List all integration keys for the brand, optionally filtered by
+      provider name. Returns key previews, health status, usage counters
+      and spend data.
+    http: GET /brands/{brand_id}/integrations/all
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      provider_name:
+        type: string
+        required: false
+        description: Filter by provider name (e.g. spideriq, smartlead)
+    response:
+      format: json
+
+  # -- Single Integration Detail ---------------------------------------------
+  getIntegration:
+    description: >
+      Get details for a single integration key including preview, health
+      status, usage and spend limits.
+    http: GET /brands/{brand_id}/integrations/{integration_id}
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID
+    response:
+      format: json
+
+  # -- Create Integration ----------------------------------------------------
+  createIntegration:
+    description: >
+      Create a new API integration key. Requires provider_name and a
+      credentials object with the provider's required fields. Brand
+      admin only.
+    http: POST /brands/{brand_id}/integrations
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      provider_name:
+        type: string
+        required: true
+        description: Provider identifier (e.g. spideriq, smartlead, spidermail)
+      credentials:
+        type: object
+        required: true
+        description: Provider-specific credential fields (api_key, workspace, etc.)
+      key_label:
+        type: string
+        required: false
+        description: Human-readable label for this key
+      is_primary:
+        type: boolean
+        required: false
+        default: false
+        description: Set as primary key for this provider
+      daily_limit:
+        type: integer
+        required: false
+        description: Daily usage limit (overrides provider default)
+      minute_limit:
+        type: integer
+        required: false
+        description: Per-minute usage limit (overrides provider default)
+      country_code:
+        type: string
+        required: false
+        description: Country code for region-specific keys
+    response:
+      format: json
+
+  # -- Update Integration ----------------------------------------------------
+  updateIntegration:
+    description: >
+      Update an existing integration key. Supports partial updates for
+      label, credentials, limits, priority, active status, and spend
+      limits. Brand admin only.
+    http: PATCH /brands/{brand_id}/integrations/{integration_id}
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID to update
+      key_label:
+        type: string
+        required: false
+        description: Updated human-readable label
+      credentials:
+        type: object
+        required: false
+        description: Updated credential fields (merged with existing)
+      is_active:
+        type: boolean
+        required: false
+        description: Enable or disable the key
+      is_primary:
+        type: boolean
+        required: false
+        description: Set as primary key for this provider
+      daily_limit:
+        type: integer
+        required: false
+        description: Updated daily usage limit
+      minute_limit:
+        type: integer
+        required: false
+        description: Updated per-minute usage limit
+      priority:
+        type: integer
+        required: false
+        description: Round-robin priority (higher = preferred)
+      spend_limit_amount:
+        type: number
+        required: false
+        description: Spend limit amount
+      spend_limit_period:
+        type: string
+        required: false
+        description: Spend limit period (daily, monthly)
+      spend_limit_action:
+        type: string
+        required: false
+        description: Action when limit hit (pause, alert)
+    response:
+      format: json
+
+  # -- Delete Integration ----------------------------------------------------
+  deleteIntegration:
+    description: >
+      Delete an integration key permanently. Also deregisters associated
+      services (e.g. SpiderMail mailboxes). Brand admin only.
+    http: DELETE /brands/{brand_id}/integrations/{integration_id}
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID to delete
+    response:
+      format: json
+
+  # -- Reset Usage Counters --------------------------------------------------
+  resetUsage:
+    description: >
+      Reset daily and minute usage counters for an integration key.
+      Brand admin only.
+    http: POST /brands/{brand_id}/integrations/{integration_id}/reset-usage
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID
+    response:
+      format: json
+
+  # -- Spend Detail ----------------------------------------------------------
+  getSpend:
+    description: >
+      Get spend details for a single integration key including cached
+      balance, daily and monthly usage, and currency.
+    http: GET /brands/{brand_id}/integrations/{integration_id}/spend
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID
+    response:
+      format: json
+
+  # -- Provider Spend Overview -----------------------------------------------
+  getProviderSpend:
+    description: >
+      Get aggregated spend overview for all keys of a specific provider.
+      Includes per-key snapshots with balance, daily/monthly usage.
+    http: GET /brands/{brand_id}/integrations/spend/provider/{provider_name}
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      provider_name:
+        type: string
+        required: true
+        description: Provider name (e.g. spideriq, smartlead)
+    response:
+      format: json
+
+  # -- Sync Billing ----------------------------------------------------------
+  syncBilling:
+    description: >
+      Trigger a billing sync for an integration key. Fetches current
+      balance and usage from the provider API. Brand admin only.
+    http: POST /brands/{brand_id}/integrations/{integration_id}/sync-billing
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID
+    response:
+      format: json

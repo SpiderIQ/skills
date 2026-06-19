@@ -1,0 +1,264 @@
+# Manage Locations Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate manage-locations
+
+name: manage-locations
+version: "1.0.0"
+description: >
+  Manage SpiderIQ location database — add cities and postcodes, view country
+  coverage stats, find gaps, and expand campaign search coverage with
+  postcode-level targeting. Admin-level operations on the global location DB
+  used by campaigns and lead research.
+category: admin
+base_url: /api/v1
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - locations
+  - postcodes
+  - cities
+  - coverage
+  - location stats
+  - manage locations
+
+methods:
+  # -- List & Search ------------------------------------------------
+  listLocations:
+    description: >
+      List and search locations with filters. Supports filtering by country,
+      type (city/postcode), region, population, and free-text search across
+      display names and search strings. Use needs_postcodes=true to find
+      cities that need postcode expansion for better campaign coverage.
+    http: GET /admin/locations
+    params:
+      page:
+        type: integer
+        required: false
+        default: 1
+        description: Page number (starts at 1)
+      page_size:
+        type: integer
+        required: false
+        default: 50
+        description: Results per page (1-200)
+      country_code:
+        type: string
+        required: false
+        description: ISO 2-letter country code (e.g. "DE", "GB", "US")
+      location_type:
+        type: string
+        required: false
+        description: Filter by type — "city" or "postcode"
+      admin_region:
+        type: string
+        required: false
+        description: Filter by state/province/region name
+      search:
+        type: string
+        required: false
+        description: Free-text search in display_name and search_string
+      needs_postcodes:
+        type: boolean
+        required: false
+        description: If true, only cities with population >= 500k that need postcode breakdown
+      min_population:
+        type: integer
+        required: false
+        description: Minimum population filter
+    response:
+      format: json
+
+  # -- Statistics ---------------------------------------------------
+  getGlobalStats:
+    description: >
+      Get global location database statistics — total locations, countries,
+      cities, postcodes, and count of cities needing postcode expansion.
+      Use this to understand overall coverage before expanding.
+    http: GET /admin/locations/stats
+    response:
+      format: json
+
+  listCountries:
+    description: >
+      List all countries in the location database with their location counts.
+      Returns country codes, names, and how many locations each has.
+      Ordered by location count descending.
+    http: GET /admin/locations/countries
+    response:
+      format: json
+
+  getCountryStats:
+    description: >
+      Get detailed statistics for a single country — city count, postcode
+      count, population coverage, coordinate coverage, cities needing
+      postcodes, and list of admin regions. Essential for identifying
+      gaps before adding postcodes.
+    http: GET /admin/locations/countries/{country_code}/stats
+    params:
+      country_code:
+        type: string
+        required: true
+        description: ISO 2-letter country code (e.g. "DE")
+    response:
+      format: json
+
+  # -- CRUD Operations ----------------------------------------------
+  createLocation:
+    description: >
+      Create a single location (city or postcode). For postcodes, always
+      set location_type to "postcode" and parent_city to the city name.
+      Returns 409 if a location with the same country_code + search_string
+      already exists. Cities with population >= 500k are auto-flagged as
+      needing postcode expansion.
+    http: POST /admin/locations
+    params:
+      country_code:
+        type: string
+        required: true
+        description: ISO 2-letter country code (e.g. "DE")
+      country_name:
+        type: string
+        required: true
+        description: Full country name (e.g. "Germany")
+      search_string:
+        type: string
+        required: true
+        description: >
+          Search string for Google Maps (e.g. "10115 Berlin, Germany"
+          for a postcode, or "Berlin, Germany" for a city)
+      location_type:
+        type: string
+        required: false
+        default: city
+        description: Location type — "city" or "postcode"
+      display_name:
+        type: string
+        required: false
+        description: Human-readable name (defaults to search_string)
+      parent_city:
+        type: string
+        required: false
+        description: Parent city name — REQUIRED for postcodes (e.g. "Berlin")
+      admin_region:
+        type: string
+        required: false
+        description: State/province/region (e.g. "Berlin", "Bayern")
+      latitude:
+        type: number
+        required: false
+        description: Latitude coordinate
+      longitude:
+        type: number
+        required: false
+        description: Longitude coordinate
+      population:
+        type: integer
+        required: false
+        description: Population count (cities >= 500k auto-flagged for postcode expansion)
+    response:
+      format: json
+
+  getLocation:
+    description: >
+      Get a single location by ID. Returns full location details including
+      coordinates, population, and needs_postcodes flag.
+    http: GET /admin/locations/{location_id}
+    params:
+      location_id:
+        type: integer
+        required: true
+        description: Location ID
+    response:
+      format: json
+
+  updateLocation:
+    description: >
+      Update a location's fields. Only provided fields are updated.
+      Cannot change country_code or location_id.
+    http: PATCH /admin/locations/{location_id}
+    params:
+      location_id:
+        type: integer
+        required: true
+        description: Location ID to update
+      search_string:
+        type: string
+        required: false
+        description: Updated search string for Google Maps
+      display_name:
+        type: string
+        required: false
+        description: Updated display name
+      parent_city:
+        type: string
+        required: false
+        description: Updated parent city
+      admin_region:
+        type: string
+        required: false
+        description: Updated state/province/region
+      latitude:
+        type: number
+        required: false
+        description: Updated latitude
+      longitude:
+        type: number
+        required: false
+        description: Updated longitude
+      population:
+        type: integer
+        required: false
+        description: Updated population
+      location_type:
+        type: string
+        required: false
+        description: Updated type — "city" or "postcode"
+    response:
+      format: json
+
+  deleteLocation:
+    description: >
+      Delete a location by ID. Will fail with 409 if the location is used
+      in any active campaign jobs (pending or submitted status). Remove
+      campaign references first or wait for campaigns to complete.
+    http: DELETE /admin/locations/{location_id}
+    params:
+      location_id:
+        type: integer
+        required: true
+        description: Location ID to delete
+    response:
+      format: json
+
+  # -- AI Research (Placeholder) ------------------------------------
+  researchLocations:
+    description: >
+      AI-powered location research — suggest new locations matching criteria.
+      NOTE: Currently a placeholder that returns empty suggestions. Agents
+      should use their own knowledge to research postcodes for cities and
+      then create them via createLocation.
+    http: POST /admin/locations/research
+    params:
+      country_code:
+        type: string
+        required: true
+        description: ISO 2-letter country code to research
+      criteria:
+        type: string
+        required: true
+        description: >
+          Research criteria (e.g. "all postcodes in Berlin",
+          "cities with population > 100k")
+      limit:
+        type: integer
+        required: false
+        default: 50
+        description: Max suggestions to return (1-200)
+    response:
+      format: json

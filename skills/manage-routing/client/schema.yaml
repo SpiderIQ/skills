@@ -1,0 +1,263 @@
+# Manage-Routing Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# These wrap /api/v1/admin/gate/routing/* and are the admin mirror of the
+# gate_routing_* MCP tools (mcp-admin slice) and `spideriq gate routing …` CLI.
+# Auth is the PLATFORM admin key (X-Admin-Key), NOT a client PAT — super_admin
+# only, platform-wide (no brand scoping). The decide_proposal tool fans out to
+# the split REST endpoints (/proposals/{id}/approve | /reject) internally.
+
+name: manage-routing
+version: "0.1.0"
+description: >
+  Manage SpiderGate's LLM routing — read/validate/edit/rollback the task-alias
+  model chains the gateway serves (spideriq/coding, spideriq/extraction,
+  agent/*, …) and adjudicate the self-heal agent's Tier-2 proposals. Probe-backed
+  (the catalog reports each model's real serve/tools status); every write is
+  rollback-able. super_admin-only, platform-wide.
+category: admin
+base_url: /api/v1/admin/gate/routing
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - manage gate routing
+  - fix a dead model
+  - edit a routing chain
+  - approve a routing proposal
+  - reject a routing proposal
+  - rollback a routing change
+  - which models are probing bad
+  - validate a routing chain
+
+guidance:
+  use: >
+    Reach for this to change WHAT MODEL the gateway routes to — diagnose a failing
+    alias against the probe catalog, validate a proposed chain, write it (hot-reload,
+    no deploy), roll it back, and approve/reject the self-heal agent's proposals.
+    super_admin + X-Admin-Key; the change applies to every tenant.
+  not:
+    - "use-the-gateway (@spideriq/gateway-skills) → SEND a completion through the gateway as a provider — not change routing"
+    - "integrations / vault → manage provider API KEYS (add/rotate/health) — not the alias→model chains"
+    - "manage-locations / opvs-admin / auth → other admin surfaces in this package, unrelated to LLM routing"
+  # No routing method takes a free-text search field — every selector is a typed
+  # alias / proposal_id / provider / status. intent_aliases is explicitly empty
+  # (declared, not implicit — the runtime never guesses; Q1).
+  intent_aliases: []
+  pitfalls:
+    - "A chain is a LEAST-BUSY POOL, not a priority list — only slot 0 is load-bearing (codex bypass). Every other slot draws ~1/N of traffic, so ONE dead/throttled/tool-incapable peer fails its full share. Chain length is not redundancy."
+    - "Probe status (gate_routing_catalog_status: last_probe_status / supports_tools) is the truth — NOT GET /models. A model can be listed in a chain and de-listed at the provider; only the probe sees it."
+    - "ALWAYS gate_routing_validate (all_ok) before gate_routing_set_alias. set_alias is a WHOLESALE replace of the whole chain + a live reload; a bad push breaks the alias for every tenant until rollback."
+    - "agent/* aliases are editable but HUMAN-GATED by policy — never self-apply a set_alias/approve to an agent/* chain. The self-heal agent treats every agent/* change as proposal-only."
+    - "decide_proposal approve APPLIES the proposed_chain (and can 422 if the proposal is stale); reject changes NOTHING. Re-read proposed_chain + reason before approving — a proposal can be hours old and its slots gone bad since."
+
+methods:
+  listAliases:
+    description: >
+      List every SpiderGate task alias (spideriq/coding, spideriq/extraction,
+      agent/*, …) with its live model chain and recent change history. `source`
+      is 'db' when chains come from the gate_task_aliases table, or
+      'code_fallback' when the table is empty/unavailable. Read-only.
+    guidance:
+      use: "See all aliases and their current chains + history (the starting point for any edit)."
+      next: "catalogStatus (find healthy slots), validateAlias (probe a chain), getAlias (focus one)"
+      warn: "This shows what a chain CLAIMS, not what each model actually serves — confirm with catalogStatus before trusting a slot."
+      telemetry_signal_default: "cold"
+    http: GET /aliases
+    response:
+      format: json
+
+  getAlias:
+    description: >
+      Get one task alias with its current chain plus the history rows for that
+      alias (a focused view of listAliases filtered to a single alias). The
+      history rows carry the history_id values you pass to rollbackAlias.
+      Read-only.
+    guidance:
+      use: "Inspect one alias's chain + history (and find a history_id to roll back to)."
+      next: "validateAlias (probe it), rollbackAlias (restore a prior history_id)"
+      warn: "There is no single-alias GET endpoint — the tool filters the full list; an unknown alias returns not-found."
+      telemetry_signal_default: "cold"
+    http: GET /aliases
+    params:
+      alias:
+        type: string
+        required: true
+        description: Alias to fetch, e.g. spideriq/coding or agent/coding.
+    response:
+      format: json
+
+  validateAlias:
+    description: >
+      Dry-run probe an alias chain and return a per-slot verdict
+      (ok | no_tools | delisted | error | skipped) WITHOUT changing routing and
+      WITHOUT billing (meter-exempt). Pass `slots` to validate a PROPOSED chain
+      before setAlias; omit `slots` to probe the alias's CURRENT live chain.
+      `all_ok` is true when every non-skipped slot probed ok.
+    guidance:
+      use: "Probe a chain BEFORE writing it (or to triage why a live alias is failing)."
+      next: "setAlias (only if all_ok and tool slots support_tools), catalogStatus (swap a bad slot)"
+      warn: "ALWAYS run this before setAlias. all_ok=false means setAlias will reject the bad slots (422) — fix the chain first."
+      telemetry_signal_default: "warm"
+    http: POST /aliases/{alias}/validate
+    params:
+      alias:
+        type: string
+        required: true
+        description: Alias to validate, e.g. spideriq/coding.
+      slots:
+        type: array
+        required: false
+        description: >
+          Proposed chain to probe instead of the live one — an ordered list of
+          {provider, model} (1–32). Order is load-bearing only for slot 0 (codex
+          bypass); the rest is a least-busy pool. Omit to probe the live chain.
+        items: object
+    response:
+      format: json
+
+  setAlias:
+    description: >
+      Replace an alias's WHOLE chain (wholesale, not merged) and hot-reload the
+      live Router. Writes an append-only gate_alias_history row (so it is
+      rollback-able) and fires a reload. REJECTED (422) with `rejected_slots`
+      if any tool-class slot is known-bad in the catalog (supports_tools=FALSE /
+      no_tools / delisted) — run validateAlias first. agent/* aliases are
+      editable here but human-gated by policy.
+    guidance:
+      use: "Write a new chain for an alias (after validateAlias shows all_ok)."
+      next: "validateAlias (re-probe the live chain to confirm), getAlias (see the new history row)"
+      warn: "Wholesale replace + platform-wide live reload — a bad push breaks the alias for EVERY tenant until rollback. NEVER set an agent/* chain without human sign-off (HARD-GATE)."
+      telemetry_signal_default: "hot"
+    http: PUT /aliases/{alias}
+    params:
+      alias:
+        type: string
+        required: true
+        description: Alias to update, e.g. spideriq/coding.
+      slots:
+        type: array
+        required: true
+        description: >
+          New chain — a non-empty ordered list of {provider, model} (1–32).
+          Order is load-bearing only for slot 0 (codex bypass); the rest is a
+          least-busy pool, not a priority list.
+        items: object
+      reason:
+        type: string
+        required: false
+        description: Audit reason (≤500 chars) recorded on the history row.
+    response:
+      format: json
+
+  rollbackAlias:
+    description: >
+      Restore an alias's chain to the one stored in a prior gate_alias_history
+      row (by history_id) and hot-reload the Router. Find the history_id via
+      listAliases / getAlias (the `history` array). Writes a NEW history row
+      recording the rollback.
+    guidance:
+      use: "Undo a bad routing change by restoring a known-good prior chain."
+      next: "validateAlias (confirm the restored chain probes ok)"
+      warn: "Rollback restores the chain as-of that history row — if those models have ALSO gone bad since, validate the restored chain too."
+      telemetry_signal_default: "hot"
+    http: POST /aliases/{alias}/rollback
+    params:
+      alias:
+        type: string
+        required: true
+        description: Alias to roll back, e.g. spideriq/coding.
+      history_id:
+        type: integer
+        required: true
+        description: The gate_alias_history row id to restore the chain from (≥1).
+      reason:
+        type: string
+        required: false
+        description: Audit reason (≤500 chars).
+    response:
+      format: json
+
+  listProposals:
+    description: >
+      List self-heal routing proposals (Tier-2 suggestions the self-heal agent
+      detected but will NOT auto-apply — a new model, a primary change, ANY
+      agent/* change). Each row carries current_chain, proposed_chain, reason,
+      detected_from (errorrate | drift | probe) and status (pending | approved |
+      rejected | applied | auto-rolled-back). Newest first. Read-only.
+    guidance:
+      use: "Review what the self-heal agent wants to change (and why)."
+      next: "decideProposal (approve applies / reject rejects), validateAlias (probe the proposed_chain first)"
+      warn: "A pending proposal can be hours old — its proposed slots may have gone bad since detection. Validate before approving."
+      telemetry_signal_default: "warm"
+    http: GET /proposals
+    params:
+      status:
+        type: string
+        required: false
+        description: Filter by status (pending | approved | rejected | applied | auto-rolled-back). Omit for all.
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (default 100, max 500).
+    response:
+      format: json
+
+  decideProposal:
+    description: >
+      Approve or reject a pending self-heal proposal by id. decision='approve'
+      APPLIES the proposed_chain via the normal write path (history row + Router
+      reload) — it can 422 if the proposed chain is empty or catalog-rejected
+      (stale proposal). decision='reject' is a pure status flip (changes NOTHING
+      in routing). Routes to the split REST endpoints (/approve | /reject)
+      internally.
+    guidance:
+      use: "Adjudicate a pending proposal: approve to apply it, reject to dismiss it."
+      next: "validateAlias / getAlias (confirm the applied chain after an approve)"
+      warn: "approve writes + reloads platform-wide; re-read proposed_chain + reason first. For an agent/* proposal, get human sign-off before approving (HARD-GATE)."
+      telemetry_signal_default: "hot"
+    http: POST /proposals/{proposal_id}/{decision}
+    params:
+      proposal_id:
+        type: integer
+        required: true
+        description: The gate_routing_proposals row id (≥1).
+      decision:
+        type: string
+        required: true
+        description: "'approve' applies the proposed chain; 'reject' flips status only."
+    response:
+      format: json
+
+  catalogStatus:
+    description: >
+      Read the model catalog with each model projected to its probe-truth columns:
+      supports_tools, last_probe_status (ok | no_tools | delisted | error | NULL
+      un-probed), last_probe_latency_ms, last_probe_at, is_configured, and
+      in_task_aliases (which alias chains reference it). The authoritative source
+      for picking healthy slots and auditing which configured models probe bad.
+      Read-only.
+    guidance:
+      use: "Find healthy slots before setAlias, or audit which configured models are probing bad."
+      next: "validateAlias (probe the chain you assemble), setAlias (write it)"
+      warn: "This — not GET /models — is the truth about what a model serves + whether it does tools. Prefer slots with last_probe_status=ok (and supports_tools=true for tool aliases)."
+      telemetry_signal_default: "cold"
+    http: GET /catalog
+    params:
+      provider:
+        type: string
+        required: false
+        description: Filter to one provider (e.g. openrouter, mistral).
+      status:
+        type: string
+        required: false
+        description: Filter by last_probe_status (ok | no_tools | error | delisted | un-probed). Omit for all.
+    response:
+      format: json

@@ -1,0 +1,1 @@
+Full admin control — gateway config, cron, skills, channels

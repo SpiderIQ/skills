@@ -1,0 +1,14 @@
+{
+  "title": "A de-listed model stays a live least-busy peer until you remove it — probe the catalog, don't trust the chain",
+  "summary": "SpiderGate's per-attempt error rate regressed to ~48% (16.9% true client-facing) by 2026-06-18, concentrated in the spideriq/* worker family (spideriq/opvs 69%, spideriq/creative 50%; agent/* stayed <2%). Root cause: litellm.Router serves a chain as a LEAST-BUSY POOL, not a priority list — chain position is not priority. A de-listed model (groq/moonshotai/kimi-k2-instruct) and a throttled+tool-incapable one (nousresearch/hermes-3-llama-3.1-405b:free) sat as equal peers in 5+ worker chains and each drew ~1/N of traffic into 404/429/cooldown for 48h. The model list still 'showed' them; only a probe sees a slot is de-listed or can't do tools. PR #1783 fixed it by swapping the broken peers to probe-verified slots (gpt-oss-120b, gemma-4-31b-it:free) — and the dynamic-routing initiative turned that manual fix into the probe catalog (gate_routing_catalog_status: supports_tools / last_probe_status) + validate-before-set that this skill teaches. Lever: remove broken peers; the probe catalog is how you find them. Bonus root cause: a revoked key (Mistral #29) thrashed healthy<->unhealthy hourly until deactivate_dead_api_keys ejected it (key-pool concern, not routing — see the integrations/vault surface).",
+  "created_at": "2026-06-18",
+  "updated_at": "2026-06-19",
+  "tags": ["routing", "probe", "least-busy-pool", "incident", "spidergate"],
+  "references": [
+    "PR #1783 (master dd4993ef, api-gw prebuilt-9f52b1da67d9) — swapped de-listed kimi-k2 → groq/openai/gpt-oss-120b and throttled hermes-3-405b:free → google/gemma-4-31b-it:free across 5+ worker chains; added deactivate_dead_api_keys() + reconcile_keys() for the dead-key thrash",
+    "memory spidergate-error-regression-2026-06-18 — full 3-root-cause analysis + smoke proof (opvs 69%→0, creative 50%→0)",
+    "SpiderGate LEARNINGS #56 — litellm Router is a LEAST-BUSY pool, chain position != priority",
+    "SpiderGate LEARNINGS #33 — groq kimi-k2-instruct de-listed",
+    "packages/mcp-tools/src/admin/gate-routing.ts — gate_routing_catalog_status (supports_tools, last_probe_status) + gate_routing_validate (per-slot probe verdict) — the tooling built so this never needs manual SQL again"
+  ]
+}
