@@ -10,14 +10,16 @@ description: >
   response", "fall back to another model", "list available models / aliases",
   "what did my agent spend on LLMs", "read my gateway usage / traces / cost",
   "stream a completion", "JSON mode / structured output via the gateway",
-  "tool calling through SpiderGate". One OpenAI-compatible endpoint replaces
+  "tool calling through SpiderGate", "embed text / create embeddings / vectorise",
+  "agent/embed-small", "agent/embed-large", "embeddings without an OpenAI key".
+  One OpenAI-compatible endpoint replaces
   juggling OpenRouter + Groq + Mistral keys: send `model: "spideriq/<task>"`,
   SpiderGate routes to the best available model, falls back on failure, and
   hands back the real per-call cost. This skill teaches the CONSUMER surface
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.1.0"
+version: "0.2.0"
 category: ai-gateway
 ---
 
@@ -51,6 +53,7 @@ your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
   MCP `gate_chat` tool can't). → [references/structured-output-and-tools.md](references/structured-output-and-tools.md).
 - **Account for spend** — read usage, per-call cost, and traces. → [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
 - **Stream** — token-by-token SSE, and where job events live. → [references/stream-and-events.md](references/stream-and-events.md).
+- **Embed text** — vectorise one string or a batch through the gateway (`agent/embed-small|large`), no raw OpenAI key needed. → [references/embeddings.md](references/embeddings.md).
 
 <HARD-GATE name="no-pii-on-free-tier">
 Free-tier providers (Groq, Mistral-free, OpenRouter `:free`) may use request data
@@ -86,6 +89,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 | get strict JSON (JSON mode / schema) or call tools/functions through the gateway | [references/structured-output-and-tools.md](references/structured-output-and-tools.md) |
 | read how much was spent — usage, per-call cost, traces, p95 latency | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | stream tokens as they generate — or watch *job* events (not completion tokens) | [references/stream-and-events.md](references/stream-and-events.md) |
+| embed text / build a vector index — single or batch, no raw OpenAI key | [references/embeddings.md](references/embeddings.md) |
 | see how this compares to OpenRouter / LiteLLM / Portkey | [references/competitor-landscape.md](references/competitor-landscape.md) |
 | know which CLI/MCP surfaces are MISSING (and the HTTP workaround) | [references/gaps.md](references/gaps.md) |
 
@@ -102,12 +106,13 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | Read usage / spend | `GET /api/v1/brands/{brand_id}/gate/usage?days=` | `gate_usage` | `spideriq gate usage -b <brand>` |
 | List / inspect traces | `GET …/gate/traces` · `…/traces/{id}` · `…/traces/stats/summary` | `gate_traces` / `gate_trace_detail` / `gate_trace_stats` | — |
 | Brand stats / agents / providers | `…/gate/stats` · `/agents` · `/providers` | `gate_stats` / `gate_agents` / `gate_providers` | — |
-| Images / TTS / STT / embeddings | `POST /api/gate/v1/{images/generations,audio/speech,audio/transcriptions,embeddings}` | — *(gap 4)* | — *(gap 4)* |
+| Embed text (alias-aware: `agent/embed-small\|large\|embed`) | `POST /api/gate/v1/embeddings` | — *(gap 4)* | — *(gap 4)* |
+| Images / TTS / STT | `POST /api/gate/v1/{images/generations,audio/speech,audio/transcriptions}` | — *(gap 4)* | — *(gap 4)* |
 
 > **CLI + MCP now cover the consumer core** (chat / models / aliases / usage / health, ≥ cli@1.25.0 /
 > mcp@1.31.0), and `gate_chat` forwards the cost-cap / JSON / tool-calling controls. Still HTTP-only:
-> token-by-token **streaming** and the **multimodal** endpoints (images/TTS/STT/embeddings — gap 4).
-> See [references/gaps.md](references/gaps.md).
+> token-by-token **streaming**, **embeddings** (alias-aware — see [references/embeddings.md](references/embeddings.md)),
+> and the rest of the **multimodal** endpoints (images/TTS/STT — gap 4). See [references/gaps.md](references/gaps.md).
 
 ## Methods (native tool calls — from client/schema.yaml)
 
@@ -116,6 +121,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | `chat` | send a chat completion (task alias or model id) | [references/cost-aware-completion.md](references/cost-aware-completion.md) |
 | `listModels` | list models with provider, context window, pricing | [references/pick-an-alias.md](references/pick-an-alias.md) |
 | `listAliases` | list task aliases with their fallback chains + usage | [references/pick-an-alias.md](references/pick-an-alias.md) |
+| `embed` | vectorise one text or a batch (`agent/embed-small\|large\|embed`) | [references/embeddings.md](references/embeddings.md) |
 | `health` | gateway liveness | [references/stream-and-events.md](references/stream-and-events.md) |
 
 The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry_signal_default`, plus skill-level `intent_aliases`) lives in [client/schema.yaml](client/schema.yaml). Brand-analytics reads (usage/traces) are served under a different root (`/api/v1/brands/{brand_id}/gate`) and are exposed as the `gate_usage`/`gate_traces`/… MCP tools — see [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
@@ -127,6 +133,7 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 - **[references/structured-output-and-tools.md](references/structured-output-and-tools.md)** — `response_format` (json_object/json_schema) + `tools`/`tool_choice`. WRONG→RIGHT.
 - **[references/read-usage-and-traces.md](references/read-usage-and-traces.md)** — usage by `brand_id`, per-call cost, trace list/detail/stats.
 - **[references/stream-and-events.md](references/stream-and-events.md)** — `stream: true` SSE framing + the difference vs the `events-stream` job-event skill.
+- **[references/embeddings.md](references/embeddings.md)** — `POST /embeddings` the OpenAI-compatible way: `agent/embed-small|large|embed` aliases, batch `input`, `dimensions`, and why no raw `OPENAI_API_KEY` is needed. WRONG→RIGHT.
 - **[references/competitor-landscape.md](references/competitor-landscape.md)** — OpenRouter / LiteLLM / Portkey mapping (cited).
 - **[references/gaps.md](references/gaps.md)** — CLI/MCP gaps the skill needs but the tooling lacks (REQUIRED reading before you reach for a CLI command that doesn't exist).
 

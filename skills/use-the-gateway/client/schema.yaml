@@ -9,7 +9,7 @@
 # every method below resolves to a real /api/gate/v1 endpoint (no phantom paths).
 
 name: use-the-gateway
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
@@ -49,6 +49,7 @@ guidance:
     - "Per-call dollar cost is spidergate_metadata.cost_usd, NOT the usage block (which is tokens only)."
     - "max_cost_usd, cache_enabled, fallback_models and stream are HTTP-only — the gate_chat MCP tool drops them."
     - "The served model can differ from the alias slot-0 (a fallback fired) — read spidergate_metadata.provider_model, don't assume."
+    - "Embeddings (embed) are HTTP-only (no MCP/CLI tool yet) and need a brand OpenAI key with the vault supports_embeddings flag — else 503 no_embeddings_key; use the SpiderGate PAT as api_key, never a raw OPENAI_API_KEY."
 
 methods:
   chat:
@@ -131,6 +132,45 @@ methods:
       warn: "Cost-biased aliases route to free-tier providers that may train on data — see the chat pitfalls before sending PII."
       telemetry_signal_default: "cold"
     http: GET /aliases
+    response:
+      format: json
+
+  embed:
+    description: >
+      Create OpenAI-compatible vector embeddings for one text or a batch. Set
+      `model` to a SpiderGate embed alias (agent/embed-small → text-embedding-3-small
+      /1536, agent/embed-large → text-embedding-3-large/3072, agent/embed → small) or
+      a raw OpenAI embedding model. `input` is a single string or a list. Optional
+      `dimensions` truncates the output width (request value overrides the alias
+      default). Metered + per-key-capped under your brand like chat — no raw
+      OPENAI_API_KEY needed; the SpiderGate PAT is the api_key.
+    guidance:
+      use: "Vectorise text through the gateway (single or batch) without holding an OpenAI key."
+      next: "store the vectors in your index; read spend via getUsage (request_kind=embedding)"
+      warn: "Needs a brand OpenAI key with the vault supports_embeddings flag — otherwise 503 no_embeddings_key (no fallback chain). HTTP-only: no MCP/CLI tool yet."
+      telemetry_signal_default: "warm"
+    http: POST /embeddings
+    params:
+      model:
+        type: string
+        required: true
+        description: Embed alias ("agent/embed-small"|"agent/embed-large"|"agent/embed") or a raw OpenAI model id ("text-embedding-3-large").
+      input:
+        type: array
+        required: true
+        description: Single text (string) or a batch (list of strings, OpenAI caps at 2048). Output order preserved via data[].index.
+      dimensions:
+        type: integer
+        required: false
+        description: Output vector width 1–3072 (text-embedding-3-* only). Overrides the alias default; omit to use it. ada-002 ignores this.
+      encoding_format:
+        type: string
+        required: false
+        description: '"float" (default) or "base64" (compact wire). Affects wire size only.'
+      user:
+        type: string
+        required: false
+        description: Optional end-user id passed through to OpenAI for abuse monitoring.
     response:
       format: json
 

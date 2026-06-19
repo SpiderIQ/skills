@@ -1,0 +1,13 @@
+{
+  "title": "Embeddings go through the gateway with the SpiderGate PAT — no raw OPENAI_API_KEY",
+  "summary": "Agents reach for a raw OPENAI_API_KEY to call text-embedding-3-*; with SpiderGate they don't. POST /api/gate/v1/embeddings is OpenAI-compatible: point the openai SDK at base_url=https://spideriq.ai/api/gate/v1, use the per-brand SpiderGate PAT (cli_…:sk_…:secret_…) as api_key, and send agent/embed-small (→text-embedding-3-small/1536), agent/embed-large (→3072), or agent/embed (→small). The underlying OpenAI key lives in the brand vault and an admin owns it. Unlike images/TTS/STT (raw model names only), embeddings carry SpiderGate aliases. input is a single string or a batch; dimensions overrides the alias default. Spend is metered automatically (gate_request_logs request_kind='embedding', spiderGateLlm meter) and per-key-capped like chat. There is NO fallback chain — if the brand has no embeddings-capable key (vault supports_embeddings flag), the call returns 503 no_embeddings_key (fail-loud). HTTP-only today: no gate_embed MCP/CLI tool yet (gap 4).",
+  "created_at": "2026-06-19",
+  "updated_at": "2026-06-19",
+  "tags": ["embeddings", "aliases", "auth", "metering"],
+  "references": [
+    "app/api/v1/gate/embeddings.py — _resolve_embedding_alias (gate_embedding_aliases, mig 335) + _pick_embeddings_key (require_embeddings=TRUE) + metadata→SpiderGateCallback metering (EMB.1)",
+    "docs/services/SpiderGate/CLAUDE.md — 'Embeddings (/v1/embeddings) — alias-aware, metered, capability-gated (EMB.1)'",
+    "references/embeddings.md — the OpenAI-compatible consumption recipe (WRONG/RIGHT)",
+    "EMB.1 (#1803) deployed master 539e6372; board 424629e2 Wave E"
+  ]
+}

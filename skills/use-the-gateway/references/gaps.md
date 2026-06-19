@@ -58,15 +58,23 @@ PAT's `client_id`, so an agent can read *its own* spend without an out-of-band l
 ## Gap 4 — no MCP/CLI for the multi-modal endpoints (LOW — known/deferred)
 
 `/api/gate/v1/images/generations`, `/audio/speech`, `/audio/transcriptions`, and
-`/embeddings` are live (Phase 11) but have **no** MCP tool or CLI command.
+`/embeddings` are live but have **no** MCP tool or CLI command.
 
 **Proof** — no `gate_image*`/`gate_audio*`/`gate_embed*` tools in `gate.ts`; SpiderGate
 CLAUDE.md explicitly lists "S7 MCP tools + CLI commands" as a pending deferral.
 
-**Workaround:** raw HTTP with the real OpenAI model name (`dall-e-3`, `tts-1`, `whisper-1`,
-`text-embedding-3-large`) — these forward verbatim (no aliases for multi-modal).
+**Workaround:** raw HTTP / the OpenAI SDK pointed at `https://spideriq.ai/api/gate/v1`.
+- **Embeddings (EMB.1)** are now **alias-aware + metered** — send `agent/embed-small|large|embed`
+  (or a raw OpenAI name); the consumption recipe is [embeddings.md](embeddings.md). Still
+  HTTP-only — the `gate_embed` tool is the open part of this gap.
+- **Images / TTS / STT** take only raw OpenAI model names (`dall-e-3`, `tts-1`, `whisper-1`) —
+  no aliases — and forward verbatim.
+
 **Wanted:** `gate_image_generate`, `gate_audio_speech`, `gate_audio_transcribe`,
-`gate_embed` (tracked as SpiderGate Phase 11 S7).
+`gate_embed` (tracked as SpiderGate Phase 11 S7 / EMB.3 stretch). Adding `gate_embed` to the
+`mcp-gate` slice must bump every npm package whose `dist/` changes (core + mcp-gate +
+kitchen-sink mcp — heads are immutable) AND add the tool name to mcp `verify-tool-set.mjs`,
+in one PR.
 
 ---
 
