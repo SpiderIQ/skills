@@ -137,6 +137,7 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | understand the surfaces / auth / `?format=yaml` before the first call | [references/surfaces-and-auth.md](references/surfaces-and-auth.md) |
 | run one city / one search (lead list or local SEO) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
 | run a search across many locations (country / region / population band) | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
+| run a US campaign deep by ZIP code (one state at a time — "state = country") | [flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md](flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | read the businesses, emails, phones, and pins a run produced | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |

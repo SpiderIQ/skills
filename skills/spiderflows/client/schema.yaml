@@ -97,12 +97,13 @@ methods:
       use: "multi-location coverage — check total_locations in the response"
       next: "getCampaignStatus (poll >=5s), retryFailedLocations, getCampaignResults"
       warn: "filter.mode defaults to 'all' (every location). Narrow with regions/population/custom or stop immediately."
+      scope: "US ZIP campaign: scope to ONE state — filter={mode:regions, admin_regions:[state], include_postcodes:true}. All-US ZIP runs 422 (>10K cap). Discover state names with listRegions(country_code=US)."
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderMaps/campaigns/submit
     params:
       search_query: { type: string, required: true, description: 'BARE term (e.g. "plumbers") — location comes from country_code + filter' }
       country_code: { type: string, required: true, description: 'ISO 2-letter code' }
-      filter:       { type: object, required: false, description: 'Location selection: { mode: all|population|cities_only|custom|regions, min_population?, admin_regions?, location_ids? }. Default mode=all.' }
+      filter:       { type: object, required: false, description: 'Location selection: { mode: all|population|cities_only|regions|city|custom, admin_regions?: string[], parent_city?, include_postcodes?: bool, min_population?, max_population?, location_ids? }. Default mode=all. US ZIPs: mode=regions + ONE state in admin_regions + include_postcodes=true (every ZIP its own Maps search).' }
       max_results:  { type: integer, required: false, description: 'Businesses PER LOCATION, 1-500 (default 100)' }
       name:         { type: string, required: false, description: 'Campaign label (auto if omitted)' }
       workflow:     { type: object, required: false, description: 'Per-stage config; vayapin follows what you send here' }
@@ -116,6 +117,37 @@ methods:
     params:
       status:       { type: string, required: false, description: 'active | completed | stopped' }
       country_code: { type: string, required: false, description: 'ISO 2-letter filter' }
+    response: { format: json }
+
+  # ── Location discovery — scope a campaign before creating it ("state = country") ──
+  listCountries:
+    description: List targetable countries with location counts. For US ZIPs, pick a STATE instead (listRegions).
+    guidance: { use: "discover targetable countries", next: "listRegions(country_code=US) for US ZIP scoping", telemetry_signal_default: "cold" }
+    http: GET /locations/countries
+    response: { format: json }
+
+  listRegions:
+    description: >
+      List a country's admin regions (US states) with city_count + postcode_count.
+      How you discover the ONE state to scope a US ZIP campaign to.
+    guidance:
+      use: "find the ONE US state for a ZIP campaign"
+      next: "createCampaign(filter={mode:regions, admin_regions:[state], include_postcodes:true})"
+      warn: "a state's postcode_count ≈ how many Maps searches the ZIP run fans out into — size it first"
+      telemetry_signal_default: "cold"
+    http: GET /locations/regions
+    params:
+      country_code: { type: string, required: true, description: '2-letter ISO code (e.g. "US")' }
+    response: { format: json }
+
+  listSelectableUnits:
+    description: >
+      Flat typeahead list of selectable geo units — countries plus, by default, the
+      50 US states as country-equivalent units (target "Florida" like "Germany").
+    guidance: { use: "country/state typeahead — 'all of US' is not selectable for a ZIP campaign", telemetry_signal_default: "cold" }
+    http: GET /locations/selectable-units
+    params:
+      states_as_units: { type: boolean, required: false, description: 'When true (default), replace the US with its 50 states as top-level units.' }
     response: { format: json }
 
   getCampaignStatus:
