@@ -1,0 +1,226 @@
+# lead-enrichment Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate lead-enrichment
+
+name: lead-enrichment
+version: "1.0.0"
+description: >
+  Enrichment workflow patterns for Company boards — create enrichment
+  boards, bulk import leads, move cards through stages, link contacts,
+  and export enriched data.
+category: board
+base_url: /api/v1/board
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - enrichment
+  - leads
+  - board
+  - pipeline
+  - import
+
+methods:
+  # ── Board Creation ────────────────────────────────────────
+  createBoard:
+    description: >
+      Create an enrichment board with the Company board type and
+      enrichment column preset. Columns: Pending, Researching,
+      Confirmed, Enriching, Complete, Ambiguous, Not Found.
+    http: POST /boards
+    params:
+      name:
+        type: string
+        required: true
+        description: Board name (e.g., "UK Restaurant Leads - March 2026")
+      board_type:
+        type: enum
+        values: [companies, contacts]
+        required: true
+        description: Board type — use "companies" for enrichment
+      column_preset:
+        type: enum
+        values: [enrichment, default]
+        required: false
+        default: enrichment
+        description: Column preset — use "enrichment" for lead research
+    response:
+      format: json
+
+  # ── Bulk Import ───────────────────────────────────────────
+  bulkImportTasks:
+    description: >
+      Bulk import leads as task cards. Up to 100 tasks per batch.
+      Each task has a title, column_name, description, and custom_fields.
+    http: POST /boards/{board_id}/tasks/bulk
+    params:
+      board_id:
+        type: uuid
+        required: true
+        description: The board to import into
+      tasks:
+        type: array
+        required: true
+        description: >
+          Array of task objects. Each has: title (string, required),
+          column_name (string, default "Pending"), description (string),
+          custom_fields (object with location, industry, etc.)
+    response:
+      format: json
+
+  # ── Task Movement ─────────────────────────────────────────
+  moveTask:
+    description: >
+      Move a lead card to a different column. Column movement
+      represents status transitions in the enrichment pipeline.
+    http: POST /tasks/{task_id}/move
+    params:
+      task_id:
+        type: uuid
+        required: true
+        description: The task/lead to move
+      column_id:
+        type: uuid
+        required: true
+        description: Target column ID
+    response:
+      format: json
+
+  # ── Task CRUD ─────────────────────────────────────────────
+  createTask:
+    description: >
+      Create a single contact card on a board. Used for discovered
+      employees during enrichment.
+    http: POST /boards/{board_id}/tasks
+    params:
+      board_id:
+        type: uuid
+        required: true
+        description: The board to create the task on
+      title:
+        type: string
+        required: true
+        description: Task title (e.g., "Jane Smith - Managing Director")
+      custom_fields:
+        type: object
+        required: false
+        description: >
+          Custom field values: email, email_status, phone, job_title,
+          company, linkedin_url, location, website, industry, etc.
+      description:
+        type: string
+        required: false
+        description: Markdown description
+      column_name:
+        type: string
+        required: false
+        description: Column name to place the task in
+    response:
+      format: json
+
+  updateTask:
+    description: >
+      Update a task with enrichment data. Use custom_fields for
+      structured enrichment data and agent_result for final decisions.
+    http: PATCH /tasks/{task_id}
+    params:
+      task_id:
+        type: uuid
+        required: true
+        description: The task to update
+      custom_fields:
+        type: object
+        required: false
+        description: >
+          Enrichment field values: confidence, match_reasoning,
+          lead_score, data_completeness, place_id, linkedin_url,
+          emails_verified, employees_found, etc.
+      agent_result:
+        type: string
+        required: false
+        description: JSON string of the agent's enrichment decision
+      agent_context:
+        type: object
+        required: false
+        description: Structured search evidence and input data
+    response:
+      format: json
+
+  # ── Relationships ─────────────────────────────────────────
+  linkTasks:
+    description: >
+      Create a relationship between a contact card and a company card.
+      Used to link discovered employees to their company.
+    http: POST /tasks/{task_id}/relationships
+    params:
+      task_id:
+        type: uuid
+        required: true
+        description: Source task (e.g., contact card)
+      target_task_id:
+        type: uuid
+        required: true
+        description: Target task (e.g., company card)
+      relationship_type:
+        type: enum
+        values: [belongs_to, related_to, blocks, parent_of]
+        required: true
+        description: Relationship type (use "belongs_to" for contact-to-company)
+    response:
+      format: json
+
+  # ── Columns ───────────────────────────────────────────────
+  listColumns:
+    description: >
+      List all columns on a board to get column IDs for task movement.
+    http: GET /boards/{board_id}/columns
+    params:
+      board_id:
+        type: uuid
+        required: true
+        description: The board to list columns for
+    response:
+      format: yaml
+
+  # ── Export ────────────────────────────────────────────────
+  exportBoard:
+    description: >
+      Export enriched leads as CSV. Returns all tasks with custom fields.
+    http: GET /boards/{board_id}/export
+    params:
+      board_id:
+        type: uuid
+        required: true
+        description: The board to export
+      format:
+        type: enum
+        values: [csv, json]
+        required: false
+        default: csv
+        description: Export format
+    response:
+      format: text
+
+  # ── Comments ──────────────────────────────────────────────
+  addComment:
+    description: >
+      Post a progress comment on a task. Used for structured
+      heartbeat reporting during enrichment campaigns.
+    http: POST /tasks/{task_id}/comments
+    params:
+      task_id:
+        type: uuid
+        required: true
+        description: The task to comment on
+      content:
+        type: string
+        required: true
+        description: Markdown content of the progress report
+    response:
+      format: json

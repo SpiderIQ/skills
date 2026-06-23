@@ -1,0 +1,98 @@
+# Verify Email Deliverability Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate verify-email-deliverability
+
+name: verify-email-deliverability
+version: "1.0.0"
+description: >
+  Verify email addresses for deliverability using SMTP validation.
+  Checks MX records, mailbox existence, and catch-all detection.
+  Supports batch verification of multiple emails.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - verify
+  - email
+  - deliverability
+  - smtp
+  - validation
+
+methods:
+  # -- Submit Job ------------------------------------------------
+  submitJob:
+    description: >
+      Submit an email verification job. Validates one or more
+      email addresses for deliverability by checking DNS MX
+      records, SMTP mailbox existence, and catch-all status.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderVerify
+        description: Job type — must be "spiderVerify"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          emails:
+            type: array
+            items: string
+            required: true
+            description: List of email addresses to verify
+    response:
+      format: json
+
+  # -- Job Status ------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted job. Returns
+      status (queued, running, completed, failed), progress
+      percentage, and any error messages.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submit
+    response:
+      format: yaml
+
+  # -- Job Results -----------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the verification results. Returns per-email
+      status (valid, invalid, risky, unknown), reason codes,
+      MX records, and catch-all detection flags.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: yaml
+
+  # -- Cancel Job ------------------------------------------------
+  cancelJob:
+    description: >
+      Cancel a running or queued job. Returns confirmation of
+      cancellation. Cannot cancel already completed jobs.
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel
+    response:
+      format: json

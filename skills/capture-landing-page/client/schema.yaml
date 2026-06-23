@@ -1,0 +1,81 @@
+# Capture Landing Page Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate capture-landing-page
+
+name: capture-landing-page
+version: "1.0.0"
+description: >
+  Website capture — take screenshots and capture landing page
+  content for analysis, archival, or design reference.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - landing page
+  - screenshot
+  - capture
+  - website capture
+
+methods:
+  # ── Submit Capture ────────────────────────────────────────
+  submitCapture:
+    description: >
+      Submit a landing page capture job. Captures a screenshot
+      and extracts page content from the given URL.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderLanding
+        description: Job type — must be "spiderLanding"
+      payload:
+        type: object
+        required: true
+        description: Capture payload object
+        properties:
+          url:
+            type: string
+            required: true
+            description: The URL of the landing page to capture
+          options:
+            type: object
+            required: false
+            description: Optional capture settings (viewport, full_page, wait_for, etc.)
+    response:
+      format: json
+
+  # ── Job Status ────────────────────────────────────────────
+  getJobStatus:
+    description: >
+      Check the status of a submitted capture job.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to check status for
+    response:
+      format: json
+
+  # ── Job Results ───────────────────────────────────────────
+  getJobResults:
+    description: >
+      Retrieve the results of a completed capture job,
+      including screenshot URLs and extracted content.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: json

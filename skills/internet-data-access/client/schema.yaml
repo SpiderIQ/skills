@@ -1,0 +1,348 @@
+# Internet Data Access — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate internet-data-access
+
+name: internet-data-access
+version: "1.0.0"
+description: >
+  Unified read/flag access to all per-client normalized data.
+  Fetch, list, search, batch, flag, and get stats for businesses,
+  domains, contacts, emails, phones, company registry, and LinkedIn profiles.
+  Like IMAP for business data — standardized, cacheable, syncable.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - fetch data
+  - list resources
+  - search data
+  - flag resource
+  - batch fetch
+  - sync data
+  - idap
+
+guidance:
+  use: "read, search, flag, and sync normalized client data across all resource types — businesses, domains, contacts, emails, phones"
+  not:
+    - "scrape-google-maps → discover NEW businesses (IDAP reads already-collected data)"
+    - "scrape-website-extract-leads → crawl websites (IDAP reads crawl results)"
+    - "lead-enrichment → manage board cards and enrichment workflow stages"
+  chains:
+    - "fetchResource → writeFlags (qualify/reject a resource)"
+    - "listResources (with since) → batch fetch for sync"
+    - "searchResources → writeFlags (qualify matches)"
+    - "getStats → listResources (drill into specific types)"
+  pitfalls:
+    - "IDAP reads EXISTING data — it does NOT trigger new scraping or crawling"
+    - "Resource IDs are UUIDs from norm_cli_* tables, NOT job IDs"
+    - "rejected flag auto-excludes from list/search — use flags=-rejected to include"
+    - "Batch max is 100 refs per request"
+
+methods:
+  fetchResource:
+    description: >
+      Fetch a single resource by type and ID. Returns data, active flags,
+      and optional related resources via include parameter.
+    guidance:
+      use: "get full details for a specific resource — use fields for projection, include for related data"
+    http: GET /idap/{resource_type}/{resource_id}
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: "Resource type: businesses, domains, contacts, emails, phones, company_registry, linkedin_profiles"
+      resource_id:
+        type: string
+        required: true
+        description: UUID of the resource
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field names to return (projection)
+      include:
+        type: string
+        required: false
+        description: "Comma-separated related types to include (e.g. emails,phones for businesses)"
+    response:
+      format: json
+
+  listResources:
+    description: >
+      List resources with filtering, cursor-based pagination, and incremental sync.
+      Use since parameter for efficient polling (only new/modified data).
+    guidance:
+      use: "browse or sync resources — use since for incremental updates, flags for filtering"
+    http: GET /idap/{resource_type}
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: "Resource type: businesses, domains, contacts, emails, phones, company_registry, linkedin_profiles"
+      since:
+        type: string
+        required: false
+        description: ISO 8601 datetime — only resources modified after this time
+      until:
+        type: string
+        required: false
+        description: ISO 8601 datetime — only resources modified before this time
+      limit:
+        type: integer
+        required: false
+        description: Max results per page (1-500, default 100)
+      cursor:
+        type: string
+        required: false
+        description: Pagination cursor from previous response
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field names to return
+      include:
+        type: string
+        required: false
+        description: Comma-separated related types to include
+      flags:
+        type: string
+        required: false
+        description: 'Filter by flags (e.g. "qualified" or "-rejected")'
+      sort:
+        type: string
+        required: false
+        description: Sort column (e.g. created_at, name)
+      order:
+        type: string
+        required: false
+        description: Sort order (asc or desc, default desc)
+      campaign_id:
+        type: string
+        required: false
+        description: Filter by campaign ID
+      source:
+        type: string
+        required: false
+        description: Filter by source worker
+    response:
+      format: json
+
+  searchResources:
+    description: >
+      Full-text search within a resource type using PostgreSQL tsvector.
+      Results are ranked by relevance.
+    guidance:
+      use: "find specific resources by keyword — faster than listing + filtering"
+    http: GET /idap/{resource_type}/search
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: Resource type to search
+      q:
+        type: string
+        required: true
+        description: Search query string
+      limit:
+        type: integer
+        required: false
+        description: Max results (1-500, default 20)
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field names to return
+      flags:
+        type: string
+        required: false
+        description: Filter by flags
+    response:
+      format: json
+
+  getStats:
+    description: >
+      Get aggregate statistics for a resource type — total count,
+      flag distribution, source breakdown, and last-24h activity.
+    guidance:
+      use: "overview of data coverage and health — start here before drilling into details"
+    http: GET /idap/{resource_type}/stats
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: Resource type to get stats for
+    response:
+      format: json
+
+  writeFlags:
+    description: >
+      Add or remove flags on a resource. Flags are idempotent and
+      soft-deleted (history preserved). Behavioral flags: rejected
+      excludes from lists, do_not_contact blocks outreach.
+    guidance:
+      use: "tag resources for qualification, rejection, or workflow control"
+    http: POST /idap/{resource_type}/{resource_id}/flags
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: Resource type
+      resource_id:
+        type: string
+        required: true
+        description: UUID of the resource to flag
+      add:
+        type: array
+        required: false
+        description: Flags to add (e.g. qualified, priority, reviewed)
+      remove:
+        type: array
+        required: false
+        description: Flags to remove
+      flagged_by:
+        type: string
+        required: false
+        description: Who is flagging (e.g. "agent:name", "user:name")
+      reason:
+        type: string
+        required: false
+        description: Reason for flagging
+    response:
+      format: json
+
+  batchFetch:
+    description: >
+      Batch fetch up to 100 resources by idap:// ref strings.
+      Returns results keyed by ref, plus errors for missing/invalid.
+    guidance:
+      use: "efficient multi-resource fetch — one call instead of N individual fetches"
+    http: POST /idap/batch
+    params:
+      refs:
+        type: array
+        required: true
+        description: 'Array of idap:// ref strings (e.g. ["idap://businesses/uuid1", "idap://emails/uuid2"])'
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field names to return
+      include:
+        type: string
+        required: false
+        description: Comma-separated related types to include
+    response:
+      format: json
+
+  resolveByExternalId:
+    description: >
+      Look up a resource by external identifier — place_id, domain, email, url,
+      vat, registration_number, lei, tax_id, linkedin, twitter, or source_id.
+      Exactly one identifier must be supplied per call. Returns the canonical
+      resource if it exists in the caller's normalized data (404 otherwise).
+    guidance:
+      use: "find a canonical resource when you only have an external ID (e.g. a VAT, a LinkedIn URL, or a Google Maps place_id) — pairs well with fetchResource for full details once resolved"
+    http: GET /idap/{resource_type}/resolve
+    params:
+      resource_type:
+        type: string
+        required: true
+        description: "Resource type: businesses, domains, contacts, emails, phones, company_registry, linkedin_profiles"
+      place_id:
+        type: string
+        required: false
+        description: Google Maps place_id (for businesses)
+      domain:
+        type: string
+        required: false
+        description: Bare domain (for domains / businesses)
+      email:
+        type: string
+        required: false
+        description: Email address (for emails / contacts)
+      url:
+        type: string
+        required: false
+        description: Canonical URL (for linkedin_profiles)
+      vat:
+        type: string
+        required: false
+        description: VAT number (for company_registry)
+      registration_number:
+        type: string
+        required: false
+        description: Company registration number (for company_registry)
+      lei:
+        type: string
+        required: false
+        description: Legal Entity Identifier (for company_registry)
+      tax_id:
+        type: string
+        required: false
+        description: Tax identifier (for company_registry)
+      linkedin:
+        type: string
+        required: false
+        description: LinkedIn profile URL (for contacts)
+      twitter:
+        type: string
+        required: false
+        description: Twitter / X profile URL (for contacts)
+      source_id:
+        type: string
+        required: false
+        description: Upstream worker source ID (for company_registry / linkedin_profiles)
+      fields:
+        type: string
+        required: false
+        description: Comma-separated field names to return (projection)
+      include:
+        type: string
+        required: false
+        description: Comma-separated related types to include
+    response:
+      format: json
+
+  deleteBusiness:
+    description: >
+      🔴 DESTRUCTIVE — hard-delete a business + cascade across per-tenant
+      tables (pins, business_contacts, business_registry, company_registry,
+      contacts, phones, domains, linkedin_profiles). Transactional + audit
+      row written to public.idap_deletions_audit. UUID-only target —
+      resolve alternate keys via resolveByExternalId first.
+
+      Does NOT touch cs.vayapin.com (VayaPin pin pages are permanent per
+      §10 — response includes vayapin_pins_remain_external and
+      vayapin_pin_data_set_ids_orphaned).
+
+      Does NOT cascade the 'emails' canonical store (multiple businesses
+      share email rows via business_contacts M:N; only the link is removed).
+
+      booking_flows + services auto-cascade via Postgres FK; counts in
+      response.auto_cascaded. bookings BLOCK the delete via ON DELETE NO
+      ACTION FK — returns 409 with blocking_booking_ids.
+
+      Tenant-owner auth only. Idempotent: second call returns 404.
+    guidance:
+      use: "delete a business + all linked rows in your tenant after confirming it's truly a duplicate or no-longer-needed record"
+      pitfalls:
+        - "IRREVERSIBLE — there is no undo (audit log preserves IDs but not data)"
+        - "VayaPin pin pages on cs.vayapin.com REMAIN — handle external cleanup separately if needed"
+        - "emails verification metadata is preserved (canonical store, shared across businesses)"
+        - "409 booking_conflict — re-point or delete bookings before retry"
+    http: DELETE /idap/businesses/{business_id}
+    params:
+      business_id:
+        type: string
+        required: true
+        description: UUID of the business to delete (resolve alternate keys via resolveByExternalId first)
+      reason:
+        type: string
+        required: false
+        description: Free-text reason recorded in the audit log (max 500 chars). e.g. "duplicate of <uuid>"
+    response:
+      format: json

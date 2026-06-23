@@ -1,0 +1,225 @@
+# Run Enrichment Pipeline Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate run-enrichment-pipeline
+
+name: run-enrichment-pipeline
+version: "1.1.0"
+description: >
+  Enrichment pipeline management — create and manage lead
+  enrichment campaigns, retrieve results, control execution,
+  and deduplicate records.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: true
+triggers:
+  - enrichment
+  - pipeline
+  - campaign
+  - windmill
+
+guidance:
+  use: "orchestrate multi-step enrichment campaigns — Maps search, website scrape, email verify in automated sequence"
+  not:
+    - "scrape-google-maps → single one-off Maps search"
+    - "lead-enrichment → manual lead board management"
+    - "campaigns → outreach campaigns (email sequences, not data enrichment)"
+  chains:
+    - "estimateCampaign (preflight) → createCampaign → getCampaignStatus (poll 10s) → getCampaignResults"
+    - "getCampaignResults → deduplicate (remove duplicates before import)"
+  limits:
+    concurrent: "plan-tiered active campaigns — Free 1 / Starter 1 / Growth 3 / Pro unlimited"
+    speed: "parallel locations per campaign — Free 1 (sequential) / Starter 5 / Growth 15 / Pro 50"
+    batch: "start with 50-100 leads to validate pipeline"
+  pitfalls:
+    - "estimateCampaign BEFORE createCampaign — exact location + per-stage job counts, writes no rows, not billed"
+    - "At the concurrent cap createCampaign returns 429 MAX_CAMPAIGNS_PER_CLIENT (envelope CTA → /dashboard/plans) — finish/stop a running campaign or upgrade; no queue, no Retry-After"
+    - "Higher tiers run more locations in parallel (speed), not more results — Free is sequential"
+    - "Start small (50-100 leads) to validate before scaling to thousands"
+    - "Always deduplicate results before importing to board"
+    - "Campaigns can run for hours — set expectations with user"
+  case_study:
+    location: "Berlin SaaS companies"
+    steps: "Campaign(SaaS Berlin)→200 Maps results→Site(140)→89 emails→Verify→67 valid→Dedup→61 unique"
+    time: "45min"
+  case_date: "2026-03"
+
+methods:
+  # ── Estimate Campaign (pre-flight) ────────────────────────
+  estimateCampaign:
+    description: >
+      Pre-flight estimate for a campaign — returns the exact
+      location count and per-stage billable-job counts WITHOUT
+      writing any rows. Pure read: not billed, not a dispatcher
+      submission. Use it to make a Proceed/Upgrade decision
+      before createCampaign.
+    guidance:
+      use: "size a campaign before submitting — exact counts, no rows written"
+      next: "createCampaign (if requires_upgrade is false / volume acceptable)"
+      warn: "cost is per-stage job COUNTS, not USD (no local per-job price). requires_upgrade=true → narrow the filter or upgrade the plan"
+    http: POST /jobs/spiderMaps/campaigns/estimate
+    params:
+      country_code:
+        type: string
+        required: true
+        description: ISO 2-letter country code (e.g. "US", "DE")
+      filter:
+        type: object
+        required: false
+        description: Location filter (mode all/regions/population/city/custom + admin_regions/include_postcodes/min_population/etc.) — the cost lever
+      max_results:
+        type: integer
+        required: false
+        description: Businesses per location (1-500, default 100) — multiplies the location count
+      workflow:
+        type: object
+        required: false
+        description: Which downstream stages to estimate (spidersite/spiderverify/vayapin enabled flags)
+    response:
+      format: json
+
+  # ── Create Campaign ───────────────────────────────────────
+  createCampaign:
+    description: >
+      Create a new enrichment campaign. Defines the search
+      query, target country, and optional workflow configuration.
+    guidance:
+      next: "getCampaignStatus (poll every 10s)"
+      warn: "start with max_results 50-100 for first run. At the plan's concurrent-campaign cap this returns 429 MAX_CAMPAIGNS_PER_CLIENT with an envelope CTA (suggested_url=/dashboard/plans) — finish/stop a running campaign or upgrade; no queue, no Retry-After"
+    http: POST /campaigns
+    params:
+      search_query:
+        type: string
+        required: true
+        description: Search query to find leads for enrichment
+      country_code:
+        type: string
+        required: false
+        description: ISO country code to filter results (e.g. "US", "GB")
+      workflow:
+        type: object
+        required: false
+        description: Optional workflow configuration for custom enrichment steps
+    response:
+      format: json
+    errors:
+      "429":
+        code: MAX_CAMPAIGNS_PER_CLIENT
+        meaning: >
+          At the plan's concurrent-campaign cap. Envelope carries
+          message + suggested_action + suggested_url=/dashboard/plans.
+          Finish-or-upgrade — no queue, no Retry-After. Also fires a
+          campaign.cannot_start notification.
+
+  # ── List Campaigns ────────────────────────────────────────
+  listCampaigns:
+    description: >
+      List all enrichment campaigns, optionally filtered by
+      status with pagination.
+    http: GET /campaigns
+    params:
+      status:
+        type: string
+        required: false
+        description: Filter by campaign status (e.g. "running", "completed", "stopped")
+      page:
+        type: integer
+        required: false
+        description: Page number for pagination
+      pageSize:
+        type: integer
+        required: false
+        description: Number of campaigns per page
+    response:
+      format: json
+
+  # ── Campaign Status ───────────────────────────────────────
+  getCampaignStatus:
+    description: >
+      Get the current status and progress of a specific
+      enrichment campaign.
+    http: GET /campaigns/{campaign_id}
+    params:
+      campaign_id:
+        type: string
+        required: true
+        description: The campaign ID to check status for
+    response:
+      format: json
+
+  # ── Campaign Results ──────────────────────────────────────
+  getCampaignResults:
+    description: >
+      Retrieve the enriched results from a completed or
+      running campaign.
+    http: GET /campaigns/{campaign_id}/results
+    params:
+      campaign_id:
+        type: string
+        required: true
+        description: The campaign ID to get results for
+    response:
+      format: json
+
+  # ── Stop Campaign ─────────────────────────────────────────
+  stopCampaign:
+    description: >
+      Stop a running enrichment campaign. Already-processed
+      results are preserved.
+    guidance:
+      warn: "stopped campaigns can be resumed with continueCampaign"
+    http: POST /campaigns/{campaign_id}/stop
+    params:
+      campaign_id:
+        type: string
+        required: true
+        description: The campaign ID to stop
+    response:
+      format: json
+
+  # ── Continue Campaign ─────────────────────────────────────
+  continueCampaign:
+    description: >
+      Resume a previously stopped enrichment campaign from
+      where it left off.
+    guidance:
+      use: "resume a stopped/paused campaign"
+      next: "getCampaignStatus (poll every 10s)"
+    http: POST /campaigns/{campaign_id}/continue
+    params:
+      campaign_id:
+        type: string
+        required: true
+        description: The campaign ID to continue
+    response:
+      format: json
+
+  # ── Deduplicate ───────────────────────────────────────────
+  deduplicate:
+    description: >
+      Fuzzy-match deduplicate a set of records based on
+      specified fields. Returns unique records with
+      similarity scores.
+    guidance:
+      use: "remove duplicate leads from campaign results before board import"
+    http: POST /fuzziq/deduplicate
+    params:
+      records:
+        type: array
+        items: object
+        required: true
+        description: Array of record objects to deduplicate
+      match_fields:
+        type: array
+        items: string
+        required: true
+        description: Field names to use for fuzzy matching
+    response:
+      format: json

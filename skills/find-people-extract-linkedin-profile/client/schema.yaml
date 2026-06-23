@@ -1,0 +1,120 @@
+# Find People Extract LinkedIn Profile Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate find-people-extract-linkedin-profile
+
+name: find-people-extract-linkedin-profile
+version: "1.0.0"
+description: >
+  Find people by name/role/company and extract public LinkedIn
+  profile data. Supports general people search and direct
+  LinkedIn URL extraction.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - people
+  - linkedin
+  - profile
+  - person
+  - find
+
+methods:
+  # -- Submit Jobs -----------------------------------------------
+  submitSearchJob:
+    description: >
+      Submit a people search job. Finds people matching the
+      query by name, role, company, or combination. Returns
+      names, titles, companies, and LinkedIn profile URLs.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderPeople
+        description: Job type — must be "spiderPeople"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          search_query:
+            type: string
+            required: true
+            description: People search query (e.g. "CTO at fintech startups in London")
+    response:
+      format: json
+
+  submitLinkedinJob:
+    description: >
+      Submit a LinkedIn profile extraction job. Takes a public
+      LinkedIn profile URL and extracts structured data including
+      name, headline, experience, education, skills, and more.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderPublicLinkedin
+        description: Job type — must be "spiderPublicLinkedin"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          linkedin_url:
+            type: string
+            required: true
+            description: Public LinkedIn profile URL (e.g. "https://linkedin.com/in/username")
+    response:
+      format: json
+
+  # -- Job Status ------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted job. Returns
+      status (queued, running, completed, failed), progress
+      percentage, and any error messages.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submit
+    response:
+      format: yaml
+
+  # -- Job Results -----------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the results of a completed job. Returns the full
+      result payload with all extracted profile data.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: yaml
+
+  # -- Cancel Job ------------------------------------------------
+  cancelJob:
+    description: >
+      Cancel a running or queued job. Returns confirmation of
+      cancellation. Cannot cancel already completed jobs.
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel
+    response:
+      format: json

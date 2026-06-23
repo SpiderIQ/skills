@@ -1,0 +1,1 @@
+Multi-location campaign orchestration — Maps → Site → Verify → callback

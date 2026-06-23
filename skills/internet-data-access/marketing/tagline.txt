@@ -1,0 +1,1 @@
+IDAP — unified read & flag access to normalized client data

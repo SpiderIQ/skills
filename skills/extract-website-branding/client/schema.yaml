@@ -1,0 +1,49 @@
+# Extract Website Branding Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate extract-website-branding
+
+name: extract-website-branding
+version: "1.0.0"
+description: >
+  Brand extraction — scrape a website and extract branding
+  elements including colors, typography, logos, and design
+  patterns using Firecrawl.
+category: design
+base_url: https://api.firecrawl.dev/v2
+auth:
+  type: bearer
+  header: Authorization
+  prefix: Bearer
+  env_var: FIRECRAWL_API_KEY
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: false
+triggers:
+  - branding
+  - design
+  - colors
+  - typography
+  - extract
+
+methods:
+  # ── Extract Branding ──────────────────────────────────────
+  extractBranding:
+    description: >
+      Scrape a website URL and extract branding elements
+      including color palette, typography, logos, and visual
+      design patterns.
+    http: POST /scrape
+    params:
+      url:
+        type: string
+        required: true
+        description: The website URL to extract branding from
+      formats:
+        type: array
+        items: string
+        required: false
+        default: ["branding"]
+        description: Extraction formats to return (default is branding)
+    response:
+      format: json

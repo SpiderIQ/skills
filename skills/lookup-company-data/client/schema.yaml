@@ -1,0 +1,159 @@
+# Lookup Company Data Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate lookup-company-data
+
+name: lookup-company-data
+version: "1.0.0"
+description: >
+  Look up company data from public registries and VAT databases.
+  Search by name, retrieve by identifier, or validate VAT numbers.
+  Covers Companies House (UK), handelsregister (DE), KVK (NL),
+  and other national registries.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - company
+  - registry
+  - vat
+  - business lookup
+  - companies house
+
+methods:
+  # -- Submit Jobs -----------------------------------------------
+  submitSearchJob:
+    description: >
+      Submit a company search job. Searches national business
+      registries by company name and country. Returns matching
+      companies with registration numbers, status, and addresses.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderCompanySearch
+        description: Job type — must be "spiderCompanySearch"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          name:
+            type: string
+            required: true
+            description: Company name to search for
+          country:
+            type: string
+            required: true
+            description: Two-letter country code (e.g. "GB", "DE", "NL")
+          limit:
+            type: integer
+            required: false
+            default: 10
+            description: Maximum number of results to return
+    response:
+      format: json
+
+  submitLookupJob:
+    description: >
+      Submit a company lookup job by registry identifier. Returns
+      full company details including directors, filings, financial
+      summaries, and registered address.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderCompanyLookup
+        description: Job type — must be "spiderCompanyLookup"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          identifier:
+            type: string
+            required: true
+            description: Company registry number (e.g. Companies House number, KVK number)
+          country:
+            type: string
+            required: true
+            description: Two-letter country code (e.g. "GB", "DE", "NL")
+    response:
+      format: json
+
+  submitVatJob:
+    description: >
+      Submit a VAT number validation job. Checks the VAT number
+      against the VIES database and returns company name, address,
+      and validity status.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderVatLookup
+        description: Job type — must be "spiderVatLookup"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          vat_number:
+            type: string
+            required: true
+            description: VAT number including country prefix (e.g. "GB123456789", "DE123456789")
+    response:
+      format: json
+
+  # -- Job Status ------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted job. Returns
+      status (queued, running, completed, failed), progress
+      percentage, and any error messages.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submit
+    response:
+      format: yaml
+
+  # -- Job Results -----------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the results of a completed job. Returns the full
+      result payload with company data, registry info, or VAT
+      validation results.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: yaml
+
+  # -- Cancel Job ------------------------------------------------
+  cancelJob:
+    description: >
+      Cancel a running or queued job. Returns confirmation of
+      cancellation. Cannot cancel already completed jobs.
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel
+    response:
+      format: json

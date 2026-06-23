@@ -1,0 +1,102 @@
+# Lead Search Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate lead-search
+
+name: lead-search
+version: "1.0.0"
+description: >
+  Single-location lead generation — find businesses on Google Maps,
+  crawl their websites, verify emails, and create VayaPin profiles.
+  Full pipeline in one call.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: true
+triggers:
+  - find leads
+  - lead search
+  - search businesses
+  - lead generation
+
+guidance:
+  use: "search and discover leads across enrichment boards — filter by industry, location, CHAMP score, data completeness"
+  not:
+    - "find-people-extract-linkedin-profile → specific person lookup by name"
+    - "scrape-google-maps → finding businesses by geography"
+    - "company-intel → deep company research with full pipeline"
+  chains:
+    - "searchLeads → getJobResults → lead-enrichment_moveTask (qualify matches)"
+  pitfalls:
+    - "Vague queries return too many results — always include industry + location"
+    - "CHAMP scores below 40 are low confidence — verify before outreach"
+
+methods:
+  searchLeads:
+    description: >
+      Run the full lead generation pipeline for a search query in a location.
+      Maps → Site → Verify → VayaPin. Returns job_id to poll for results.
+    guidance:
+      use: "search for leads matching criteria — returns ranked results"
+    http: POST /lead-search
+    params:
+      search_query:
+        type: string
+        required: true
+        description: What to search for (e.g. "restaurants", "plumbers", "software companies")
+      country_code:
+        type: string
+        required: false
+        description: ISO 2-letter country code (default "US")
+      location:
+        type: string
+        required: false
+        description: Location (e.g. "Berlin", "Boston, MA"). If omitted, include in search_query.
+      max_results:
+        type: integer
+        required: false
+        description: Max businesses to find (default 20, max 500)
+      lang:
+        type: string
+        required: false
+        description: Language code (default "en")
+      workflow:
+        type: object
+        required: false
+        description: >
+          Pipeline config: { spidersite: { enabled, mode }, spiderverify: { enabled },
+          vayapin: { enabled } }. Defaults to full pipeline.
+      test:
+        type: boolean
+        required: false
+        description: Route to test queue
+    response:
+      format: json
+
+  getJobStatus:
+    description: Check status of a lead search job.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID from search submission
+    response:
+      format: json
+
+  getJobResults:
+    description: Get results of a completed lead search.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID
+    response:
+      format: json

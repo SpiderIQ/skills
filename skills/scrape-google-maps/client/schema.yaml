@@ -1,0 +1,125 @@
+# Scrape Google Maps Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate scrape-google-maps
+
+name: scrape-google-maps
+version: "1.0.0"
+description: >
+  Search Google Maps for businesses and places, extract detailed
+  business data including contact info, reviews, and locations.
+  Supports single searches and place enrichment.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - maps
+  - google maps
+  - business search
+  - local search
+  - places
+
+methods:
+  # -- Submit Jobs -----------------------------------------------
+  submitJob:
+    description: >
+      Submit a Google Maps search job. Searches for businesses
+      matching the query and returns up to max_results entries
+      with name, address, phone, website, ratings, and more.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderMaps
+        description: Job type — must be "spiderMaps"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          search_query:
+            type: string
+            required: true
+            description: Search query (e.g. "dentists in Austin TX")
+          max_results:
+            type: integer
+            required: false
+            default: 20
+            description: Maximum number of results to return
+    response:
+      format: json
+
+  submitEnrichJob:
+    description: >
+      Submit a Maps enrichment job for a specific place. Takes a
+      Google Maps place_id and returns full business details
+      including hours, reviews, photos, and owner responses.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderMapsEnrich
+        description: Job type — must be "spiderMapsEnrich"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          place_id:
+            type: string
+            required: true
+            description: Google Maps place_id to enrich
+    response:
+      format: json
+
+  # -- Job Status ------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted job. Returns
+      status (queued, running, completed, failed), progress
+      percentage, and any error messages.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submit
+    response:
+      format: yaml
+
+  # -- Job Results -----------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the results of a completed job. Returns the full
+      result payload with all extracted data.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: yaml
+
+  # -- Cancel Job ------------------------------------------------
+  cancelJob:
+    description: >
+      Cancel a running or queued job. Returns confirmation of
+      cancellation. Cannot cancel already completed jobs.
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel
+    response:
+      format: json

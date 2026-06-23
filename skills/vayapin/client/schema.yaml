@@ -1,0 +1,139 @@
+# VayaPin Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate vayapin
+
+name: vayapin
+version: "1.0.0"
+description: >
+  Create enriched business profiles from crawled data — combines
+  maps data, website content, contact info, and social profiles
+  into a structured VayaPin business card.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - create business profile
+  - vayapin
+  - business card
+  - enrich business
+
+guidance:
+  use: "Vayapin CRM integration — manage contacts, deals, pipeline stages"
+  not:
+    - "lead-enrichment → enrichment board workflows"
+    - "agentboard → general task management"
+    - "send-receive-email → email communication"
+
+methods:
+  submitVayapin:
+    description: >
+      Create a VayaPin business profile from enriched data.
+      Requires business name, country code, and coordinates.
+      Optionally include crawled markdown, contact info, and social links.
+    http: POST /vayapin/submit
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderVayapin
+        description: Job type — must be "spiderVayapin"
+      payload:
+        type: object
+        required: true
+        description: VayaPin payload
+        properties:
+          business_name:
+            type: string
+            required: true
+            description: Business name
+          country_code:
+            type: string
+            required: true
+            description: 2-letter ISO country code (e.g. "US", "DE")
+          latitude:
+            type: number
+            required: true
+            description: Business latitude coordinate
+          longitude:
+            type: number
+            required: true
+            description: Business longitude coordinate
+          markdown_url:
+            type: string
+            required: false
+            description: URL to crawled markdown content
+          markdown_compendium:
+            type: string
+            required: false
+            description: Direct markdown content
+          business_phone:
+            type: string
+            required: false
+            description: Business phone number
+          business_address:
+            type: string
+            required: false
+            description: Business street address
+          original_website:
+            type: string
+            required: false
+            description: Original website URL
+          domain:
+            type: string
+            required: false
+            description: Business domain
+          emails_verified:
+            type: array
+            required: false
+            description: Verified email addresses
+            items: object
+          facebook:
+            type: string
+            required: false
+          instagram:
+            type: string
+            required: false
+          linkedin:
+            type: string
+            required: false
+          twitter:
+            type: string
+            required: false
+          gmaps_link:
+            type: string
+            required: false
+          logo:
+            type: string
+            required: false
+    response:
+      format: json
+
+  getJobStatus:
+    description: Check status of a VayaPin job.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID
+    response:
+      format: json
+
+  getJobResults:
+    description: Get results of a completed VayaPin job.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID
+    response:
+      format: json

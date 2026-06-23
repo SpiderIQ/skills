@@ -1,0 +1,159 @@
+# Company Intel Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate company-intel
+
+name: company-intel
+version: "1.0.0"
+description: >
+  Company intelligence research — full pipeline: Perplexity discovery,
+  website crawl, company registry lookup, email verification, and
+  people/LinkedIn extraction. Single or batch (up to 50).
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: true
+triggers:
+  - company research
+  - company intel
+  - research company
+  - company data
+
+guidance:
+  use: "deep company research — full pipeline: Perplexity discovery, website crawl, registry lookup, email verify, LinkedIn extraction"
+  not:
+    - "lookup-company-data → basic company registration/VAT data only"
+    - "scrape-google-maps → local business discovery by geography"
+    - "scrape-website-extract-leads → website scraping without company context"
+  chains:
+    - "researchCompany → getJobStatus (poll 10s) → getJobResults"
+    - "researchBatch (up to 50) → getJobStatus → getJobResults"
+  limits:
+    batch: "max 50 companies per batch job"
+  pitfalls:
+    - "If you know the domain, pass it — skips Perplexity discovery step (faster)"
+    - "If you know the LinkedIn URL, pass it — skips LinkedIn search step"
+    - "Single company research is faster for urgent requests — use researchBatch for bulk"
+  case_study:
+    location: "UK fintech companies"
+    steps: "Batch(15 companies)→Discovery→Site crawl→Companies House→Verify→LinkedIn→12 complete profiles"
+    time: "12min"
+  case_date: "2026-04"
+
+methods:
+  researchCompany:
+    description: >
+      Research a single company through the full intelligence pipeline.
+      Returns job_id to poll for results via GET /jobs/{job_id}/results.
+    guidance:
+      next: "getJobStatus (poll every 10s)"
+      use: "research a single company — pass domain/linkedin_url if known to skip discovery"
+    http: POST /company-intel
+    params:
+      company_name:
+        type: string
+        required: true
+        description: Company name to research
+      city:
+        type: string
+        required: false
+        description: City/location hint (helps discovery)
+      country_code:
+        type: string
+        required: false
+        description: ISO 2-letter country code (e.g. "US", "DE")
+      domain:
+        type: string
+        required: false
+        description: Known domain — skips Perplexity discovery step
+      linkedin_url:
+        type: string
+        required: false
+        description: Known LinkedIn company URL
+      profile_mode:
+        type: string
+        required: false
+        enum: [short, full, full_email]
+        default: short
+        description: "Employee detail level: 'short' (name+title), 'full' (+skills/education/experience), 'full_email' (+email discovery)"
+      max_employees:
+        type: integer
+        required: false
+        default: 20
+        description: Max employees to extract (1-2000, default 20)
+      config:
+        type: object
+        required: false
+        description: >
+          Pipeline config — toggle steps on/off. Keys: discovery, site,
+          company_data, verify, people. Each has { enabled: bool }.
+      test:
+        type: boolean
+        required: false
+        description: Route to test queue
+    response:
+      format: json
+
+  researchBatch:
+    description: >
+      Research multiple companies in batch (max 50). Same pipeline,
+      processes all companies. Returns job_id to poll.
+    guidance:
+      next: "getJobStatus (poll every 10s)"
+      warn: "max 50 companies per batch"
+    http: POST /company-intel/batch
+    params:
+      companies:
+        type: array
+        required: true
+        description: Array of companies — each needs company_name, optional city/country_code/domain/linkedin_url
+        items: object
+      profile_mode:
+        type: string
+        required: false
+        enum: [short, full, full_email]
+        default: short
+        description: "Employee detail level for all companies: 'short', 'full', 'full_email'"
+      max_employees:
+        type: integer
+        required: false
+        default: 20
+        description: Max employees per company (1-2000, default 20)
+      config:
+        type: object
+        required: false
+        description: Shared pipeline config applied to all companies
+      test:
+        type: boolean
+        required: false
+        description: Route to test queue
+    response:
+      format: json
+
+  getJobStatus:
+    description: Check status of a company intel job.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID from research submission
+    response:
+      format: json
+
+  getJobResults:
+    description: Get results of a completed company intel job.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: Job ID
+    response:
+      format: json

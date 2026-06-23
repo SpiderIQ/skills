@@ -1,0 +1,117 @@
+# Scrape Website Extract Leads Skill — API Surface Definition
+# Source of truth for Tier 3 client generation.
+# Regenerate plugin with: opvs-skills generate scrape-website-extract-leads
+
+name: scrape-website-extract-leads
+version: "1.0.0"
+description: >
+  Crawl websites and extract lead information including email
+  addresses, phone numbers, and social media profiles. Supports
+  multi-page crawling with configurable depth.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - website
+  - scrape
+  - crawl
+  - extract
+  - leads
+  - contacts
+
+methods:
+  # -- Submit Job ------------------------------------------------
+  submitJob:
+    description: >
+      Submit a website scraping job. Crawls the target URL and
+      linked pages up to max_pages, extracting emails, phone
+      numbers, and social media links from each page.
+    http: POST /jobs
+    params:
+      type:
+        type: string
+        required: true
+        default: spiderSites
+        description: Job type — must be "spiderSites"
+      payload:
+        type: object
+        required: true
+        description: Job payload
+        properties:
+          url:
+            type: string
+            required: true
+            description: Target website URL to scrape (e.g. "https://example.com")
+          max_pages:
+            type: integer
+            required: false
+            default: 10
+            description: Maximum number of pages to crawl
+          extract_emails:
+            type: boolean
+            required: false
+            default: true
+            description: Whether to extract email addresses
+          extract_phones:
+            type: boolean
+            required: false
+            default: true
+            description: Whether to extract phone numbers
+          extract_social:
+            type: boolean
+            required: false
+            default: true
+            description: Whether to extract social media profile links
+    response:
+      format: json
+
+  # -- Job Status ------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted job. Returns
+      status (queued, running, completed, failed), progress
+      percentage, and any error messages.
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submit
+    response:
+      format: yaml
+
+  # -- Job Results -----------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the results of a completed job. Returns extracted
+      emails, phones, social links, and page metadata.
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for
+    response:
+      format: yaml
+
+  # -- Cancel Job ------------------------------------------------
+  cancelJob:
+    description: >
+      Cancel a running or queued job. Returns confirmation of
+      cancellation. Cannot cancel already completed jobs.
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel
+    response:
+      format: json

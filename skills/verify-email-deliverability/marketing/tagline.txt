@@ -1,0 +1,1 @@
+SpiderVerify — SMTP-level deliverability checks, drop bounces
