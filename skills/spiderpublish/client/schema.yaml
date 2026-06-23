@@ -90,7 +90,7 @@ guidance:
     - "AUTHORING IS NOT LIVE: creating/updating a page or post only changes STORE. Nothing appears on the public site until you DEPLOY (deploySite / deploy/production). The two are separate steps."
     - "PUBLISH != DEPLOY: publishPost/publishPage flips a row draft->published (visible to the API); deploy pushes the rendered site to the Cloudflare edge. You usually need BOTH."
     - "POST FIELD NAMES: prefer `cover_image_url` (MUST end in _url), `is_featured`, `category_ids` (a LIST of UUIDs). The API now also accepts the aliases `cover_image`/`featured`/`category_id` (folded server-side), but canonical names are clearest — any OTHER misnamed field is still silently dropped. See learnings/."
-    - "cover_image_url is HOST-ALLOWLISTED: pass a uploadMedia CDN url (e.g. media.cdn.spideriq.ai). Arbitrary hosts (files.opvs.ai) -> 422. Upload the image via uploadMedia first, then use the url it returns."
+    - "cover_image_url is HOST-ALLOWLISTED: pass a CDN url (e.g. media.cdn.spideriq.ai). Arbitrary hosts (files.opvs.ai, kie.*, any generation host) -> 422. Got only a URL (a generated image, no local file)? Call uploadMediaFromUrl(media_url=...) FIRST — it hosts it on R2 and returns an allowlisted url. Got a local file? uploadMedia (multipart). Then use the returned media.r2_url."
     - "vayapin_pins wants the public CODE (COUNTRY:CODE, e.g. DE:KAIMUL — the `vayapin` field from vayapinCards), NOT the pin UUID. A UUID is silently dropped. Resolve codes via vayapinCards (pinned or query mode) first."
     - "createPost saves a DRAFT — call publishPost after. createPost does not publish."
     - "Writes live on /dashboard/content (Bearer, drafts visible). The PUBLIC /content/* paths are READ-ONLY (POST there -> 405) and return only PUBLISHED content. Do not POST to /content/*."
@@ -347,6 +347,22 @@ methods:
       next: "deploySite to push the live site"
       warn: "publish != deploy."
     http: POST /dashboard/content/posts/{post_id}/publish
+    params:
+      post_id: { type: string, required: true }
+    response: { format: json }
+
+  previewPost:
+    description: >
+      Mint a 15-minute, tokened preview URL for a DRAFT post. Draft posts 404 at
+      /blog/<slug> on the live site, so use this to get a noindex URL a human
+      reviewer can open to see the draft rendered in the real theme. Returns
+      {preview_url, expires_at}. The draft→review→publish flow: previewPost →
+      reviewer approves → publishPost.
+    guidance:
+      use: "get a shareable review URL for an unpublished draft post"
+      next: "send preview_url to the reviewer; on approval, publishPost"
+      warn: "URL expires in 15 min and is the whole credential — re-call for a fresh one."
+    http: POST /dashboard/content/posts/{post_id}/preview
     params:
       post_id: { type: string, required: true }
     response: { format: json }
@@ -660,14 +676,35 @@ methods:
 
   uploadMedia:
     description: >
-      Upload an image/video/asset (multipart). Returns a permanent CDN URL to
-      drop into a page/post (use it as cover_image_url, logo_url, etc.).
+      Upload an image/video/asset (MULTIPART — needs a local file). Returns a
+      permanent CDN URL to drop into a page/post (use it as cover_image_url,
+      logo_url, etc.). If you only have an image URL (no local file), use
+      uploadMediaFromUrl instead.
     guidance:
-      use: "host an image/video and get a permanent CDN URL"
-      next: "use the returned url as cover_image_url / logo_url / in a block"
+      use: "host a LOCAL image/video file and get a permanent CDN URL"
+      next: "use the returned media.r2_url as cover_image_url / logo_url / in a block"
+      warn: "Multipart only — an agent on a JSON forwarder can't call this. Holding a URL, not a file? Use uploadMediaFromUrl."
     http: POST /dashboard/content/media/upload
     params:
       file: { type: file, required: true, description: 'Multipart file (image/video/asset)' }
+    response: { format: json }
+
+  uploadMediaFromUrl:
+    description: >
+      Host a REMOTE image URL on R2 — the JSON-only twin of uploadMedia. Pass an
+      image URL (e.g. a generated hero on a provider host like kie.*) and the
+      server fetches it SSRF-safely and returns a hosted media.cdn.spideriq.ai
+      URL. THIS is how an agent (no multipart, no local disk) gets a generated
+      image onto an allowlisted host so it passes cover_image_url validation.
+    guidance:
+      use: "mirror a remote image URL onto R2 and get back an allowlisted CDN URL"
+      next: "pass the returned media.r2_url to createPost as cover_image_url (or into a page image block)"
+      warn: "Images only, 5 MB cap. A raw provider URL passed straight to cover_image_url 422s — ingest it here first."
+    http: POST /dashboard/content/media/upload-from-url
+    params:
+      media_url: { type: string, required: true,  description: 'Remote image URL to fetch + host (any public host accepted)' }
+      folder:    { type: string, required: false, description: "Target media folder, e.g. 'blog' or 'hero'" }
+      alt_text:  { type: string, required: false, description: 'Alt text for accessibility' }
     response: { format: json }
 
   updateMedia:
