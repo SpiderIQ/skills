@@ -1,0 +1,16 @@
+{
+  "title": "Commerce funnels: fork a template, op:\"equal\" not \"eq\", live_mode to publish, product creation is Medusa-Admin-only",
+  "summary": "Unified Funnels + Commerce P3 shipped commerce as a kind of Flow. Four hard-won rules: (1) create a commerce funnel by funnel_template_apply (NOT raw flow_create — the graph validator enforces OTO_REQUIRES_CHECKOUT + COMMERCE_NODE_LAYER); (2) edge condition operators are long-form — op:\"eq\" is not a recognised token and silently never matches (the 8.T1 production bug that 500'd then mis-routed buyers); (3) publish with live_mode=true, not a status flip; (4) check a sent order email via notification_log channel='email' status='sent', never mail_messages. Agents author the whole funnel EXCEPT product creation, which is the Medusa Admin UI today (the [8.6c] gap).",
+  "created_at": "2026-06-24",
+  "updated_at": "2026-06-24",
+  "tags": ["commerce", "funnels", "checkout", "oto", "stripe", "hard-gate"],
+  "references": [
+    "app/services/flow_event_engine.py:62 — resolve() defensive guard (8.T1-fix)",
+    "app/services/flow_logic/comparators.py:163 — compare_leaf, canonical token 'equal' (no 'eq' alias)",
+    "app/scripts/seed_flow_templates.py — tripwire-oto / single-product-checkout / subscription-checkout seeds",
+    "app/services/commerce_order_service.py — Stripe-canonical write_order + list/get/stats",
+    "app/api/v1/commerce/orders.py — tenant-scoped read API",
+    "docs/services/catalog/PROPAGATE.md — Unified Funnels + Commerce P3",
+    "spiderflows flows/commerce-funnels/recipes/build-tripwire-oto.md"
+  ]
+}

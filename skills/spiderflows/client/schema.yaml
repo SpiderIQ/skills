@@ -67,6 +67,7 @@ guidance:
     - "Single mode: location goes in search_query OR location, never both. Campaign mode: keep search_query bare."
     - "company-intel: pass domain/linkedin_url hints when known (they skip a discovery step). Registry resolves UK/US/EU only; empty registry/LinkedIn is a normal partial brief. Batch caps at 50 companies."
     - "linkedinProfiles: set mode + its required field (profile->linkedin_url, search->search_query, company->company_url) or 422. search is a Google-SERP discovery (shallow URLs+snippets), not authenticated LinkedIn search; re-run profile on a URL for depth. company-mode profile_mode short/full/full_email drives cost steeply. Empty (private profile / no hits / no public roster) is a normal completed result."
+    - "commerce funnels: create by forking a template (applyFunnelTemplate — single-product-checkout/tripwire-oto/subscription-checkout), NEVER hand-build with raw flow_create (the graph validator enforces OTO_REQUIRES_CHECKOUT + COMMERCE_NODE_LAYER). Publish with live_mode=true (NOT a status flip). Edge operators are LONG-FORM — op:'equal', never 'eq' (no alias; 'eq' silently never matches). Orders are read-only (no create/update/delete). Confirm a sale email via notification_log channel='email' status='sent', never mail_messages. Product creation is Medusa Admin UI today ([8.6c] gap) — agents author the funnel but not the product."
 
 methods:
   searchLeads:
@@ -469,4 +470,70 @@ methods:
     params:
       payload:  { type: object,  required: true,  description: 'Lookup payload: { mode: search|lookup|vat (default search); name (search, 1-500 chars); identifier + country (lookup; country is ISO-2); vat_number (vat, incl. country prefix); country (ISO-2, narrows search); limit (1-100, search, default 10); include_financials (UK lookup only, ~$0.05); financials_mode: url_only|ixbrl|regex|ocr|auto; test }' }
       priority: { type: integer, required: false, description: 'Job priority 1-10 (default 5)' }
+    response: { format: json }
+
+  # ── flow:commerce (Commerce Funnels — Unified Funnels + Commerce P3) ──────
+  # A commerce funnel is a kind='funnel' Flow carrying checkout + oto nodes that
+  # sells a product and lands a Stripe-canonical order (commerce_orders). CREATE
+  # by forking a template (applyFunnelTemplate), NOT by hand. Publish with
+  # live_mode=true. Orders are read-only (4 commerce_order_* tools). Product
+  # CREATION is Medusa Admin UI only ([8.6c]). These methods are the kitchen-sink
+  # @spideriq/mcp + CLI surface (funnel_template_*, commerce_order_*); verify the
+  # OPVS proxy forwards them before relying on them live.
+  listFunnelTemplates:
+    description: List flow templates; pass kind=commerce for the 3 commerce starters.
+    guidance:
+      use: "discover commerce starters before forking — single-product-checkout / tripwire-oto / subscription-checkout"
+      next: "applyFunnelTemplate(slug)"
+      telemetry_signal_default: "cold"
+    http: GET /api/v1/dashboard/content/funnels/templates
+    params:
+      kind: { type: string, required: false, description: 'commerce | funnel | booking | form — filter the gallery' }
+    response: { format: json }
+
+  applyFunnelTemplate:
+    description: >
+      Fork a flow template into a NEW DRAFT funnel in the tenant — the only safe
+      way to create a commerce funnel (forks a valid checkout/oto graph + seed
+      pages; raw flow_create fights the validator).
+    guidance:
+      use: "create a commerce funnel by forking single-product-checkout / tripwire-oto / subscription-checkout"
+      next: "flow_update_node to customise copy; publish with live_mode=true; content_visual_check the /f/<flow_id> URL"
+      warn: "uses the template's existing Medusa product catalog — you CANNOT create a product via MCP/CLI yet (Medusa Admin UI only, [8.6c]). Edge operators are long-form (op:'equal', never 'eq')."
+      telemetry_signal_default: "cold"
+    http: POST /api/v1/dashboard/content/funnels/templates/{slug}/apply
+    params:
+      slug: { type: string, required: true, description: 'single-product-checkout | tripwire-oto | subscription-checkout' }
+      name: { type: string, required: false, description: 'Label for the forked draft funnel' }
+    response: { format: json }
+
+  listCommerceOrders:
+    description: List the tenant's commerce orders (Stripe-canonical), paginated + filterable.
+    guidance:
+      use: "read orders a commerce funnel produced — status / contact_email / since filters"
+      warn: "read-only (orders are written server-side on a succeeded Stripe PaymentIntent — no create/update/delete). total_amount_cents is Stripe minor units; Medusa unit_price is major units — never mix."
+      telemetry_signal_default: "warm"
+    http: GET /api/v1/commerce/orders
+    params:
+      status:        { type: string,  required: false, description: 'succeeded | pending | failed | refunded' }
+      contact_email: { type: string,  required: false, description: 'filter to one buyer' }
+      since:         { type: string,  required: false, description: 'relative (7d/12h) or ISO timestamp' }
+      limit:         { type: integer, required: false, description: '1-200 (default 50)' }
+      offset:        { type: integer, required: false, description: 'pagination offset' }
+    response: { format: json }
+
+  getCommerceOrder:
+    description: One commerce order — line items, customer, PaymentIntent, lifecycle.
+    guidance: { use: "inspect a single order", telemetry_signal_default: "warm" }
+    http: GET /api/v1/commerce/orders/{order_id}
+    params:
+      order_id: { type: string, required: true, description: 'Commerce order UUID' }
+    response: { format: json }
+
+  getCommerceOrderStats:
+    description: Aggregate commerce stats over a window — orders, succeeded-only revenue, currency, per-status breakdown.
+    guidance: { use: "revenue / AOV / success-rate over a window", telemetry_signal_default: "warm" }
+    http: GET /api/v1/commerce/orders/stats
+    params:
+      window: { type: string, required: false, description: '7d | 30d | 90d | all (default 30d)' }
     response: { format: json }

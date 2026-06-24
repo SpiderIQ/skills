@@ -23,7 +23,12 @@ description: >
   employees. Trigger linkedinProfiles on: "enrich this LinkedIn profile", "find
   people on LinkedIn", "look up a LinkedIn profile", "who works at <company>",
   "pull a company's employees / team from LinkedIn", "search LinkedIn for <title>".
-  More flows are added here as recipes.
+  And commerce funnels (flow:commerce): sell a product through a checkout + one-time-offer
+  (OTO) funnel that lands a Stripe-canonical order. Trigger commerce on: "build a tripwire
+  funnel", "sell a product / one-time offer / upsell", "checkout funnel", "subscription
+  funnel", "set up a commerce funnel", "read my orders / revenue". Commerce funnels are
+  created by forking a template (funnel_template_apply), NOT by hand. More flows are added
+  here as recipes.
 ---
 
 # SpiderFlows
@@ -81,6 +86,24 @@ modes — single jobs, **no campaign fan-out**. Read the people back via
 `GET /jobs/{job_id}/results`, with `linkedin_profiles` + `contacts` also queryable
 through IDAP. (This is *not* the account-and-proxy-gated Voyager LinkedIn search —
 that's a separate service, out of scope here.)
+
+The fourth flow — **commerce** — is the odd one out: it does not scrape or enrich. It
+**sells a product** through a funnel and lands a real order.
+
+```
+flow:commerce   (kind='funnel' carrying checkout + oto nodes — Unified Funnels + Commerce P3)
+checkout node → oto node → thank-you
+(tripwire buy)  (accept = charge upsell off-session · decline = no-op)  (Stripe-canonical order)
+```
+
+You **create a commerce funnel by forking a template** (`funnel_template_apply`, one of
+`single-product-checkout` / `tripwire-oto` / `subscription-checkout`) — never by hand, because the
+graph validator enforces `OTO_REQUIRES_CHECKOUT` + `COMMERCE_NODE_LAYER`. Publish with
+`live_mode=true`, walk the buyer path with Stripe TEST, and read orders back through the 4
+`commerce_order_*` tools (`spideriq commerce orders …`). Stripe is the order-of-record (Medusa is
+catalog/cart only). **You can author the whole funnel EXCEPT the product itself** — product
+creation is the Medusa Admin UI today ([8.6c]). See
+[flows/commerce-funnels/recipes/build-tripwire-oto.md](flows/commerce-funnels/recipes/build-tripwire-oto.md).
 
 ## Approach
 
@@ -153,6 +176,10 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | find LinkedIn profiles from a search query (shallow list) | [flows/linkedinProfiles/recipes/run-search.md](flows/linkedinProfiles/recipes/run-search.md) |
 | extract a company's employees from its LinkedIn page | [flows/linkedinProfiles/recipes/run-company.md](flows/linkedinProfiles/recipes/run-company.md) |
 | read a linkedinProfiles run's people (job results / IDAP) | [flows/linkedinProfiles/recipes/read-results.md](flows/linkedinProfiles/recipes/read-results.md) |
+| build a commerce funnel that sells a product (tripwire + one-time-offer upsell) | [flows/commerce-funnels/recipes/build-tripwire-oto.md](flows/commerce-funnels/recipes/build-tripwire-oto.md) |
+| build a simple one-product checkout funnel (no upsell) | [flows/commerce-funnels/recipes/single-product-checkout.md](flows/commerce-funnels/recipes/single-product-checkout.md) |
+| build a subscription / recurring-plan funnel with an upgrade OTO | [flows/commerce-funnels/recipes/subscription-checkout.md](flows/commerce-funnels/recipes/subscription-checkout.md) |
+| read commerce orders + revenue a funnel produced | [flows/commerce-funnels/recipes/read-orders.md](flows/commerce-funnels/recipes/read-orders.md) |
 | understand poll-vs-SSE progress and realistic timing | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 | watch a run with live events instead of polling — react to the stream, read the sink once on the terminal `campaign.terminal` / `job.completed` event | [recipes/watch-a-run.md](recipes/watch-a-run.md) (event surface: [references/events-stream.md](references/events-stream.md)) |
 
