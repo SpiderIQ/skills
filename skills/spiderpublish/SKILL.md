@@ -111,6 +111,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Customise a Liquid template | `getTemplate` · `upsertTemplate` · `previewTemplate` | `references/templates-deploy.md` |
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
 | Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
+| Embed a live AI agent (SDR/support/concierge/booking) on the site | `agent_flow_create`→`agent_flow_publish`→`agent_flow_preview_url`/`agent_flow_get_embed_snippet` | `references/agent-embed.md` |
 | Host an image/video → CDN URL | `uploadMedia` · `listMedia` | `references/media.md` |
 | Browse + insert a marketplace section / bg-video | `listMarketplaceComponents` · `listBgVideos`→`insertSection` | `references/marketplace.md` |
 | Sync an external source (Airtable/Stripe/HubSpot/cal/CF) / clone a URL | (integration recipes) | `references/integrations.md` |
@@ -174,6 +175,9 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
   overrides, the two-phase deploy.
 - `references/forms-booking.md` — forms + booking flows (build, embed, logic,
   test, share, cal.com calendar invite).
+- `references/agent-embed.md` — embed a live OPVS AI agent as a `kind='agent'`
+  flow (standalone/inline/concierge/headless), the secret-free binding, the
+  3-tier customization, and the surface-vs-conversation honesty split.
 - `references/media.md` — upload/host media, import-from-url, media budget.
 - `references/marketplace.md` — browse + insert sections / bg-videos, author
   marketplace assets.

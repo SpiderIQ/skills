@@ -71,6 +71,9 @@ triggers:
   - landing page
   - reusable component
   - site settings
+  - embed an agent
+  - ai agent on my site
+  - chatbot widget
 
 guidance:
   use: >
@@ -96,6 +99,7 @@ guidance:
     - "Writes live on /dashboard/content (Bearer, drafts visible). The PUBLIC /content/* paths are READ-ONLY (POST there -> 405) and return only PUBLISHED content. Do not POST to /content/*."
     - "Destructive ops on a production tenant are two-phase: a dry_run preview returns a confirm_token you pass back to actually mutate (deploy/delete/publish/apply-theme). Default behaviour previews first."
     - "Tiptap body: page/post/doc `body` is a Tiptap JSON document object, not an HTML string."
+    - "AGENT EMBED (kind='agent'): to put a live AI agent on the site, use the agent_flow_* tools (agent_flow_create/publish + agent_flow_preview_url/get_embed_snippet — kitchen-sink @spideriq/mcp only). The SURFACE is live; the live CONVERSATION needs an OPVS agent hire + a bound origin. The flow.agent binding is URLs+ids ONLY — any credential-shaped key 422s. Never hand-compose /f/<id> or the embed snippet. See references/agent-embed.md."
 
 methods:
 
@@ -310,9 +314,9 @@ methods:
       Update a blog post. PATCH semantics. Same field-name rules as createPost:
       cover_image_url, is_featured, category_ids (LIST).
     guidance:
-      use: "edit a post — title, body, author, categories, cover image, featured"
+      use: "edit a post — title, body, author, categories, cover image, featured, vayapin_pins"
       next: "publishPost -> deploySite"
-      warn: "cover_image_url / is_featured / category_ids — wrong names (cover_image, featured, category_id) are silently dropped."
+      warn: "cover_image_url / is_featured / category_ids — wrong names (cover_image, featured, category_id) are silently dropped. vayapin_pins REPLACES the post's whole pin set (PATCH semantics — send the full list, [] clears)."
     http: PATCH /dashboard/content/posts/{post_id}
     params:
       post_id:           { type: string,  required: true }
@@ -331,6 +335,8 @@ methods:
       related_post_ids:  { type: array,   required: false, items: string }
       seo_title:         { type: string,  required: false }
       seo_description:   { type: string,  required: false }
+      vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). PATCH REPLACES the whole pin set: send the full list, [] clears. Resolve codes via vayapinCards first." }
+      project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
     response: { format: json }
 
   deletePost:
