@@ -1,0 +1,13 @@
+{
+  "title": "email_list_mailboxes is slow on a cold call (~20s) — design for it, don't treat it as a hang",
+  "summary": "email_list_mailboxes reads the provider org-accounts list live, which is paginated at the provider — cold it takes ~20 seconds; the server then caches the result ~90s so warm calls are fast. The MCP tool sets a generous 45s client timeout specifically so a healthy-but-slow read isn't aborted (LIST_MAILBOXES_TIMEOUT_MS = 45_000 in packages/mcp-tools/src/admin/email.ts). Two failure modes for naive agents: (1) treating a 15-20s response as a hang and retrying — which just starts another cold read; (2) calling the list per-mailbox inside a loop (audit/enable-imap/rotate flows) — minutes of wasted wall-clock when ONE list call returns the whole annotated inventory. The right pattern is always: one list call → filter/batch in memory → act. Every other tool's account_id + zuid come from this single list, so there's no reason to re-list per mailbox.",
+  "created_at": "2026-06-29",
+  "updated_at": "2026-06-29",
+  "tags": ["email-admin", "latency", "zoho", "pagination", "cache", "mcp-timeout"],
+  "references": [
+    "packages/mcp-tools/src/admin/email.ts — LIST_MAILBOXES_TIMEOUT_MS = 45_000; comment: 'cold ~20s, then server-cached 90s'",
+    "app/api/v1/mail_admin.py GET /connections/{id}/mailboxes → provisioning.list_org_mailboxes (live provider read)",
+    "PR #2041 — Email Admin S2.1 (the email_* tool family + the 45s list timeout)",
+    "MEMORY email-admin-initiative — ~20s cold list latency, server-cached 90s, opt-in Smartlead"
+  ]
+}

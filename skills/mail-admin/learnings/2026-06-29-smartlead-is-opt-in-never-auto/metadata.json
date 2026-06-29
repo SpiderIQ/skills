@@ -1,0 +1,14 @@
+{
+  "title": "Adding a mailbox to Smartlead is a SEPARATE opt-in — never auto-chain it after provisioning",
+  "summary": "email_add_to_smartlead is intentionally NOT part of the provision→enable-imap→register→health chain. email_provision_and_link deliberately stops before Smartlead. This is a LOCKED product decision: provisioning a mailbox and putting it into live cold-outreach rotation are two different consent levels — a customer may want mailboxes stood up and registered in SpiderMail without being added to Smartlead sending. So an agent must only call email_add_to_smartlead when the user has EXPLICITLY asked to warm/add that specific mailbox as a Smartlead sender. Preconditions: the mailbox must already be registered in SpiderMail (email_register_in_spidermail) AND the brand must have an active Smartlead outreach connection — otherwise the call 409s (SmartleadLinkError). The Smartlead WRITE path (SmartleadProvider.add_sender → POST /email-accounts/save) was built best-effort against Smartlead's documented sender-create endpoint; verify live with a throwaway sender before trusting it at scale. Defaults: max_email_per_day 50, warmup_enabled false.",
+  "created_at": "2026-06-29",
+  "updated_at": "2026-06-29",
+  "tags": ["email-admin", "smartlead", "opt-in", "locked-decision", "outreach", "consent"],
+  "references": [
+    "packages/mcp-tools/src/admin/email.ts — email_add_to_smartlead: 'a SEPARATE, deliberate step — it is NEVER part of email_provision_and_link'",
+    "app/api/v1/mail_admin.py — add_to_smartlead route + provision_and_link route (Smartlead absent from the chain); SmartleadLinkError → 409",
+    "PR #2041 — Email Admin S2.1 scope decision: add_to_smartlead is a SEPARATE opt-in tool, never auto-chained (locked)",
+    "app/services/email_admin/smartlead_link.py + app/services/mail/outreach/smartlead.py SmartleadProvider.add_sender (POST /email-accounts/save) — best-effort, verify live",
+    "MEMORY email-admin-initiative — opt-in (never-auto) Smartlead step"
+  ]
+}

@@ -1,0 +1,480 @@
+# Email Admin (mail-admin) Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# These wrap /api/v1/mail-admin/* and are the admin mirror of the email_* MCP
+# tools (mcp-admin slice) and the `spideriq email …` CLI. Auth is the PLATFORM
+# admin key (X-Admin-Key), NOT a client PAT — super_admin only, cross-tenant
+# god-mode (one super-admin acting over many brands' provider orgs). This is the
+# CONTROL plane (org-admin actions over a provider's API); reading/sending mail
+# from a mailbox is the DATA plane (SpiderMail / @spideriq/mail-skills).
+
+name: mail-admin
+version: "0.1.0"
+description: >
+  Provision and operate outreach mailboxes on a provider org (Zoho EU first) —
+  connect an org, provision mailboxes, enable IMAP, set passwords, register them
+  into SpiderMail, health-check with a real login, run the full provision→link
+  chain, and (opt-in) add a registered mailbox to Smartlead as a sender. Every
+  mutating action is audited. super_admin-only, X-Admin-Key.
+category: admin
+base_url: /api/v1/mail-admin
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - provision outreach mailboxes
+  - spin up cold email mailboxes
+  - create a mailbox on a domain
+  - enable IMAP on mailboxes
+  - audit mailboxes and re-enable IMAP
+  - rotate mailbox passwords
+  - register a mailbox in SpiderMail
+  - health check a mailbox
+  - connect a Zoho org
+  - add a mailbox to Smartlead
+
+guidance:
+  use: >
+    Reach for this to STAND UP and OPERATE outreach mailboxes on a provider org —
+    connect a Zoho-EU org to a brand, provision mailboxes, enable IMAP, register
+    them in SpiderMail, health-check, rotate passwords, and (opt-in) add a sender
+    to Smartlead. super_admin + X-Admin-Key; runs against a real provider org and
+    consumes paid license seats.
+  not:
+    - "@spideriq/mail-skills (SpiderMail) → READ or SEND mail from a mailbox (the data plane) — not provision/configure it"
+    - "integrations / vault (this package) → store/rotate the Zoho OAuth token + provider API keys — not provision mailboxes"
+    - "manage-routing / opvs-admin / auth → other admin surfaces in this package, unrelated to mailbox provisioning"
+  # No mail-admin method takes a free-text search field — every selector is a
+  # typed connection_id (uuid), account_id+zuid, brand_id, email, or domain.
+  # intent_aliases is explicitly empty (declared, not implicit — the runtime
+  # never guesses; Q1).
+  intent_aliases: []
+  pitfalls:
+    - "provisionMailbox consumes a paid LICENSE SEAT — a full Zoho org returns 409 (C1) with the verbatim provider reason. A 409 means free/buy a seat, NOT retry."
+    - "listMailboxes is SLOW — the provider list is paginated (cold ~20s, server-cached ~90s; client timeout 45s). Don't treat 15-20s as a hang, don't poll it in a loop, prefer ONE list feeding a batch."
+    - "addToSmartlead is a SEPARATE opt-in — NEVER auto-chain it after provisioning. provisionAndLink deliberately stops before Smartlead (locked decision)."
+    - "A provisioned mailbox is invisible to SpiderMail until registerInSpiderMail, and un-pollable until IMAP is enabled. Load-bearing order: provision → enable-imap → register → health."
+    - "healthCheck is only trustworthy WITH a password (real IMAP+SMTP login); without one (and unregistered) it degrades to a reachability probe that can falsely say ok."
+
+methods:
+  listConnections:
+    description: >
+      List provider org connections (Zoho EU, …) in the Email Admin control
+      plane, optionally filtered to one brand. Returns each connection's id,
+      brand_id, provider, data_center, status, label and whether a vault token is
+      attached (never the token itself). Read-only.
+    guidance:
+      use: "See which brands have a provider org connected (and get a connection_id for everything else)."
+      next: "listMailboxes (inventory a connection), connectProvider (if the brand has none)"
+      warn: "An empty list for a brand means no org is connected yet — connectProvider first; you can't provision without a connection_id."
+      telemetry_signal_default: "cold"
+    http: GET /connections
+    params:
+      brand_id:
+        type: integer
+        required: false
+        description: Filter to one brand id (>=1). Omit for all brands.
+    response:
+      format: json
+
+  connectProvider:
+    description: >
+      Connect a provider org (default zoho / eu) to a brand. Attach an EXISTING
+      vault token with vault_key_ref (e.g. "apiint:106"), OR pass an inline OAuth
+      bundle (refresh_token + client_id + client_secret [+ scope]) which is
+      stored in the vault first, then attached. Secrets are never audited or
+      logged. Returns the new connection (201).
+    guidance:
+      use: "One-time setup per brand-org: attach a Zoho-EU org so its mailboxes can be managed."
+      next: "listMailboxes (inventory it), provisionAndLink (start spinning up mailboxes)"
+      warn: "vault_key_ref and the inline bundle are mutually exclusive — pass one. The inline bundle's refresh_token+client_id+client_secret are all required together. Prefer attaching an existing vault ref over pasting raw secrets."
+      telemetry_signal_default: "cold"
+    http: POST /connections
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand id (>=1) to connect the org to.
+      provider:
+        type: string
+        required: false
+        description: "Provider key (default 'zoho')."
+      data_center:
+        type: string
+        required: false
+        description: "Provider data center (default 'eu')."
+      org_external_id:
+        type: string
+        required: false
+        description: "Provider org id (Zoho zoid), if known."
+      vault_key_ref:
+        type: string
+        required: false
+        description: "Existing vault ref to attach (e.g. 'apiint:106'). Mutually exclusive with the inline bundle."
+      label:
+        type: string
+        required: false
+        description: Human label for the connection.
+      end_client_name:
+        type: string
+        required: false
+        description: End-client display name (agency context).
+      refresh_token:
+        type: string
+        required: false
+        description: Inline OAuth refresh token (stored in vault; requires client_id + client_secret).
+      client_id:
+        type: string
+        required: false
+        description: Inline OAuth client id (with refresh_token + client_secret).
+      client_secret:
+        type: string
+        required: false
+        description: Inline OAuth client secret.
+      scope:
+        type: string
+        required: false
+        description: "OAuth scope (default ZohoMail.organization.accounts.ALL)."
+    response:
+      format: json
+
+  revokeConnection:
+    description: >
+      Revoke (deactivate) a provider org connection. The vault token is left in
+      place; only the connection status flips to revoked. Reversible by
+      re-connecting. Audited.
+    guidance:
+      use: "Deactivate a connection without deleting its stored token."
+      next: "listConnections (confirm status=revoked)"
+      warn: "This does NOT delete the vault token or any provisioned mailboxes — it only stops this connection from being used for new actions."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/revoke
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Email Admin connection id (uuid) from listConnections.
+    response:
+      format: json
+
+  listMailboxes:
+    description: >
+      List a connection's org mailboxes LIVE from the provider, annotated with
+      SpiderIQ state (registered in SpiderMail? Smartlead sender? IMAP enabled?).
+      Each row carries the account_id + zuid you need for enableImap / setPassword.
+      SLOW — the provider list is paginated (cold ~20s, then server-cached ~90s).
+      Read-only.
+    guidance:
+      use: "Get the full org inventory + per-mailbox SpiderIQ state (the input to a fleet audit or bulk enable-imap)."
+      next: "enableImap (flip the IMAP-off ones), setPassword (rotate), addToSmartlead (opt-in, registered ones)"
+      warn: "SLOW: cold ~20s, cached ~90s (client timeout 45s). Don't treat 15-20s as a hang and don't call it in a loop — ONE list feeds a whole batch. account_id + zuid for every other call come from here."
+      telemetry_signal_default: "warm"
+    http: GET /connections/{connection_id}/mailboxes
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid) to inventory.
+    response:
+      format: json
+
+  provisionMailbox:
+    description: >
+      Create a new org mailbox (local_part@domain) with an initial password. The
+      password is never audited. CONSUMES A PAID LICENSE SEAT — a full org is
+      rejected with a clean 409 (C1) carrying the verbatim provider reason.
+      Returns the email + provider response (201).
+    guidance:
+      use: "Create a single mailbox. For the full outreach setup prefer provisionAndLink (it also enables IMAP + registers + health-checks)."
+      next: "enableImap, registerInSpiderMail, healthCheck — or just use provisionAndLink to do all four"
+      warn: "409 = no free license seat (C1). That means free/buy a seat, NOT retry — retrying 409s again. password must be >=8 chars."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/mailboxes
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      local_part:
+        type: string
+        required: true
+        description: Mailbox local part (before @), 1-64 chars.
+      domain:
+        type: string
+        required: true
+        description: Mailbox domain (after @), 3-255 chars. Must be a verified domain on the org.
+      password:
+        type: string
+        required: true
+        description: Initial password (>=8 chars). Never audited.
+      display_name:
+        type: string
+        required: false
+        description: Display name (optional).
+    response:
+      format: json
+
+  enableImap:
+    description: >
+      Enable IMAP for one OR MANY org mailboxes (bulk). Each target is enabled
+      independently — one failure does not abort the rest; the response reports
+      enabled / failed counts and a per-target result. Targets are
+      {account_id, zuid, email?} from listMailboxes.
+    guidance:
+      use: "Turn IMAP on so SpiderMail can poll the mailbox — for one or a whole batch in a single call."
+      next: "registerInSpiderMail (if not yet registered), healthCheck (confirm a real login)"
+      warn: "IMAP-off mailboxes can't be polled even if registered. Pull account_id + zuid from listMailboxes — they are NOT the email address. Inspect the per-target results; a partial batch can have failures."
+      telemetry_signal_default: "warm"
+    http: POST /connections/{connection_id}/enable-imap
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      targets:
+        type: array
+        required: true
+        description: >
+          One or more mailboxes to enable IMAP for (1-500). Each item is
+          {account_id, zuid, email?} — account_id + zuid from listMailboxes;
+          email is optional, for audit/labeling.
+        items: object
+    response:
+      format: json
+
+  setPassword:
+    description: >
+      Reset an org mailbox's provider password. The password is never audited or
+      logged. Targets one mailbox by account_id + zuid (from listMailboxes). For
+      SpiderMail to keep working after a rotation, re-register the mailbox with
+      the new password (registerInSpiderMail is idempotent).
+    guidance:
+      use: "Rotate / reset a single mailbox's provider password."
+      next: "registerInSpiderMail (re-register with the new password so SpiderMail's stored copy matches), healthCheck"
+      warn: "Changing the provider password does NOT update SpiderMail's stored copy — re-register or the data plane logins start failing. password must be >=8 chars. account_id + zuid come from listMailboxes."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/set-password
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      account_id:
+        type: string
+        required: true
+        description: Provider account id (from listMailboxes).
+      zuid:
+        type: string
+        required: true
+        description: Provider zuid (from listMailboxes).
+      password:
+        type: string
+        required: true
+        description: New password (>=8 chars). Never audited.
+      email:
+        type: string
+        required: false
+        description: Mailbox email (optional, for audit/labeling).
+    response:
+      format: json
+
+  registerInSpiderMail:
+    description: >
+      Register an org mailbox into SpiderMail (mail_mailboxes) so the data plane
+      can poll/send it. IMAP/SMTP hosts default to the connection's data center;
+      override per-field if needed. Idempotent per (client, email) — safe to
+      re-run after a password rotation. Returns the registered mailbox (201).
+    guidance:
+      use: "Make a provisioned mailbox visible to SpiderMail (and refresh its stored password after a rotation)."
+      next: "healthCheck (confirm a real IMAP+SMTP login), addToSmartlead (opt-in, only if asked)"
+      warn: "Idempotent per (client, email) — re-running updates the stored password rather than duplicating. The mailbox still won't poll unless IMAP is enabled at the provider (enableImap)."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/register
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      email:
+        type: string
+        required: true
+        description: Mailbox email to register.
+      password:
+        type: string
+        required: true
+        description: Mailbox password (used for IMAP/SMTP).
+      display_name:
+        type: string
+        required: false
+        description: Display name (optional).
+      imap_host:
+        type: string
+        required: false
+        description: Override IMAP host (optional; defaults to the data center).
+      imap_port:
+        type: integer
+        required: false
+        description: Override IMAP port (1-65535, optional).
+      smtp_host:
+        type: string
+        required: false
+        description: Override SMTP host (optional; defaults to the data center).
+      smtp_port:
+        type: integer
+        required: false
+        description: Override SMTP port (1-65535, optional).
+      client_id:
+        type: string
+        required: false
+        description: Override the resolved client (uuid, rarely needed).
+    response:
+      format: json
+
+  provisionAndLink:
+    description: >
+      Full chain in one call: provision a mailbox → enable IMAP → register in
+      SpiderMail → health-check (live IMAP+SMTP login). Smartlead is intentionally
+      NOT part of this chain (use addToSmartlead separately). The preferred way to
+      stand up a single outreach mailbox. Returns the chain result (201).
+    guidance:
+      use: "Stand up ONE fully-wired outreach mailbox (provision + IMAP + register + health) in a single call."
+      next: "addToSmartlead (ONLY if the user explicitly asked to warm it in Smartlead)"
+      warn: "Still consumes a license seat → 409 if the org is full (C1). Deliberately STOPS before Smartlead — never assume the caller wants the mailbox in live outreach rotation."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/provision-and-link
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      local_part:
+        type: string
+        required: true
+        description: Mailbox local part (before @), 1-64 chars.
+      domain:
+        type: string
+        required: true
+        description: Mailbox domain (after @), 3-255 chars.
+      password:
+        type: string
+        required: true
+        description: Mailbox password (>=8 chars).
+      display_name:
+        type: string
+        required: false
+        description: Display name (optional).
+      account_id:
+        type: string
+        required: false
+        description: Provider account id (optional; pulled from the provision response if absent).
+      zuid:
+        type: string
+        required: false
+        description: Provider zuid (optional).
+      client_id:
+        type: string
+        required: false
+        description: Override the resolved client (uuid, optional).
+    response:
+      format: json
+
+  healthCheck:
+    description: >
+      Live IMAP+SMTP probe for one mailbox. WITH a password → a REAL login (the
+      only trustworthy check). WITHOUT a password → uses the registered mailbox's
+      stored password, or degrades to a server-reachability probe if it isn't
+      registered. Returns per-protocol (imap_ok / smtp_ok) status.
+    guidance:
+      use: "Confirm a mailbox can actually log in over IMAP+SMTP after provisioning or a rotation."
+      next: "registerInSpiderMail (if the probe shows it isn't registered), setPassword (if login fails)"
+      warn: "Only trustworthy WITH a password (or a registered mailbox with a stored one). A bare probe on an unregistered mailbox is reachability-only and can falsely report ok."
+      telemetry_signal_default: "warm"
+    http: POST /connections/{connection_id}/health-check
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      email:
+        type: string
+        required: true
+        description: Mailbox email to probe.
+      password:
+        type: string
+        required: false
+        description: Optional — provide for a real login probe (the trustworthy path).
+    response:
+      format: json
+
+  addToSmartlead:
+    description: >
+      OPT-IN: add an already-registered mailbox to the brand's Smartlead account
+      as an outreach sender. A SEPARATE, deliberate step — NEVER part of
+      provisionAndLink. The mailbox must already be registered in SpiderMail and
+      the brand must have an active Smartlead outreach connection (else 409).
+      Returns the Smartlead sender result (201).
+    guidance:
+      use: "Put a registered mailbox into live Smartlead outreach rotation — ONLY when explicitly asked."
+      next: "audit (confirm the add-to-smartlead action was recorded)"
+      warn: "NEVER auto-chain after provisioning (HARD-GATE / locked decision). 409 if the mailbox isn't registered or the brand has no active Smartlead outreach connection. Default warmup_enabled is false and max_email_per_day is 50."
+      telemetry_signal_default: "cold"
+    http: POST /connections/{connection_id}/add-to-smartlead
+    params:
+      connection_id:
+        type: string
+        required: true
+        description: Connection id (uuid).
+      email:
+        type: string
+        required: true
+        description: Registered mailbox email to add as a Smartlead sender.
+      smartlead_connection_id:
+        type: integer
+        required: false
+        description: "Target a specific Smartlead outreach connection (>=1); omit to use the brand's active one."
+      max_email_per_day:
+        type: integer
+        required: false
+        description: Smartlead daily send cap for this sender (1-2000, default 50).
+      warmup_enabled:
+        type: boolean
+        required: false
+        description: Enable Smartlead warmup for this sender (default false).
+    response:
+      format: json
+
+  audit:
+    description: >
+      Read the Email Admin god-mode audit log — every connect / provision /
+      enable-imap / set-password / register / health-check / add-to-smartlead
+      action, with actor (user_id + kind), target_email, a secrets-stripped
+      request_summary, result and error. Filter by brand and/or connection.
+      Newest first. Read-only.
+    guidance:
+      use: "Review who did what across the Email Admin control plane (and confirm a mutating action landed)."
+      next: "listMailboxes / listConnections (inspect current state after reviewing the log)"
+      warn: "Secrets (passwords, tokens) are never recorded — the summary is intentionally redacted. limit is 1-500 (default 100)."
+      telemetry_signal_default: "cold"
+    http: GET /audit
+    params:
+      brand_id:
+        type: integer
+        required: false
+        description: Filter to one brand (>=1, optional).
+      connection_id:
+        type: string
+        required: false
+        description: Filter to one connection uuid (optional).
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (1-500, default 100).
+    response:
+      format: json

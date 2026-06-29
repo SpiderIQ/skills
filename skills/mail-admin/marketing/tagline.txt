@@ -1,0 +1,1 @@
+Provision and operate outreach mailboxes — connect a Zoho org, spin up mailboxes, enable IMAP, register in SpiderMail, rotate passwords, (opt-in) warm in Smartlead

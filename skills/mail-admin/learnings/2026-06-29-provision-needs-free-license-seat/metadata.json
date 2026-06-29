@@ -1,0 +1,13 @@
+{
+  "title": "Provisioning a mailbox consumes a paid license seat — a full org returns 409 (C1), not a retryable error",
+  "summary": "email_provision_mailbox / email_provision_and_link create a real mailbox on the provider org (Zoho EU), which consumes a paid LICENSE SEAT. When the org has no free seat, Zoho rejects the create — and because that arrives from the provider as a 5xx, the control plane maps it to a clean HTTP 409 carrying the verbatim provider business message (the ProviderCapacityError → 409 branch in mail_admin.py, the 'C1' fix, PR #2043). A 409 here is NOT transient: it means free up or buy a license seat. Retrying just 409s again. The agent must surface the provider message to the operator and STOP the provisioning loop, not back off and retry. Each provision call is independent, so in a fleet loop catch the 409 per-mailbox and halt when seats are exhausted rather than burning the whole batch against a full org.",
+  "created_at": "2026-06-29",
+  "updated_at": "2026-06-29",
+  "tags": ["email-admin", "provisioning", "zoho", "license-seat", "409", "C1"],
+  "references": [
+    "PR #2041 — Email Admin S2.1: email_* MCP/CLI tools + require_super_admin_or_admin_key over app/api/v1/mail_admin.py",
+    "PR #2043 — C1: ProviderCapacityError mapped to a clean 409 with the verbatim provider message (Zoho license cap), placed before the generic EmailAdminError 502 branch",
+    "app/api/v1/mail_admin.py _raise_http() — `if isinstance(exc, ProviderCapacityError): return HTTPException(409, exc.provider_message or str(exc))`",
+    "MEMORY email-admin-initiative — Zoho-EU control plane, license-seat semantics"
+  ]
+}
