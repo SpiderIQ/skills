@@ -85,6 +85,10 @@ chain.
 - **Repair a fleet** — list the org inventory (annotated with `imap_enabled`,
   `registered`, `smartlead_sender`), then bulk `email_enable_imap` on the ones
   that are off. The proven fleet-recovery path. → [references/audit-and-reenable-imap.md](references/audit-and-reenable-imap.md)
+- **Diagnose deliverability** — a mailbox bounces in Smartlead
+  (`domain_does_not_exist`, `553`, NXDOMAIN) or its inbox looks stale. Localize the
+  fault to the right plane (SpiderMail `is_active` / DNS / Zoho / Smartlead) before
+  touching anything — it's usually DNS, not Smartlead. → [references/diagnose-deliverability.md](references/diagnose-deliverability.md)
 - **Rotate credentials** — reset the provider password for every mailbox on a
   domain and re-register so SpiderMail keeps the new password. → [references/rotate-passwords.md](references/rotate-passwords.md)
 - **Warm in Smartlead (opt-in)** — only on explicit instruction, add a
@@ -137,6 +141,7 @@ a client PAT — never echo it. Every mutating action is written to
 | spin up N outreach mailboxes on a domain (provision → IMAP → register → health) | [references/provision-outreach-fleet.md](references/provision-outreach-fleet.md) |
 | (opt-in) add a provisioned+registered mailbox to Smartlead as a sender | [references/provision-outreach-fleet.md](references/provision-outreach-fleet.md) (final step) |
 | audit all mailboxes and re-enable IMAP wherever it's off (fleet recovery) | [references/audit-and-reenable-imap.md](references/audit-and-reenable-imap.md) |
+| figure out why a mailbox bounces (`domain_does_not_exist` / `553` / NXDOMAIN) or its inbox is stale | [references/diagnose-deliverability.md](references/diagnose-deliverability.md) |
 | rotate / reset passwords for every mailbox on a domain | [references/rotate-passwords.md](references/rotate-passwords.md) |
 | understand why provision 409s / why the list is slow / why Smartlead is opt-in | [learnings/](learnings/) |
 
