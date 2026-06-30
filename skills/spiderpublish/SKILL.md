@@ -112,6 +112,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
 | Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
 | Embed a live AI agent (SDR/support/concierge/booking) on the site | `agent_flow_create`→`agent_flow_publish`→`agent_flow_preview_url`/`agent_flow_get_embed_snippet` | `references/agent-embed.md` |
+| Design/brand a mountable AI-agent COMPONENT (section/widget/concierge/headless) | `content_create_agent_component` (MCP) · or `createComponent` (marketplace_category=agent) →`insertSection` | `references/agent-component-authoring.md` |
 | Host an image/video → CDN URL | `uploadMedia` · `listMedia` | `references/media.md` |
 | Browse + insert a marketplace section / bg-video | `listMarketplaceComponents` · `listBgVideos`→`insertSection` | `references/marketplace.md` |
 | Sync an external source (Airtable/Stripe/HubSpot/cal/CF) / clone a URL | (integration recipes) | `references/integrations.md` |

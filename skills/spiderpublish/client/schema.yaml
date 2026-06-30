@@ -100,6 +100,7 @@ guidance:
     - "Destructive ops on a production tenant are two-phase: a dry_run preview returns a confirm_token you pass back to actually mutate (deploy/delete/publish/apply-theme). Default behaviour previews first."
     - "Tiptap body: page/post/doc `body` is a Tiptap JSON document object, not an HTML string."
     - "AGENT EMBED (kind='agent'): to put a live AI agent on the site, use the agent_flow_* tools (agent_flow_create/publish + agent_flow_preview_url/get_embed_snippet — kitchen-sink @spideriq/mcp only). The SURFACE is live; the live CONVERSATION needs an OPVS agent hire + a bound origin. The flow.agent binding is URLs+ids ONLY — any credential-shaped key 422s. Never hand-compose /f/<id> or the embed snippet. See references/agent-embed.md."
+    - "AGENT COMPONENT (marketplace_category='agent') is a DIFFERENT primitive from the agent FLOW: it's a reusable, brand-skinned <opvs-agent> BLOCK in a form_factor (section|widget|concierge|headless). MCP: content_create_agent_component bakes the whole shape. Raw HTTP: createComponent with js_runtime=web-component + agent_meta{role,surface,form_factor} + dependencies=['opvs-agent'] — and the css column is IGNORED (skin via inline --opvs-agent-* tokens). Browse via listMarketplaceComponents{category:'agent', agent_form_factor:…}. See references/agent-component-authoring.md."
 
 methods:
 
@@ -826,22 +827,30 @@ methods:
       kind='dynamic' component you MUST also pass `sources` (a DB CHECK rejects a
       dynamic component without a source binding).
     guidance:
-      use: "author a reusable UI block (static, interactive, or dynamic)"
+      use: "author a reusable UI block (static, interactive, or dynamic) — or a marketplace AI-agent component"
       next: "publishComponent -> insertSection on a page -> deploySite"
-      warn: "kind='dynamic' REQUIRES `sources` (data bindings). Use CSS :host {} + var(--primary) — Tailwind classes do not pierce the shadow boundary."
+      warn: "kind='dynamic' REQUIRES `sources` (data bindings). Use CSS :host {} + var(--primary) — Tailwind classes do not pierce the shadow boundary. For an AGENT component (marketplace_category='agent', js_runtime='web-component') the css column is IGNORED — skin via inline --opvs-agent-* tokens in html_template, and set agent_meta {role, surface, form_factor}. See references/agent-component-authoring.md for the full <opvs-agent> emission recipe."
     http: POST /dashboard/content/components
     params:
-      slug:          { type: string, required: true,  description: 'Component slug' }
-      name:          { type: string, required: true }
-      html_template: { type: string, required: true,  description: 'Liquid/HTML template body' }
-      css:           { type: string, required: false }
-      js:            { type: string, required: false }
-      kind:          { type: enum,   required: false, values: [static, interactive, dynamic, extension] }
-      block_type:    { type: string, required: false, description: 'Required for some dynamic kinds (e.g. list, item_details)' }
-      js_runtime:    { type: string, required: false, description: 'vanilla | web-component | …' }
-      props_schema:  { type: object, required: false, description: 'JSON Schema for the component props' }
-      sources:       { type: array,  required: false, description: 'REQUIRED for kind=dynamic — data-source bindings [{source_id,...}]' }
-      category:      { type: string, required: false }
+      slug:                 { type: string, required: true,  description: 'Component slug' }
+      name:                 { type: string, required: true }
+      html_template:        { type: string, required: true,  description: 'Liquid/HTML template body. For an agent component this is the <opvs-agent> element with the --opvs-agent-* token preset baked inline.' }
+      css:                  { type: string, required: false, description: 'Shadow-DOM CSS. IGNORED for js_runtime=web-component (agent components) — bypassed by the renderer.' }
+      js:                   { type: string, required: false }
+      kind:                 { type: enum,   required: false, values: [static, interactive, dynamic, extension] }
+      block_type:           { type: string, required: false, description: 'Required for some dynamic kinds (e.g. list, item_details)' }
+      js_runtime:           { type: string, required: false, description: 'vanilla | web-component | … (agent components use web-component)' }
+      props_schema:         { type: object, required: false, description: 'JSON Schema for the component props' }
+      default_props:        { type: object, required: false, description: 'Default prop values (e.g. {flow_id} so an agent component mounts without per-insert props)' }
+      sources:              { type: array,  required: false, description: 'REQUIRED for kind=dynamic — data-source bindings [{source_id,...}]' }
+      category:             { type: string, required: false }
+      dependencies:         { type: array,  required: false, description: 'CDN allowlist KEYS (not URLs). An agent component sets ["opvs-agent"].' }
+      marketplace_category: { type: string, required: false, description: "Set 'agent' to publish a marketplace agent component (flips agent_meta validation to AgentAssetMeta)." }
+      marketplace_description: { type: string, required: false }
+      agent_meta:           { type: object, required: false, description: "For marketplace_category='agent': {role?, surface (flow|inline|concierge), form_factor (section|widget|concierge|headless), grounding_modes?, required_scopes?, trigger_kind?}. extra keys rejected (422)." }
+      tags:                 { type: array,  required: false, description: 'Discovery tags' }
+      is_global:            { type: boolean, required: false, description: 'Publish to all clients — reserved for is_marketplace_authoring brands.' }
+      version:              { type: string, required: false, description: 'Semver (default 1.0.0)' }
     response: { format: json }
 
   getComponent:
@@ -1082,12 +1091,19 @@ methods:
     response: { format: yaml }
 
   listMarketplaceComponents:
-    description: Browse the global section library (PUBLIC).
+    description: >
+      Browse the global section library (PUBLIC). The `agent` category holds
+      mountable <opvs-agent> components — narrow them by mount type with
+      `agent_form_factor`.
+    guidance:
+      use: "browse ready-to-insert sections; with category=agent, find a mountable AI-agent component"
+      next: "insertSection with the component_slug; design your own agent component via createComponent (see references/agent-component-authoring.md)"
     http: GET /content/marketplace/components
     params:
-      category:    { type: string,  required: false }
-      is_featured: { type: boolean, required: false }
-      tag:         { type: string,  required: false }
+      category:          { type: string,  required: false, description: 'hero | features | … | authentication | agent' }
+      is_featured:       { type: boolean, required: false }
+      tag:               { type: string,  required: false }
+      agent_form_factor: { type: string,  required: false, description: 'Only with category=agent — section | widget | concierge | headless (maps to the agent_meta.form_factor JSONB filter).' }
     response: { format: json }
 
   listBgVideos:
