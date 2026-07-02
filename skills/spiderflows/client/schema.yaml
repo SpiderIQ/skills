@@ -76,8 +76,8 @@ methods:
       Verify -> optional VayaPin). Returns a job_id to poll.
     guidance:
       use: "one city / one search — fastest path, always safe on cost"
-      next: "getJobStatus, then getJobResults"
-      warn: "omitting workflow makes vayapin publish (default ON on this path) — set vayapin.enabled=false for a data-only lead list"
+      next: "getJobStatus, then getJobResults. SMARTLEAD EXPORT: to auto-send the verified leads to a SmartLead outreach campaign, set workflow.smartlead={enabled:true,connection_id,remote_campaign_id} — discover the ids via the SpiderMail skill (listOutreachConnections → listOutreachCampaigns) FIRST; recipe flows/maps-site-verify-vayapin/recipes/smartlead-export.md."
+      warn: "omitting workflow makes vayapin publish (default ON on this path) — set vayapin.enabled=false for a data-only lead list. workflow.smartlead SENDS real email at completion — only enable it once the user confirms the target SmartLead campaign."
       telemetry_signal_default: "cold"
     http: POST /lead-search
     params:
@@ -96,8 +96,8 @@ methods:
       Returns campaign_id + total_locations.
     guidance:
       use: "multi-location coverage — check total_locations in the response"
-      next: "getCampaignStatus (poll >=5s), retryFailedLocations, getCampaignResults"
-      warn: "filter.mode defaults to 'all' (every location). Narrow with regions/population/custom or stop immediately."
+      next: "getCampaignStatus (poll >=5s), retryFailedLocations, getCampaignResults. SMARTLEAD EXPORT: to auto-send the campaign's verified leads to a SmartLead outreach campaign at completion, set workflow.smartlead={enabled:true,connection_id,remote_campaign_id,only_with_vayapin_seo?} (keep spiderverify.enabled=true) — discover the ids via the SpiderMail skill (listOutreachConnections → listOutreachCampaigns) FIRST; recipe flows/maps-site-verify-vayapin/recipes/smartlead-export.md."
+      warn: "filter.mode defaults to 'all' (every location). Narrow with regions/population/custom or stop immediately. workflow.smartlead SENDS real email — only enable it once the user confirms the target SmartLead campaign."
       scope: "US ZIP campaign: scope to ONE state — filter={mode:regions, admin_regions:[state], include_postcodes:true}. All-US ZIP runs 422 (>10K cap). Discover state names with listRegions(country_code=US)."
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderMaps/campaigns/submit
