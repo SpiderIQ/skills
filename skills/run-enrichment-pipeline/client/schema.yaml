@@ -91,8 +91,8 @@ methods:
       Create a new enrichment campaign. Defines the search
       query, target country, and optional workflow configuration.
     guidance:
-      next: "getCampaignStatus (poll every 10s)"
-      warn: "start with max_results 50-100 for first run. At the plan's concurrent-campaign cap this returns 429 MAX_CAMPAIGNS_PER_CLIENT with an envelope CTA (suggested_url=/dashboard/plans) — finish/stop a running campaign or upgrade; no queue, no Retry-After"
+      next: "getCampaignStatus (poll every 10s). SMARTLEAD EXPORT: to auto-send the campaign's verified leads to a SmartLead outreach campaign at completion, set workflow.smartlead={enabled:true,connection_id,remote_campaign_id,only_with_vayapin_seo?} — discover the ids via the SpiderMail skill (listOutreachConnections → listOutreachCampaigns) FIRST; recipe in the @spideriq/spiderflows skill (smartlead-export)."
+      warn: "start with max_results 50-100 for first run. At the plan's concurrent-campaign cap this returns 429 MAX_CAMPAIGNS_PER_CLIENT with an envelope CTA (suggested_url=/dashboard/plans) — finish/stop a running campaign or upgrade; no queue, no Retry-After. workflow.smartlead SENDS real email — only enable once the user confirms the target campaign."
     http: POST /campaigns
     params:
       search_query:

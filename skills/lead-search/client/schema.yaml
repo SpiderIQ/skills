@@ -44,6 +44,8 @@ methods:
       Maps → Site → Verify → VayaPin. Returns job_id to poll for results.
     guidance:
       use: "search for leads matching criteria — returns ranked results"
+      next: "SMARTLEAD EXPORT: to auto-send the verified leads to a SmartLead outreach campaign, set workflow.smartlead={enabled:true,connection_id,remote_campaign_id} — discover the ids via the SpiderMail skill (listOutreachConnections → listOutreachCampaigns) FIRST; full recipe in the @spideriq/spiderflows skill (smartlead-export)."
+      warn: "workflow.smartlead SENDS real email at completion — only enable it once the user confirms the target SmartLead campaign."
     http: POST /lead-search
     params:
       search_query:
