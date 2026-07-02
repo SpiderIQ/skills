@@ -33,14 +33,19 @@ Prereq: a `connection_id` — see [connect-and-inspect.md](connect-and-inspect.m
 3. **Check the Zoho domain state.** `email_list_mailboxes({ connection_id })`
    shows per-mailbox `imap_enabled` / `registered`. For domain-level state
    (verification, DKIM, MX) the maintainer reads `GET /api/organization/domains`.
-   ⚠️ **Zoho's `mxstatus:expired` / `isExpired` / `spfstatus:false` flags are
-   STALE** — they read identically on a perfectly healthy domain. Do NOT conclude
-   "expired = broken." Trust a real `dig` + a login probe instead.
+   ⚠️ **`isExpired:true` / `mxstatus:expired` mean the domain is SEND-BLOCKED** —
+   the API equivalent of the Zoho console's **"Yet to reverify your ownership."**
+   While set, Zoho refuses ALL outbound (`553 Invalid Domain`). `verificationStatus`
+   / `dkimstatus` can read `true` at the same time, so they do **not** prove sending.
+   (This corrects an earlier version that wrongly called these flags "stale.")
 
-4. **Probe the actual login.** `email_health_check({ connection_id, email, password })`
-   does a REAL IMAP+SMTP login *with a password* (without one it's only a
-   reachability probe — can falsely say "ok"). A green login + a resolving domain
-   means the mailbox itself is fine and any Smartlead error is **historical**.
+4. **Prove sending with a REAL send — not a login probe.** `email_health_check`
+   (or any AUTH / `MAIL FROM`+`RCPT` check) only proves the mailbox can *connect*;
+   Zoho rejects a send-blocked domain at the **DATA** stage, so AUTH/RCPT return a
+   false "ok". The only reliable test is actually sending a message (DATA) — e.g.
+   a send to an internal same-domain address (`250` = can send, `553` = blocked).
+   A `553 Relaying disallowed. Invalid Domain` is **LIVE, not historical** —
+   Smartlead is faithfully reporting Zoho's real rejection.
 
 ## What you can fix vs. what you escalate
 
@@ -49,9 +54,11 @@ Prereq: a `connection_id` — see [connect-and-inspect.md](connect-and-inspect.m
   (`email_enable_imap`), missing registration → re-register.
 - **Escalate to an operator (no MCP tool yet — give them the precise diagnosis):**
   registrar **NS repoint** (Netim), **Cloudflare** zone/record changes, publishing
-  a domain's **per-domain DKIM + Zoho verify** record, and **Smartlead warmup
-  re-enable**. The maintainer runbook with exact commands is SpiderMail
-  `LEARNINGS.md §24–26`.
+  a domain's **per-domain DKIM + Zoho verify** record, **Smartlead warmup re-enable**,
+  and — for a `553 Invalid Domain` send-block — the **Zoho domain re-verify** (owner
+  does it in the Zoho Mail Admin console → Domains → "Yet to reverify your ownership";
+  our token is read-only for domains so the verify API `401`s). The maintainer
+  runbook with exact commands is SpiderMail `LEARNINGS.md §24–27`.
 
 ## WRONG → RIGHT
 
@@ -69,10 +76,11 @@ dig @1.1.1.1 <domain> NS        # SERVFAIL → it's DNS, not Smartlead
 
 ## Gotchas
 
-- **Smartlead errors are often HISTORICAL.** Smartlead surfaces the *last* error,
-  not a live one — `warmup_details.blocked_reason` keeps the old text (with its
-  original date) until the next successful cycle. Check the *date* and the live
-  `status`, not the message.
+- **`blocked_reason` text can be stale, but a `553` on a live send is REAL.**
+  `warmup_details.blocked_reason` keeps its old text until the next successful
+  cycle — but do NOT generalize that to "the error is historical." If a real send
+  (DATA) returns `553 Invalid Domain`, the domain is send-blocked right now. Confirm
+  by sending, not by reading a cached field.
 - **`is_active=false` ≠ broken.** It just means "not polled." Different fix
   (activate) from a domain failure (DNS/Zoho).
 - **DKIM + verify records are per-domain** and can't be copied between domains —
