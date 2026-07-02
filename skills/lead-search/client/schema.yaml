@@ -71,7 +71,12 @@ methods:
         required: false
         description: >
           Pipeline config: { spidersite: { enabled, mode }, spiderverify: { enabled },
-          vayapin: { enabled } }. Defaults to full pipeline.
+          vayapin: { enabled }, smartlead: { enabled, connection_id, remote_campaign_id,
+          only_with_vayapin_seo } }. Defaults to full pipeline. smartlead auto-exports the
+          VERIFIED leads into a SmartLead outreach campaign at completion — discover
+          connection_id + remote_campaign_id FIRST via the SpiderMail skill
+          (listOutreachConnections / listOutreachCampaigns). Campaign recipe:
+          @spideriq/spiderflows smartlead-export.
       test:
         type: boolean
         required: false

@@ -36,6 +36,6 @@ searchLeads → getJobResults → lead-enrichment_moveTask (qualify matches)
 
 ## Methods
 
-- `searchLeads(search_query, country_code?, location?, max_results?, lang?, workflow?, test?)` — Run the full lead generation pipeline for a search query in a location. Maps → Site → Verify → VayaPin. Returns job_id to poll for results.
+- `searchLeads(search_query, country_code?, location?, max_results?, lang?, workflow?, test?)` — Run the full lead generation pipeline for a search query in a location. Maps → Site → Verify → VayaPin. Returns job_id to poll for results. Set `workflow.smartlead = { enabled, connection_id, remote_campaign_id }` to auto-export the verified leads into a SmartLead outreach campaign at completion (discover the ids via the SpiderMail skill first; recipe in `@spideriq/spiderflows`).
 - `getJobStatus(job_id)` — Check status of a lead search job.
 - `getJobResults(job_id)` — Get results of a completed lead search.
