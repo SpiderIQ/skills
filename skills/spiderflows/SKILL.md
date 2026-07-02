@@ -139,6 +139,18 @@ explicitly wants published map profiles. When in doubt, ask — you cannot undo 
 published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md))
 </HARD-GATE>
 
+<HARD-GATE name="smartlead-target-is-live-outreach">
+`workflow.smartlead.enabled=true` pushes the campaign's **verified** leads into a
+**live SmartLead outreach campaign** at completion — those contacts then get
+**emailed** by that campaign's sequence. So: (1) NEVER guess the target — you MUST
+discover `connection_id` (SpiderMail `listOutreachConnections`) and
+`remote_campaign_id` (`listOutreachCampaigns`) and confirm the campaign name with
+the user before enabling; (2) it requires `spiderverify.enabled=true` (only verified
+emails export — leave verify ON); (3) it only fires when the run reaches a terminal
+state. If the user just wants a lead *list* (not to send email yet), do NOT enable
+smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md))
+</HARD-GATE>
+
 ## Rules (Non-Negotiable)
 
 **Auth:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (a PAT). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP, never echo the secret into logs or chat.
@@ -147,7 +159,7 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 
 **Query construction differs by mode.** Single: put the location *inside* the query (`"plumbers in Berlin"`) or pass `location` — not both. Campaign: the query is *bare* (`"plumbers"`); location comes from `country_code` + `filter`. A city in both double-targets and wastes the run.
 
-**Stages are opt-in past Maps.** `workflow.spidersite.enabled`, `workflow.spiderverify.enabled`, `workflow.vayapin.enabled` gate each stage. SpiderVerify and VayaPin both require SpiderSite (422 otherwise). Maps always runs.
+**Stages are opt-in past Maps.** `workflow.spidersite.enabled`, `workflow.spiderverify.enabled`, `workflow.vayapin.enabled` gate each stage. SpiderVerify and VayaPin both require SpiderSite (422 otherwise). Maps always runs. **SmartLead export** (`workflow.smartlead.enabled`) is a FINALIZE step, not a pipeline stage — it needs `spiderverify.enabled=true` (only verified leads export) and runs once, at terminal-close. See the `smartlead-target-is-live-outreach` HARD-GATE.
 
 **Read results through IDAP, by `campaign_id`.** `GET /api/v1/idap/businesses?campaign_id=<id>&include=emails,phones,domains,pins`. Don't parse progress endpoints for data. (`pins` is read via `include`, not as a standalone type.)
 
@@ -163,6 +175,7 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | run a US campaign deep by ZIP code (one state at a time — "state = country") | [flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md](flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
+| auto-export a campaign's verified leads into a SmartLead outreach campaign | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |
 | read the businesses, emails, phones, and pins a run produced | [flows/maps-site-verify-vayapin/recipes/read-results.md](flows/maps-site-verify-vayapin/recipes/read-results.md) |
 | research ONE company → a full account brief (domain, registry, LinkedIn, emails) | [flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md) |
 | enrich a LIST of companies (KYC / list enrichment, up to 50) | [flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md) |
@@ -191,6 +204,7 @@ published pin. ([flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows
 | Site | `mode` (contacts / compendium / leads / full), `max_pages`, `extract_team`, CHAMP `product_description`+`icp_description` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
 | Verify | `check_gravatar`, `check_dnsbl`, `max_emails_per_business` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
 | VayaPin | `enabled` (path-dependent default — see the HARD-GATE) | [flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md) |
+| SmartLead (finalize) | `enabled`, `connection_id`, `remote_campaign_id`, `only_with_vayapin_seo` — auto-export verified leads at completion | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |
 
 ## Methods (native tool calls — opvsHUB & marketplace)
 

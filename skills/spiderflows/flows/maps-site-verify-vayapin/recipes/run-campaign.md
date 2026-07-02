@@ -52,6 +52,19 @@ A campaign's `filter` decides how many locations it fans out to. `mode: "all"` o
    `total_locations`. If `total_locations` is larger than intended, `stop` it now
    (see [manage-campaign.md](manage-campaign.md)).
 
+   **Optional — auto-export verified leads to SmartLead.** Add a `smartlead` block to
+   `workflow` and the campaign's verified leads are pushed to that SmartLead campaign
+   automatically when the run finishes (keep `spiderverify.enabled: true`). You must
+   discover the two ids first — see [smartlead-export.md](smartlead-export.md):
+   ```json
+   "workflow": {
+     "spidersite":  { "enabled": true, "mode": "leads" },
+     "spiderverify": { "enabled": true },
+     "vayapin":     { "enabled": false },
+     "smartlead":   { "enabled": true, "connection_id": 7, "remote_campaign_id": "3534935" }
+   }
+   ```
+
 5. **Watch** via `GET /jobs/spiderMaps/campaigns/{id}/stage-progress` (velocity ETA)
    or the SSE stream.
 

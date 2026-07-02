@@ -58,6 +58,9 @@ whenever the user named **one** place.
 - **Location in both places** wastes the run — pick one.
 - **Stage dependencies**: Verify needs Site; VayaPin needs Site. The API rejects
   `verify`-without-`site` with a 422.
+- **Auto-export to SmartLead**: add a `workflow.smartlead` block to push the verified
+  leads into a SmartLead campaign at completion — see
+  [smartlead-export.md](smartlead-export.md) (discover the ids first; it sends real email).
 
 ## Verify
 
