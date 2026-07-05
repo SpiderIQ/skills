@@ -112,6 +112,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
 | Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
 | Embed a live AI agent (SDR/support/concierge/booking) on the site | `agent_flow_create`→`agent_flow_publish`→`agent_flow_preview_url`/`agent_flow_get_embed_snippet` | `references/agent-embed.md` |
+| Add that agent to the client's OWN React/Vite/Next app (BYOS, npm SDK) | `agent_flow_create`→`agent_flow_publish` then `@spideriq/agent-react` (`<SpiderAgent>`/`useSpiderAgent`) | `references/add-agent-react-app.md` |
 | Design/brand a mountable AI-agent COMPONENT (section/widget/concierge/headless) | `content_create_agent_component` (MCP) · or `createComponent` (marketplace_category=agent) →`insertSection` | `references/agent-component-authoring.md` |
 | Host an image/video → CDN URL | `uploadMedia` · `listMedia` | `references/media.md` |
 | Browse + insert a marketplace section / bg-video | `listMarketplaceComponents` · `listBgVideos`→`insertSection` | `references/marketplace.md` |
@@ -179,6 +180,9 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 - `references/agent-embed.md` — embed a live OPVS AI agent as a `kind='agent'`
   flow (standalone/inline/concierge/headless), the secret-free binding, the
   3-tier customization, and the surface-vs-conversation honesty split.
+- `references/add-agent-react-app.md` — BYOS: put that agent in the client's OWN
+  React/Vite/Next app via the `@spideriq/agent-react` npm SDK (`<SpiderAgent>` +
+  `useSpiderAgent()`) or zero-dep `@spideriq/agent-core`; SSR-safe, origin-bind gotcha.
 - `references/media.md` — upload/host media, import-from-url, media budget.
 - `references/marketplace.md` — browse + insert sections / bg-videos, author
   marketplace assets.

@@ -68,14 +68,24 @@ pastes a key into the binding, that's the error you'll get; strip it.
 5. visual-check the URL (assert dom.shadow_hosts, NOT body_text_preview — the agent is in shadow DOM)
 ```
 
+**Never hand-write the mount markup.** Three surfaces emit the identical, corrected snippet from one
+shared source (`buildAgentEmbedSnippet` in `@spideriq/core`) — they can never drift:
+- **MCP** — `agent_flow_get_embed_snippet { flow_id, mode }` (or `agent_flow { op:"get_embed_snippet" }`)
+- **CLI** — `spideriq agent embed-snippet <flow_id> --mode inline|concierge` (pure local, no API call)
+- **Dashboard** — the **Copy embed code** button on the agent flow
+
 ## Four mount surfaces
 
 | Mode | How | Use for |
 |---|---|---|
 | **Standalone** | publish + link `/f/<id>` | a dedicated "talk to us" page |
-| **Inline** | `<div data-spiderflow-id data-spiderflow-kind="agent">` + loader | agent in a marketing page |
-| **Concierge** | same + `data-spiderflow-mode="concierge"` | site-wide floating bubble |
+| **Inline** | `<div data-spiderflow-flow="<id>" data-spiderflow-kind="agent" data-spiderflow-mode="inline">` + loader | agent in a marketing page |
+| **Concierge** | same, `data-spiderflow-mode="concierge"` | site-wide floating bubble |
 | **Headless** | `<opvs-agent headless>` | client builds 100% of the UI |
+
+> **Corrected snippet contract:** the loader keys on **`data-spiderflow-flow`** (+ `data-spiderflow-kind="agent"`
+> + `data-spiderflow-mode`). An element using the old `data-spiderflow-id` / `data-opvs-agent` name is
+> silently skipped and never mounts — always generate the snippet from one of the three surfaces above.
 
 Agents render **in-DOM (open shadow root), never an iframe** — that's what makes them customizable
 and lets the SSE stream through.
