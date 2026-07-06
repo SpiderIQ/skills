@@ -101,6 +101,7 @@ guidance:
     - "Tiptap body: page/post/doc `body` is a Tiptap JSON document object, not an HTML string."
     - "AGENT EMBED (kind='agent'): to put a live AI agent on the site, use the agent_flow_* tools (agent_flow_create/publish + agent_flow_preview_url/get_embed_snippet — kitchen-sink @spideriq/mcp only). The SURFACE is live; the live CONVERSATION needs an OPVS agent hire + a bound origin. The flow.agent binding is URLs+ids ONLY — any credential-shaped key 422s. Never hand-compose /f/<id> or the embed snippet. See references/agent-embed.md."
     - "AGENT COMPONENT (marketplace_category='agent') is a DIFFERENT primitive from the agent FLOW: it's a reusable, brand-skinned <opvs-agent> BLOCK in a form_factor (section|widget|concierge|headless). MCP: content_create_agent_component bakes the whole shape. Raw HTTP: createComponent with js_runtime=web-component + agent_meta{role,surface,form_factor} + dependencies=['opvs-agent'] — and the css column is IGNORED (skin via inline --opvs-agent-* tokens). Browse via listMarketplaceComponents{category:'agent', agent_form_factor:…}. See references/agent-component-authoring.md."
+    - "AGENT HIRE LIFECYCLE (headless — NO dashboard): TWO feeds. To re-embed an agent I ALREADY hired (VayaPin's case, FREE): listAgentRoster → hireAgent <catalog_profile_id> → listHiredAgents (get the flow_id) → embed. To BUY a new one (OPVS-billed): listAgentCatalog → hireAgent <component_id> → … . hireAgent returns a `status` (payment_required|provisioning|active) — NOT an HTTP 402/202; branch on the field. Hire keys: catalog_profile_id (Feed A, free) XOR component_id (Feed B, billed) — Feed-B profile_id is only a cross-check. After hiring, the visitor origin must be allowlisted on the agent's OPVS binding or the embed 403s. See references/agent-hire-discover.md."
 
 methods:
 
@@ -1104,6 +1105,91 @@ methods:
       is_featured:       { type: boolean, required: false }
       tag:               { type: string,  required: false }
       agent_form_factor: { type: string,  required: false, description: 'Only with category=agent — section | widget | concierge | headless (maps to the agent_meta.form_factor JSONB filter).' }
+    response: { format: json }
+
+  # ──────────────────── AGENT LIFECYCLE (roster · catalog · hire · list) ────────
+  # Give a headless client agent (NO dashboard) the two hire feeds + embed loop.
+  # TWO feeds (OPVS AG.0 contract): listAgentRoster = agents I ALREADY hired (Feed
+  # A — free re-embed, VayaPin's case); listAgentCatalog = the GLOBAL storefront to
+  # BUY a new agent (Feed B — OPVS-billed). Then hireAgent → listHiredAgents → copy
+  # flow_id → agent_flow_get_embed_snippet / <SpiderAgent flowId=…>.
+  # See references/agent-hire-discover.md.
+  listAgentRoster:
+    description: >
+      List MY OPVS-hired roster — Feed A. The agents this tenant ALREADY hired from
+      OPVS (brand-scoped), each with `catalog_profile_id` (the FREE-reuse hire key
+      for hireAgent) + display_name/role_title/status/agent_type/avatar_url/pricing.
+      This is the "I already hired them, let me embed one" path (VayaPin's 39 incl.
+      Zara). Distinct from listHiredAgents (my LOCAL kind='agent' flows).
+    guidance:
+      use: "list the agents I already hired from OPVS to re-embed one for free (NO new charge)"
+      next: "hireAgent with the catalog_profile_id (a free reuse); then listHiredAgents for the flow_id"
+      warn: "a 409 OPVS_NOT_CONNECTED / OPVS_BRAND_NOT_CONFIGURED means the workspace's OPVS account/brand isn't wired up yet."
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/agents/roster
+    params:
+      format: { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  listAgentCatalog:
+    description: >
+      List the GLOBAL OPVS agent storefront — Feed B. Every PUBLISHED 'agent'
+      profile any client can BUY (NOT brand-scoped; a new hire is OPVS-billed). For
+      agents THIS tenant already hired (a free re-embed), use listAgentRoster. Each
+      tile carries `id` (the hire key you pass to hireAgent) +
+      `agent_meta.opvs_catalog.profile_id`. This is `category=agent` on
+      listMarketplaceComponents, surfaced as its own verb for discovery.
+    guidance:
+      use: "discover a NEW agent to BUY (e.g. find 'Zara') BEFORE hireAgent; for an agent you already own use listAgentRoster instead"
+      next: "hireAgent with the tile's id; then listHiredAgents to get the flow_id"
+      telemetry_signal_default: "warm"
+    http: GET /content/marketplace/components
+    params:
+      category:          { type: string, required: false, description: "Fixed 'agent' for this verb — the client sends category=agent." }
+      agent_form_factor: { type: string, required: false, description: 'section | widget | concierge | headless' }
+      tag:               { type: string, required: false }
+      limit:             { type: integer, required: false }
+    response: { format: json }
+
+  hireAgent:
+    description: >
+      Hire an OPVS agent → mint the bound kind='agent' flow. TWO hire keys (pass
+      exactly one): `catalog_profile_id` (Feed A, from listAgentRoster — a FREE
+      reuse of an agent you own) OR the path `component_id` (Feed B, from
+      listAgentCatalog — BUYS a new agent, OPVS-billed). SpiderPublish runs NO
+      checkout. ALWAYS returns HTTP 200 with a `status` discriminator (the backend
+      flattens OPVS 402/202/200): branch on it — "payment_required" (open
+      handoff_url, then re-call), "provisioning" (re-call with the echoed flow_id
+      to poll; honor retry_after), "active" (flow_id is live — that's what you embed).
+    guidance:
+      use: "mint a flow: from listAgentRoster (free reuse) via by-profile, or from listAgentCatalog (buy) via the component_id path"
+      next: "on status=active, listHiredAgents / agent_flow_get_embed_snippet with the flow_id. AFTER hiring, allowlist the visitor origin on the agent's OPVS binding or the embed session-mint 403s."
+      warn: "one feed per hire — catalog_profile_id (Feed A, free) XOR component_id (Feed B, billed). Feed-B profile_id is an OPTIONAL cross-check, not the key."
+    http: POST /marketplace/agents/{by-profile/{catalog_profile_id}|{component_id}}/hire
+    params:
+      component_id:       { type: string, required: false, description: 'Feed B hire key — marketplace tile id from listAgentCatalog (path; buys a new agent).' }
+      catalog_profile_id: { type: string, required: false, description: 'Feed A hire key — OPVS profile id from listAgentRoster (path on the by-profile route; a free reuse).' }
+      display_name:       { type: string, required: false, description: 'Feed A only — display name for the minted flow (defaults to "Agent").' }
+      profile_id:         { type: string, required: false, description: 'Feed B only — optional OPVS profile_id cross-check (agent_meta.opvs_catalog.profile_id).' }
+      project_id:         { type: string, required: false, description: 'sp_project_id (proj_…); workspace default resolved server-side when omitted.' }
+      flow_id:            { type: string, required: false, description: 'Re-send the echoed flow_id to poll a provisioning (202→status=provisioning) hire.' }
+      embed_origins:      { type: array,  required: false, description: 'Foreign BYOS origins (scheme://host) to UNION into the OPVS bind allowlist.' }
+    response: { format: json }
+
+  listHiredAgents:
+    description: >
+      List MY LOCAL kind='agent' flows — the agents already EMBEDDED on this
+      workspace/project, each with the `agent_flow_id` UUID to mount, plus
+      name/status/role. This is the flow_id-discovery to re-embed an agent already
+      minted. Distinct from listAgentRoster (agents hired on OPVS, keyed by
+      catalog_profile_id, not yet necessarily a local flow).
+    guidance:
+      use: "find the flow_id of an agent already minted as a local flow (to embed it)"
+      next: "agent_flow_get_embed_snippet / agent_flow_preview_url with the agent_flow_id"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/agents/hireable
+    params:
+      format: { type: string, required: false, description: 'json | yaml | md' }
     response: { format: json }
 
   listBgVideos:
