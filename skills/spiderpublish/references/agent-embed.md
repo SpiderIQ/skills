@@ -112,3 +112,5 @@ Full token/part/event/headless reference: **`apps/opvs-agent/CUSTOMIZATION.md`**
 - **Don't reach for `spiderflows`/`lead-search`** — those FIND prospects. This embeds an agent.
 - **The binding is authored by OPVS**, not by you. If there's no binding yet, create the flow and
   tell the client the surface will wait for its OPVS agent hire.
+- **Want the agent to read the page it's on?** That's page-grounding — opt in with `pageContext`
+  (automatic on hosted pages). See [`page-grounding.md`](page-grounding.md).

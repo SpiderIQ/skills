@@ -55,9 +55,10 @@ import { SpiderAgent } from '@spideriq/agent-react';
 ```
 
 Required props: `flowId`, `apiUrl`. Optional: `mode` (default `inline`), `theme`, `hideHeaders`,
-`title`/`subtitle` (in-card header), `className`/`style`, `onError`, `onReady(el)`. Changing
-`flowId`/`apiUrl`/`mode` re-mounts a fresh session; `theme`/`title`/`subtitle` are read at mount
-(change them live with a React `key`).
+`title`/`subtitle` (in-card header), `className`/`style`, `onError`, `onReady(el)`, and
+**`pageContext`** (opt-in page-grounding — a CSS selector or `true`; see `page-grounding.md`).
+Changing `flowId`/`apiUrl`/`mode` re-mounts a fresh session; `theme`/`title`/`subtitle` are read at
+mount (change them live with a React `key`).
 
 ### B — `useSpiderAgent()` hook (headless — client builds the UI)
 

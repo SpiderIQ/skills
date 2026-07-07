@@ -114,6 +114,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Re-embed an agent I ALREADY hired on OPVS (free), or BUY + hire a new one, headlessly (NO dashboard), then get its flow_id to embed | `listAgentRoster`(mine, free)/`listAgentCatalog`(buy)→`hireAgent`→`listHiredAgents` (or CLI `spideriq agent roster\|catalog\|hire\|list`) → `agent_flow_get_embed_snippet` | `references/agent-hire-discover.md` |
 | Embed a live AI agent (SDR/support/concierge/booking) on the site | `agent_flow_create`→`agent_flow_publish`→`agent_flow_preview_url`/`agent_flow_get_embed_snippet` | `references/agent-embed.md` |
 | Add that agent to the client's OWN React/Vite/Next app (BYOS, npm SDK) | `agent_flow_create`→`agent_flow_publish` then `@spideriq/agent-react` (`<SpiderAgent>`/`useSpiderAgent`) | `references/add-agent-react-app.md` |
+| Make the embedded agent READ the page it's on ("what's on this page?" / grounded answers) | `pageContext` prop/attr (no tool — SDK property); auto on hosted pages | `references/page-grounding.md` |
 | Design/brand a mountable AI-agent COMPONENT (section/widget/concierge/headless) | `content_create_agent_component` (MCP) · or `createComponent` (marketplace_category=agent) →`insertSection` | `references/agent-component-authoring.md` |
 | Host an image/video → CDN URL | `uploadMedia` · `listMedia` | `references/media.md` |
 | Browse + insert a marketplace section / bg-video | `listMarketplaceComponents` · `listBgVideos`→`insertSection` | `references/marketplace.md` |
@@ -184,6 +185,10 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 - `references/add-agent-react-app.md` — BYOS: put that agent in the client's OWN
   React/Vite/Next app via the `@spideriq/agent-react` npm SDK (`<SpiderAgent>` +
   `useSpiderAgent()`) or zero-dep `@spideriq/agent-core`; SSR-safe, origin-bind gotcha.
+- `references/page-grounding.md` — make the embedded agent READ the page it's on:
+  the `pageContext` opt-in (prop/attr/loader), auto-vs-selector, the privacy model
+  (visible text only, ≤8 KB, forms/passwords/`[data-private]` stripped), and the
+  automatic hosted-page (`{url}.md`) path. No CLI/MCP tool — a client-SDK property.
 - `references/media.md` — upload/host media, import-from-url, media budget.
 - `references/marketplace.md` — browse + insert sections / bg-videos, author
   marketplace assets.
