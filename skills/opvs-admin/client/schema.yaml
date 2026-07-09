@@ -84,14 +84,53 @@ methods:
         type: object
         required: false
         description: Memory search config (provider, model, query)
+        properties:
+          provider:
+            type: string
+            required: false
+            description: Memory search provider
+          model:
+            type: string
+            required: false
+            description: Model used for memory search
+          query:
+            type: string
+            required: false
+            description: Query configuration for memory search
       contextPruning:
         type: object
         required: false
         description: Context pruning config (mode, ttl, keepLastAssistants)
+        properties:
+          mode:
+            type: string
+            required: false
+            description: Context pruning mode
+          ttl:
+            type: integer
+            required: false
+            description: Time-to-live before context is pruned
+          keepLastAssistants:
+            type: integer
+            required: false
+            description: Number of most recent assistant messages to retain
       compaction:
         type: object
         required: false
         description: Compaction config (mode, reserveTokensFloor, memoryFlush)
+        properties:
+          mode:
+            type: string
+            required: false
+            description: Compaction mode
+          reserveTokensFloor:
+            type: integer
+            required: false
+            description: Minimum tokens to reserve during compaction
+          memoryFlush:
+            type: boolean
+            required: false
+            description: Whether to flush memory during compaction
     response:
       format: json
 
@@ -122,6 +161,15 @@ methods:
         type: object
         required: false
         description: YAML frontmatter fields (description, homepage, etc.)
+        properties:
+          description:
+            type: string
+            required: false
+            description: Skill description
+          homepage:
+            type: string
+            required: false
+            description: Skill homepage URL
       context:
         type: string
         required: false
@@ -234,6 +282,32 @@ methods:
         description: >
           Schedule config: {kind: "cron"|"every"|"at", expr/everyMs/at,
           tz (optional), staggerMs (optional)}
+        properties:
+          kind:
+            type: enum
+            values: [cron, every, at]
+            required: true
+            description: Schedule type
+          expr:
+            type: string
+            required: false
+            description: Cron expression (when kind is "cron")
+          everyMs:
+            type: integer
+            required: false
+            description: Interval in milliseconds (when kind is "every")
+          at:
+            type: string
+            required: false
+            description: One-shot timestamp (when kind is "at")
+          tz:
+            type: string
+            required: false
+            description: Timezone (optional)
+          staggerMs:
+            type: integer
+            required: false
+            description: Stagger delay in milliseconds (optional)
       sessionTarget:
         type: enum
         values: [main, isolated]
@@ -245,12 +319,40 @@ methods:
         description: >
           Payload config: {kind: "agentTurn"|"systemEvent",
           message/text}
+        properties:
+          kind:
+            type: enum
+            values: [agentTurn, systemEvent]
+            required: true
+            description: Payload type
+          message:
+            type: string
+            required: false
+            description: Message text (when kind is "agentTurn")
+          text:
+            type: string
+            required: false
+            description: Event text (when kind is "systemEvent")
       delivery:
         type: object
         required: false
         description: >
           Delivery config: {mode: "announce"|"webhook"|"none",
           channel, to}
+        properties:
+          mode:
+            type: enum
+            values: [announce, webhook, none]
+            required: false
+            description: Delivery mode
+          channel:
+            type: string
+            required: false
+            description: Channel to deliver to
+          to:
+            type: string
+            required: false
+            description: Recipient identifier
       enabled:
         type: boolean
         required: false
@@ -482,10 +584,54 @@ methods:
         type: object
         required: false
         description: Template variables — brand_name, brand_id, persona_name, persona_code, industry, onboarded_date
+        properties:
+          brand_name:
+            type: string
+            required: false
+            description: Brand name
+          brand_id:
+            type: string
+            required: false
+            description: Brand identifier
+          persona_name:
+            type: string
+            required: false
+            description: Persona display name
+          persona_code:
+            type: string
+            required: false
+            description: Persona code
+          industry:
+            type: string
+            required: false
+            description: Industry
+          onboarded_date:
+            type: string
+            required: false
+            description: Onboarding date
       moltbot_overrides:
         type: object
         required: false
         description: Runtime config overrides — model, tools (profile, alsoAllow)
+        properties:
+          model:
+            type: string
+            required: false
+            description: Model override for this agent
+          tools:
+            type: object
+            required: false
+            description: Tools config (profile, alsoAllow)
+            properties:
+              profile:
+                type: string
+                required: false
+                description: Tools profile
+              alsoAllow:
+                type: array
+                items: string
+                required: false
+                description: Additional tool groups to allow
     response:
       format: json
 
@@ -586,6 +732,15 @@ methods:
         type: object
         required: true
         description: Account configuration (token, webhook, etc.)
+        properties:
+          token:
+            type: string
+            required: false
+            description: Channel account token
+          webhook:
+            type: string
+            required: false
+            description: Webhook URL
     response:
       format: json
 

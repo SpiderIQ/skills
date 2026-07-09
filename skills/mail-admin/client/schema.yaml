@@ -245,7 +245,21 @@ methods:
           One or more mailboxes to enable IMAP for (1-500). Each item is
           {account_id, zuid, email?} — account_id + zuid from listMailboxes;
           email is optional, for audit/labeling.
-        items: object
+        items:
+          type: object
+          properties:
+            account_id:
+              type: string
+              required: true
+              description: Provider account id (from listMailboxes).
+            zuid:
+              type: string
+              required: true
+              description: Provider zuid (from listMailboxes).
+            email:
+              type: string
+              required: false
+              description: Mailbox email (optional, for audit/labeling).
     response:
       format: json
 

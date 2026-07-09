@@ -1,0 +1,13 @@
+{
+  "title": "Authored catalog copy survives the 6h discovery sync via a partial PATCH + the is_curated stamp — not by fighting the sync",
+  "summary": "The SpiderGate catalog carries two layers on one row: facts the 6h discovery sync refreshes (context window, pricing, provider, probe status) and editorial a human authors (description, tags, badges, sort_order, hidden, alias display copy, links). The naive design — author into the same columns the sync writes — loses every edit on the next sync tick. GateBoard A.1 (mig 406) + C.1 solved it two ways that this skill's tools inherit: (1) every authoring endpoint is a PARTIAL, COALESCE-preserve PATCH — only the fields in the request are written, so an agent touches one field without disturbing the rest, and badges/tags are wholesale per-field replaces; (2) authoring a model stamps is_curated=TRUE, and the discovery sync's ON CONFLICT DO UPDATE set-lists deliberately OMIT the authored columns AND branch on is_curated (CASE WHEN is_curated keep-branch) so a curated row's display_name is never overwritten. C.1's test-live proved it: PATCH /admin/gate/models/1/meta set description+tags, then the ACTUAL discovery-sync ON CONFLICT set-list ran against that row with a fresh display_name — is_curated/description/tags ALL preserved and display_name NOT overwritten. The lesson for anyone extending the catalog: authoring is sticky by design; never add an authored column to a sync set-list, and keep writes partial so agents never have to read-modify-write a whole row.",
+  "created_at": "2026-07-08",
+  "updated_at": "2026-07-08",
+  "tags": ["catalog", "editorial", "coalesce-preserve", "is_curated", "discovery-sync", "spidergate", "gateboard"],
+  "references": [
+    "GateBoard A.1 (#2323, mig 406) — added authored columns (description, long_description, tags, badges, sort_order, hidden, is_curated, curated_by, curated_at) to gate_model_catalog + the is_curated COALESCE keep-branch on BOTH discovery-sync ON CONFLICT sites (model_catalog.py Site A line 386, Site B line 452)",
+    "GateBoard C.1 (#2328) — app/api/v1/admin_gate/catalog_meta.py: the PATCH models/aliases/media meta + POST/DELETE links authoring API; test-live confirmed authored-preserve survives a live discovery-sync ON CONFLICT run (is_curated keep-branch fired)",
+    "packages/mcp-tools/src/admin/gate-catalog.ts — the gate_catalog_* MCP tools this skill wraps (COALESCE-preserve partial writes, empty-edit 422 guard)",
+    "SpiderGate LEARNINGS — asyncpg returns JSONB as strings (badges/metadata json.dumps'd on write, coerced on read) + the {alias:path}/{media_id:path} single-segment 404 trap"
+  ]
+}

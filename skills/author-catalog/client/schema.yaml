@@ -1,0 +1,308 @@
+# Author-Catalog Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# These wrap /api/v1/admin/gate/* (the C.1 authoring endpoints) and are the admin
+# mirror of the gate_catalog_* MCP tools (mcp-admin slice) and the
+# `spideriq gate catalog …` CLI. Auth is the PLATFORM admin key (X-Admin-Key),
+# NOT a client PAT — super_admin only, platform-wide (one shared catalog, no brand
+# scoping). Every write is COALESCE-preserve: only the fields you supply change.
+# The setLink method fans out to the split REST endpoints (POST /links |
+# DELETE /links/{id}) via an action=add|remove argument.
+
+name: author-catalog
+version: "0.1.0"
+description: >
+  Author the SpiderGate model-catalog editorial — model/alias/media description,
+  tags, badges, sort order, visibility, and per-model reference links (the copy
+  the client catalog + model leaderboard render). Partial + COALESCE-preserve;
+  authoring stamps the row is_curated so the discovery sync stops overwriting it.
+  super_admin-only, platform-wide.
+category: admin
+base_url: /api/v1/admin/gate
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - author the model catalog
+  - write a model description
+  - add a badge to a model
+  - tag a gateway model
+  - hide a model from the catalog
+  - set an alias display name
+  - attach a reference link to a model
+  - reorder the model leaderboard
+
+guidance:
+  use: >
+    Reach for this to write the EDITORIAL a client reads about a gateway model —
+    a description, tags, badges, sort order, visibility, an alias's display copy,
+    a media model's editorial, or a reference link. Every write is partial
+    (COALESCE-preserve): send only what you want to change. super_admin +
+    X-Admin-Key; the catalog is shared platform-wide.
+  not:
+    - "manage-routing (gate_routing_*) → change WHICH model an alias ROUTES to (the served chain) — not the copy about it"
+    - "use-the-gateway (@spideriq/gateway-skills) → SEND a completion through the gateway — not author the catalog"
+    - "the gateway catalog READ skill → what CLIENTS see; this is the WRITE side that produces it"
+    - "integrations / vault → provider API KEYS — unrelated to catalog editorial"
+  # Every selector is a typed id / alias — no free-text search field anywhere in
+  # this surface. intent_aliases is explicitly empty (declared, not implicit — the
+  # runtime never guesses; Q1).
+  intent_aliases: []
+  pitfalls:
+    - "Every set-meta is COALESCE-preserve: fields you OMIT are preserved, not blanked. To change one field, send ONLY that field — do not re-send the whole row."
+    - "badges and tags are WHOLESALE per-field replaces (not merges) — send the COMPLETE list you want for that field, or omit it to leave it untouched."
+    - "An empty edit (no editorial fields) is a 422 ('No editorial fields supplied.'). Supply at least one field."
+    - "setModelMeta stamps is_curated=TRUE — intended: the 6h discovery sync then stops overwriting the row's display_name (that is how authored copy survives). Not reversible via this surface."
+    - "setLink is idempotent per (model, url) — re-adding a url UPDATES that link; removal is by link_id, scoped to the model. Third-party links MUST carry is_authored_by_us=false + source + attribution (HARD-GATE)."
+    - "alias and media_id can contain a slash (opvs/coding, provider/model) — the tools URL-encode it; pass the value plain."
+
+methods:
+  setModelMeta:
+    description: >
+      Author the editorial copy on a gate_model_catalog row (partial update). Set
+      any of description / long_description / tags / badges / sort_order / hidden —
+      only supplied fields are written, everything else preserved. Stamps
+      is_curated=TRUE so the discovery sync stops overwriting display_name. An
+      empty edit is a 422.
+    guidance:
+      use: "Write or adjust a model's client-facing copy (description, tags, badges, sort, visibility)."
+      next: "setLink (attach a review/paper to the model), setModelMeta again (adjust another field)"
+      warn: "Partial + COALESCE-preserve — send ONLY the fields you want to change. badges/tags REPLACE the whole list. This flips the row to is_curated (sync stops managing display_name)."
+      telemetry_signal_default: "warm"
+    http: PATCH /models/{model_id}/meta
+    params:
+      model_id:
+        type: integer
+        required: true
+        description: Numeric gate_model_catalog.id of the model to author (≥1).
+      description:
+        type: string
+        required: false
+        description: Short editorial description (≤2000 chars).
+      long_description:
+        type: string
+        required: false
+        description: Long-form editorial copy (≤20000 chars).
+      tags:
+        type: array
+        required: false
+        description: Editorial tags (each 1–64 chars, ≤50). Replaces the whole tag list.
+        items: string
+      badges:
+        type: array
+        required: false
+        description: >
+          Authored badges — each {label (1–48 chars, required), tone (≤24 chars,
+          optional display hint like gold/blue/green)}. Replaces the whole badge
+          list (≤20).
+        items:
+          type: object
+          properties:
+            label:
+              type: string
+              required: true
+              description: Badge label (1–48 chars).
+            tone:
+              type: string
+              required: false
+              description: Optional display hint (≤24 chars), e.g. gold/blue/green.
+      sort_order:
+        type: integer
+        required: false
+        description: Manual sort weight, lower sorts first (0–1000000).
+      hidden:
+        type: boolean
+        required: false
+        description: Hide this model from the client catalog.
+    response:
+      format: json
+
+  setAliasMeta:
+    description: >
+      Author a task alias's editorial (gate_catalog_alias_meta) — insert-or-update
+      (upsert). Set any of display_name / description / use_case / badges /
+      sort_order / hidden; only supplied fields are written, an existing row's
+      other fields are preserved. The client catalog read prefers this DB row over
+      the hardcoded alias fallback. alias may contain a slash (opvs/coding).
+    guidance:
+      use: "Write the display name / use-case / badges a client sees for a task alias (spideriq/coding, opvs/creative)."
+      next: "setModelMeta (author the models the alias routes to), setAliasMeta again (adjust another alias)"
+      warn: "Upsert + COALESCE-preserve — send only the fields you want. This authors the alias COPY, not its routing chain (that's manage-routing)."
+      telemetry_signal_default: "warm"
+    http: PATCH /routing/aliases/{alias}/meta
+    params:
+      alias:
+        type: string
+        required: true
+        description: Task alias to author, e.g. spideriq/coding or opvs/creative (embedded slash OK).
+      display_name:
+        type: string
+        required: false
+        description: Human display name for the alias (≤128 chars).
+      description:
+        type: string
+        required: false
+        description: Short editorial description (≤2000 chars).
+      use_case:
+        type: string
+        required: false
+        description: When to reach for this alias (≤512 chars).
+      badges:
+        type: array
+        required: false
+        description: Authored badges — each {label, tone?}. Replaces the whole list (≤20).
+        items:
+          type: object
+          properties:
+            label:
+              type: string
+              required: true
+              description: Badge label (1–48 chars).
+            tone:
+              type: string
+              required: false
+              description: Optional display hint (≤24 chars), e.g. gold/blue/green.
+      sort_order:
+        type: integer
+        required: false
+        description: Manual sort weight, lower first (0–1000000).
+      hidden:
+        type: boolean
+        required: false
+        description: Hide this alias from the client catalog.
+    response:
+      format: json
+
+  setMediaMeta:
+    description: >
+      Author a gate_media_models row's editorial (partial update). display_name is
+      a real column; the rest (description / long_description / tags / badges /
+      sort_order / hidden) merges into the row's metadata JSONB under an editorial
+      block. Only supplied fields are written. media_id is provider/model.
+    guidance:
+      use: "Write client-facing copy for a media (image/video) model."
+      next: "setMediaMeta again (adjust another field), setLink (if the model_id has links)"
+      warn: "Partial + COALESCE-preserve. Non-display_name fields land in metadata.editorial, not top-level columns (media has no dedicated authored columns)."
+      telemetry_signal_default: "warm"
+    http: PATCH /media-models/{media_id}/meta
+    params:
+      media_id:
+        type: string
+        required: true
+        description: gate_media_models id, e.g. openai/gpt-image-1 (provider/model, embedded slash OK).
+      display_name:
+        type: string
+        required: false
+        description: Human display name (≤128 chars).
+      description:
+        type: string
+        required: false
+        description: Short editorial description (≤2000 chars).
+      long_description:
+        type: string
+        required: false
+        description: Long-form editorial copy (≤20000 chars).
+      tags:
+        type: array
+        required: false
+        description: Editorial tags (≤50). Merged into metadata.editorial.
+        items: string
+      badges:
+        type: array
+        required: false
+        description: Authored badges — each {label, tone?} (≤20).
+        items:
+          type: object
+          properties:
+            label:
+              type: string
+              required: true
+              description: Badge label (1–48 chars).
+            tone:
+              type: string
+              required: false
+              description: Optional display hint (≤24 chars), e.g. gold/blue/green.
+      sort_order:
+        type: integer
+        required: false
+        description: Manual sort weight, lower first (0–1000000).
+      hidden:
+        type: boolean
+        required: false
+        description: Hide this media model from the client catalog.
+    response:
+      format: json
+
+  setLink:
+    description: >
+      Add or remove a reference link on a model (gate_catalog_links). action='add'
+      attaches a link (kind = youtube | article | study | paper) keyed on the
+      model's served-ref, idempotent per (model, url) — re-adding the same url
+      updates that row. Provenance (source / source_url / attribution /
+      is_authored_by_us) carries the licensing attribution. action='remove'
+      deletes a link by link_id (scoped to the model). Routes to the split
+      POST/DELETE endpoints internally.
+    guidance:
+      use: "Attach (or remove) a review video / article / study / paper on a model."
+      next: "setModelMeta (author the model's own copy), setLink again (add another link)"
+      warn: "Third-party content MUST set is_authored_by_us=false + source + attribution (HARD-GATE). add is idempotent per (model, url); remove is by link_id, scoped to the model."
+      telemetry_signal_default: "warm"
+    http: POST /models/{model_id}/links | DELETE /models/{model_id}/links/{link_id}
+    params:
+      action:
+        type: string
+        required: true
+        description: "'add' attaches a link; 'remove' deletes one by link_id."
+      model_id:
+        type: integer
+        required: true
+        description: Numeric gate_model_catalog.id the link belongs to (≥1).
+      kind:
+        type: string
+        required: false
+        description: "add: link kind — youtube | article | study | paper."
+      url:
+        type: string
+        required: false
+        description: "add: the link URL (≤2048 chars). Idempotency key with model_id."
+      title:
+        type: string
+        required: false
+        description: "add: optional link title (≤512 chars)."
+      publisher:
+        type: string
+        required: false
+        description: "add: optional publisher (≤256 chars)."
+      note:
+        type: string
+        required: false
+        description: "add: optional editorial note (≤2000 chars)."
+      source:
+        type: string
+        required: false
+        description: "add: provenance — data source (≤256 chars). Required for third-party content."
+      source_url:
+        type: string
+        required: false
+        description: "add: provenance — source URL (≤2048 chars)."
+      attribution:
+        type: string
+        required: false
+        description: "add: provenance — attribution string (≤512 chars). Required for third-party content."
+      is_authored_by_us:
+        type: boolean
+        required: false
+        description: "add: true only if SpiderIQ authored the linked content (default false)."
+      link_id:
+        type: integer
+        required: false
+        description: "remove: the gate_catalog_links row id to delete (≥1)."
+    response:
+      format: json

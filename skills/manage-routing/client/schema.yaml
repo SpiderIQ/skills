@@ -119,7 +119,17 @@ methods:
           Proposed chain to probe instead of the live one — an ordered list of
           {provider, model} (1–32). Order is load-bearing only for slot 0 (codex
           bypass); the rest is a least-busy pool. Omit to probe the live chain.
-        items: object
+        items:
+          type: object
+          properties:
+            provider:
+              type: string
+              required: true
+              description: Provider key (1–64 chars), e.g. openrouter, mistral.
+            model:
+              type: string
+              required: true
+              description: Model id (1–256 chars).
     response:
       format: json
 
@@ -149,7 +159,17 @@ methods:
           New chain — a non-empty ordered list of {provider, model} (1–32).
           Order is load-bearing only for slot 0 (codex bypass); the rest is a
           least-busy pool, not a priority list.
-        items: object
+        items:
+          type: object
+          properties:
+            provider:
+              type: string
+              required: true
+              description: Provider key (1–64 chars), e.g. openrouter, mistral.
+            model:
+              type: string
+              required: true
+              description: Model id (1–256 chars).
       reason:
         type: string
         required: false
