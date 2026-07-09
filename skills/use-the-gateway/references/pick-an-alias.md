@@ -10,9 +10,10 @@ There are **two deliberately separate families.** Pick the family first, then th
 
 ## `spideriq/*` — for WORKERS (single-shot, batch, cost-dominated)
 
-Biased toward **free-tier** providers (Groq, Mistral-free, OpenRouter `:free`) because
+Biased toward **free-tier** providers (Groq, Mistral-free, Cerebras-free) because
 cost dominates at batch scale. Use for scraping post-processing, extraction, classification,
-one-shot transforms.
+one-shot transforms. (OpenRouter `:free` was retired from this family in 2026-06 — it can't do
+tool calls; paid OpenRouter is kept for `spideriq/vision` only.)
 
 | Alias | Task | Slot-0 model (today) |
 |---|---|---|

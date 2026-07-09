@@ -1,0 +1,13 @@
+{
+  "title": "Catalog reads are list-only (unmetered); only the leaderboard is fully public",
+  "summary": "Agents assume reading the model catalog costs credits or needs the same auth everywhere — neither is true. All four catalog reads are LIST-ONLY: not metered, not billable (same class as GET /models) — gate meters fire only on a completion, never on a read, so a GET catalog/leaderboard/evals produces ZERO gate_request_logs rows. Auth splits: GET /catalog/leaderboard is fully PUBLIC (no PAT), so an agent can rank models before it authenticates; GET /catalog/models, /catalog/models/{id}, and /catalog/models/{id}/evals are brand-PAT (identity resolves from the Bearer triple via the clients table server-side — nothing to pass). The leaderboard ranks by eval score, NOT price: to answer 'best model for <task> under $X' you rank with task_type= then filter the returned rows by the cheapest live blended price (on every row). Eval scores can be null until an OPVS eval contribution lands for that model×task — null means 'no prior', not zero. Once picked, pin a concrete model by passing its model_id straight to chat as `model` (D7 direct-model) — no task alias required.",
+  "created_at": "2026-07-08",
+  "updated_at": "2026-07-08",
+  "tags": ["catalog", "leaderboard", "evals", "billing", "auth", "model-selection"],
+  "references": [
+    "app/api/v1/gate/catalog.py — get_leaderboard (public, no Depends(get_client)), list_catalog_models / get_model_evals / get_catalog_model (Depends(get_client) brand-PAT); module docstring: 'read = list-only, NOT metered/billable'",
+    "docs/services/SpiderGate/EVAL-CONTRACT-PLAN.md §4a — read auth split + #7 aggregate as shared prior",
+    "GateBoard D.1 (#2329) test-live: GET reads produced ZERO gate_request_logs rows; public leaderboard 200 with NO auth; D7 direct-model pin records actual_model (G1)",
+    "references/best-model-under-budget.md — rank-then-filter-by-price recipe"
+  ]
+}

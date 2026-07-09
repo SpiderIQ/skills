@@ -75,7 +75,11 @@ methods:
         type: array
         required: true
         description: OpenAI messages array [{role, content}]; role ∈ system|user|assistant|tool.
-        items: object
+        items:
+          type: object
+          properties:
+            role: { type: string, values: [system, user, assistant, tool], required: true }
+            content: { type: string, required: true }
       temperature:
         type: number
         required: false
@@ -92,10 +96,25 @@ methods:
         type: object
         required: false
         description: '{type: "json_object"} or {type: "json_schema", json_schema: {...}} for strict structured output.'
+        properties:
+          type: { type: string, values: [text, json_object, json_schema], required: true }
+          json_schema: { type: object, required: false }
       tools:
         type: array
         required: false
         description: OpenAI tool/function definitions for tool calling.
+        items:
+          type: object
+          properties:
+            type: { type: string, values: [function], required: true }
+            function:
+              type: object
+              required: true
+              properties:
+                name: { type: string, required: true }
+                description: { type: string, required: false }
+                parameters: { type: object, required: false }
+                strict: { type: boolean, required: false }
       tool_choice:
         type: string
         required: false
@@ -104,6 +123,15 @@ methods:
         type: object
         required: false
         description: 'SpiderGate extras: {max_cost_usd, cache_enabled, cache_ttl_seconds, fallback_models, preferred_providers, excluded_providers, timeout_ms, retry_count}.'
+        properties:
+          max_cost_usd: { type: number, required: false }
+          cache_enabled: { type: boolean, required: false }
+          cache_ttl_seconds: { type: integer, required: false }
+          fallback_models: { type: array, required: false, items: { type: string } }
+          preferred_providers: { type: array, required: false, items: { type: string } }
+          excluded_providers: { type: array, required: false, items: { type: string } }
+          timeout_ms: { type: integer, required: false }
+          retry_count: { type: integer, required: false }
     response:
       format: json
 
@@ -159,6 +187,8 @@ methods:
         type: array
         required: true
         description: Single text (string) or a batch (list of strings, OpenAI caps at 2048). Output order preserved via data[].index.
+        items:
+          type: string
       dimensions:
         type: integer
         required: false

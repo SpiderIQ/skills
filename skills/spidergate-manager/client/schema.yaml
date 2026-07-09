@@ -44,7 +44,11 @@ methods:
         type: array
         required: true
         description: Chat messages array [{role, content}]
-        items: object
+        items:
+          type: object
+          properties:
+            role: { type: string, values: [system, user, assistant, tool], required: true }
+            content: { type: string, required: true }
     response:
       format: json
 
