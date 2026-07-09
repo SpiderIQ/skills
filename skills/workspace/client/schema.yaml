@@ -140,7 +140,26 @@ methods:
     http: PATCH /brands/{brand_id}/settings
     params:
       brand_id: { type: integer, required: true, description: Integer brand id }
-      settings: { type: object, required: true, description: Key-value settings to merge }
+      settings:
+        type: object
+        required: true
+        description: Key-value settings to merge
+        properties:
+          default_rate_limit: { type: integer, required: false, description: Default API rate limit in requests per minute }
+          default_campaign_quota_daily: { type: integer, required: false, description: Default daily campaign quota }
+          default_campaign_quota_monthly: { type: integer, required: false, description: Default monthly campaign quota }
+          default_campaign_max_concurrent: { type: integer, required: false, description: Max concurrent campaigns }
+          default_campaign_max_locations: { type: integer, required: false, description: Max locations per campaign }
+          default_auto_campaign_enabled: { type: boolean, required: false, description: Enable auto-campaigns }
+          default_auto_campaign_rate_per_hour: { type: integer, required: false, description: Auto-campaign launch rate per hour }
+          default_auto_campaign_capacity_threshold: { type: integer, required: false, description: Fleet capacity threshold percent (1-100) that pauses auto-campaigns }
+          fuzziq_enabled: { type: boolean, required: false, description: Enable FuzzIQ enrichment }
+          opensearch_enabled: { type: boolean, required: false, description: Enable OpenSearch indexing }
+          brand_voice: { type: string, required: false, description: Brand voice descriptor }
+          brand_tone: { type: string, required: false, description: Brand tone descriptor }
+          brand_name_meaning: { type: string, required: false, description: Meaning or story behind the brand name }
+          brand_promise: { type: string, required: false, description: Brand promise statement }
+          logo_url: { type: string, required: false, description: Logo image URL (normally set via uploadBrandLogo) }
     response: { format: json }
 
   getBrandInformation:
