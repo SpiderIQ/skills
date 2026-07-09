@@ -157,7 +157,46 @@ methods:
       slug:            { type: string,  required: false, description: 'URL slug — kebab-case, no leading slash, no nested path' }
       template:        { type: string,  required: false, description: 'default | blank | landing | about | contact | dynamic_list | dynamic_item' }
       collection_type: { type: string,  required: false, description: 'REQUIRED for dynamic_list/dynamic_item: posts | docs | directory_listings; else omit' }
-      blocks:          { type: array,   required: false, description: 'Block list — each {type, component_slug?, data?, props?}' }
+      blocks:
+        type: array
+        required: false
+        description: 'Block list — each {type, component_slug?, data?, props?}'
+        items:
+          type: object
+          properties:
+            id:
+              type: string
+              required: false
+              description: Unique block id (UUID).
+            type:
+              type: string
+              required: false
+              description: Block type.
+              values: [hero, features_grid, stats_bar, rich_text, cta_section, pricing_table, testimonials, faq, code_example, logo_cloud, comparison_table, image, video_embed, spacer, component]
+            data:
+              type: object
+              required: false
+              description: Block-specific data payload (shape varies by block type).
+            component_slug:
+              type: string
+              required: false
+              description: Component slug to render this block (REQUIRED when type=component).
+            component_version:
+              type: string
+              required: false
+              description: Pinned component version (omit for latest published).
+            props:
+              type: object
+              required: false
+              description: Props passed to the component template.
+            layout:
+              type: string
+              required: false
+              description: Layout id from component.layouts[].id (omit for the component default).
+            data_binding:
+              type: object
+              required: false
+              description: Per-block source/filter/sort/limit override for kind=dynamic blocks.
       seo_title:       { type: string,  required: false }
       seo_description: { type: string,  required: false }
       project:         { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
@@ -182,7 +221,46 @@ methods:
       page_id:         { type: string, required: true }
       title:           { type: string, required: false }
       slug:            { type: string, required: false }
-      blocks:          { type: array,  required: false, description: 'Full replacement block list' }
+      blocks:
+        type: array
+        required: false
+        description: 'Full replacement block list'
+        items:
+          type: object
+          properties:
+            id:
+              type: string
+              required: false
+              description: Unique block id (UUID).
+            type:
+              type: string
+              required: false
+              description: Block type.
+              values: [hero, features_grid, stats_bar, rich_text, cta_section, pricing_table, testimonials, faq, code_example, logo_cloud, comparison_table, image, video_embed, spacer, component]
+            data:
+              type: object
+              required: false
+              description: Block-specific data payload (shape varies by block type).
+            component_slug:
+              type: string
+              required: false
+              description: Component slug to render this block (REQUIRED when type=component).
+            component_version:
+              type: string
+              required: false
+              description: Pinned component version (omit for latest published).
+            props:
+              type: object
+              required: false
+              description: Props passed to the component template.
+            layout:
+              type: string
+              required: false
+              description: Layout id from component.layouts[].id (omit for the component default).
+            data_binding:
+              type: object
+              required: false
+              description: Per-block source/filter/sort/limit override for kind=dynamic blocks.
       template:        { type: string, required: false }
       seo_title:       { type: string, required: false }
       seo_description: { type: string, required: false }
@@ -285,7 +363,20 @@ methods:
     params:
       title:             { type: string,  required: true,  description: 'Post title' }
       slug:              { type: string,  required: false, description: 'URL slug (kebab-case)' }
-      body:              { type: object,  required: false, description: 'Post body — Tiptap JSON document' }
+      body:
+        type: object
+        required: false
+        description: 'Post body — Tiptap JSON document'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
       excerpt:           { type: string,  required: false, description: 'Short summary' }
       tldr_summary:      { type: string,  required: false, description: 'TL;DR shown above the body' }
       tags:              { type: array,   required: false, items: string, description: 'Legacy string tags' }
@@ -324,7 +415,20 @@ methods:
       post_id:           { type: string,  required: true }
       title:             { type: string,  required: false }
       slug:              { type: string,  required: false }
-      body:              { type: object,  required: false, description: 'Tiptap JSON document' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON document'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
       excerpt:           { type: string,  required: false }
       tldr_summary:      { type: string,  required: false }
       tags:              { type: array,   required: false, items: string }
@@ -572,7 +676,20 @@ methods:
     params:
       title:     { type: string, required: true }
       slug:      { type: string, required: false }
-      body:      { type: object, required: false, description: 'Tiptap JSON document' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON document'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
       parent_id: { type: string, required: false, description: 'Parent doc id (for nesting)' }
     response: { format: json }
 
@@ -591,7 +708,20 @@ methods:
       doc_id: { type: string, required: true }
       title:  { type: string, required: false }
       slug:   { type: string, required: false }
-      body:   { type: object, required: false, description: 'Tiptap JSON document' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON document'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
     response: { format: json }
 
   deleteDoc:
@@ -642,7 +772,38 @@ methods:
     http: PUT /dashboard/content/navigation/{location}
     params:
       location: { type: string, required: true }
-      items:    { type: array,  required: true, description: 'Full nested menu items list' }
+      items:
+        type: array
+        required: true
+        description: 'Full nested menu items list'
+        items:
+          type: object
+          properties:
+            label:
+              type: string
+              required: true
+              description: Menu item label.
+            url:
+              type: string
+              required: false
+              description: Link target (omit for a parent-only group).
+            icon:
+              type: string
+              required: false
+              description: Optional icon name.
+            children:
+              type: array
+              required: false
+              items: object
+              description: Nested sub-items — the same menu-item shape, recursive.
+            is_external:
+              type: boolean
+              required: false
+              description: TRUE if the link points off-site.
+            badge:
+              type: string
+              required: false
+              description: Optional badge label, e.g. "New" or "Beta".
     response: { format: json }
 
   # ─────────────────────────────── SETTINGS ───────────────────────────────────
@@ -841,14 +1002,90 @@ methods:
       kind:                 { type: enum,   required: false, values: [static, interactive, dynamic, extension] }
       block_type:           { type: string, required: false, description: 'Required for some dynamic kinds (e.g. list, item_details)' }
       js_runtime:           { type: string, required: false, description: 'vanilla | web-component | … (agent components use web-component)' }
-      props_schema:         { type: object, required: false, description: 'JSON Schema for the component props' }
+      props_schema:
+        type: object
+        required: false
+        description: 'JSON Schema for the component props'
+        properties:
+          type:
+            type: string
+            required: false
+            description: JSON Schema root type (usually "object").
+          properties:
+            type: object
+            required: false
+            description: Map of prop name → JSON Schema definition.
+          required:
+            type: array
+            required: false
+            items: string
+            description: List of required prop names.
       default_props:        { type: object, required: false, description: 'Default prop values (e.g. {flow_id} so an agent component mounts without per-insert props)' }
-      sources:              { type: array,  required: false, description: 'REQUIRED for kind=dynamic — data-source bindings [{source_id,...}]' }
+      sources:
+        type: array
+        required: false
+        description: 'REQUIRED for kind=dynamic — data-source bindings [{source_id,...}]'
+        items:
+          type: object
+          properties:
+            source_id:
+              type: string
+              required: true
+              description: content_data_sources row id, e.g. 'posts' or 'idap.cities'.
+            role:
+              type: string
+              required: false
+              description: Binding role when a component takes multiple, e.g. 'primary' | 'related'.
+            default_filter:
+              type: object
+              required: false
+              description: Default filter object the renderer applies unless the block instance overrides it.
+            default_sort:
+              type: string
+              required: false
+              description: Default sort field — 'field' or '-field' for descending.
+            default_limit:
+              type: integer
+              required: false
+              description: Default row limit (1–500) for a collection-typed binding.
       category:             { type: string, required: false }
       dependencies:         { type: array,  required: false, description: 'CDN allowlist KEYS (not URLs). An agent component sets ["opvs-agent"].' }
       marketplace_category: { type: string, required: false, description: "Set 'agent' to publish a marketplace agent component (flips agent_meta validation to AgentAssetMeta)." }
       marketplace_description: { type: string, required: false }
-      agent_meta:           { type: object, required: false, description: "For marketplace_category='agent': {role?, surface (flow|inline|concierge), form_factor (section|widget|concierge|headless), grounding_modes?, required_scopes?, trigger_kind?}. extra keys rejected (422)." }
+      agent_meta:
+        type: object
+        required: false
+        description: "For marketplace_category='agent': {role?, surface (flow|inline|concierge), form_factor (section|widget|concierge|headless), grounding_modes?, required_scopes?, trigger_kind?}. extra keys rejected (422)."
+        properties:
+          role:
+            type: string
+            required: false
+            description: Agent role — the deep-link handoff key passed to OPVS hire/order alongside client_id.
+            values: [sdr, support, concierge, booking]
+          surface:
+            type: string
+            required: false
+            description: How the agent renders — flow (full-page /f/<id>) | inline (in-page mount) | concierge (floating).
+            values: [flow, inline, concierge]
+          form_factor:
+            type: string
+            required: false
+            description: Marketplace mount taxonomy — resolves to a runtime (surface, headless) combo.
+            values: [section, widget, concierge, headless]
+          grounding_modes:
+            type: array
+            required: false
+            items: string
+            description: Knowledge-grounding scopes the agent supports — subset of [page, site, docs].
+          required_scopes:
+            type: array
+            required: false
+            items: string
+            description: OPVS scopes the agent needs, e.g. 'crm.read', 'calendar.write'.
+          trigger_kind:
+            type: string
+            required: false
+            description: What fires the agent on the page — page-load | scroll-into-view | click | exit-intent | etc.
       tags:                 { type: array,  required: false, description: 'Discovery tags' }
       is_global:            { type: boolean, required: false, description: 'Publish to all clients — reserved for is_marketplace_authoring brands.' }
       version:              { type: string, required: false, description: 'Semver (default 1.0.0)' }
@@ -877,7 +1114,23 @@ methods:
       html_template: { type: string, required: false }
       css:           { type: string, required: false }
       js:            { type: string, required: false }
-      props_schema:  { type: object, required: false }
+      props_schema:
+        type: object
+        required: false
+        properties:
+          type:
+            type: string
+            required: false
+            description: JSON Schema root type (usually "object").
+          properties:
+            type: object
+            required: false
+            description: Map of prop name → JSON Schema definition.
+          required:
+            type: array
+            required: false
+            items: string
+            description: List of required prop names.
     response: { format: json }
 
   deleteComponent:
@@ -962,7 +1215,54 @@ methods:
     description: Update template config (theme, routes, data sources).
     http: PATCH /dashboard/templates/config
     params:
-      config: { type: object, required: true, description: 'Config patch' }
+      config:
+        type: object
+        required: true
+        description: 'Config patch'
+        properties:
+          theme:
+            type: string
+            required: false
+            description: Theme name to apply.
+          routes:
+            type: object
+            required: false
+            description: Route → template-path map (string keys → string paths).
+          settings:
+            type: object
+            required: false
+            description: Free-form template settings bag.
+          data_sources:
+            type: array
+            required: false
+            description: Live data-source bindings for dynamic templates.
+            items:
+              type: object
+              properties:
+                name:
+                  type: string
+                  required: true
+                  description: Binding name.
+                type:
+                  type: string
+                  required: true
+                  description: SpiderIQ job type (spiderMaps, spiderSite, …).
+                job_id:
+                  type: string
+                  required: true
+                  description: Source job id whose results feed the template.
+                variable_name:
+                  type: string
+                  required: true
+                  description: Template variable name this data binds to.
+                refresh_interval:
+                  type: integer
+                  required: false
+                  description: Cache TTL in seconds (default 3600).
+          salespersons:
+            type: object
+            required: false
+            description: Free-form salespersons config bag.
     response: { format: json }
 
   listThemes:
@@ -1067,7 +1367,20 @@ methods:
     http: POST /dashboard/content/changelog
     params:
       title:   { type: string, required: true }
-      body:    { type: object, required: false, description: 'Tiptap JSON' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
       version: { type: string, required: false }
     response: { format: json }
 
