@@ -86,7 +86,35 @@ methods:
       location:     { type: string, required: false, description: 'Place; appended as "{query} in {location}". Do not also put it in search_query.' }
       max_results:  { type: integer, required: false, description: 'Businesses from Maps, 1-500 (default 20)' }
       lang:         { type: string, required: false, description: 'Maps language (default en)' }
-      workflow:     { type: object, required: false, description: 'Per-stage config: { spidersite:{enabled,mode}, spiderverify:{enabled}, vayapin:{enabled}, social_media_enrichment:{enabled}, smartlead:{enabled,connection_id,remote_campaign_id,only_with_vayapin_seo} }. social_media_enrichment recovers public social-media contact info for businesses with no verified email — only effective if the client''s plan includes it; default ON (send enabled:false to skip). smartlead auto-exports the VERIFIED leads to a SmartLead outreach campaign when the run finishes — discover connection_id + remote_campaign_id FIRST via the SpiderMail skill (listOutreachConnections / listOutreachCampaigns). See flows/maps-site-verify-vayapin/recipes/smartlead-export.md.' }
+      workflow:
+        type: object
+        required: false
+        description: 'Per-stage config: { spidersite:{enabled,mode}, spiderverify:{enabled}, vayapin:{enabled}, social_media_enrichment:{enabled}, smartlead:{enabled,connection_id,remote_campaign_id,only_with_vayapin_seo} }. social_media_enrichment recovers public social-media contact info for businesses with no verified email — only effective if the client''s plan includes it; default ON (send enabled:false to skip). smartlead auto-exports the VERIFIED leads to a SmartLead outreach campaign when the run finishes — discover connection_id + remote_campaign_id FIRST via the SpiderMail skill (listOutreachConnections / listOutreachCampaigns). See flows/maps-site-verify-vayapin/recipes/smartlead-export.md.'
+        properties:
+          spidersite:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              mode: { type: string, values: [contacts, compendium, leads, full] }
+          spiderverify:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          vayapin:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          social_media_enrichment:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          smartlead:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              connection_id: { type: integer }
+              remote_campaign_id: { type: string }
+              only_with_vayapin_seo: { type: boolean }
       test:         { type: boolean, required: false, description: 'Route to test queue' }
     response: { format: json }
 
@@ -104,10 +132,56 @@ methods:
     params:
       search_query: { type: string, required: true, description: 'BARE term (e.g. "plumbers") — location comes from country_code + filter' }
       country_code: { type: string, required: true, description: 'ISO 2-letter code' }
-      filter:       { type: object, required: false, description: 'Location selection: { mode: all|population|cities_only|regions|city|custom, admin_regions?: string[], parent_city?, include_postcodes?: bool, min_population?, max_population?, location_ids? }. Default mode=all. US ZIPs: mode=regions + ONE state in admin_regions + include_postcodes=true (every ZIP its own Maps search).' }
+      filter:
+        type: object
+        required: false
+        description: 'Location selection: { mode: all|population|cities_only|regions|city|custom, admin_regions?: string[], parent_city?, include_postcodes?: bool, min_population?, max_population?, location_ids? }. Default mode=all. US ZIPs: mode=regions + ONE state in admin_regions + include_postcodes=true (every ZIP its own Maps search).'
+        properties:
+          mode: { type: string, values: [all, population, cities_only, regions, city, custom] }
+          admin_regions:
+            type: array
+            items: { type: string }
+          parent_city: { type: string }
+          include_postcodes: { type: boolean }
+          min_population: { type: integer }
+          max_population: { type: integer }
+          location_ids:
+            type: array
+            items: { type: integer }
+          exhaustive: { type: boolean }
       max_results:  { type: integer, required: false, description: 'Businesses PER LOCATION, 1-500 (default 100)' }
       name:         { type: string, required: false, description: 'Campaign label (auto if omitted)' }
-      workflow:     { type: object, required: false, description: 'Per-stage config: { spidersite:{enabled,mode}, spiderverify:{enabled}, vayapin:{enabled}, social_media_enrichment:{enabled}, smartlead:{enabled,connection_id,remote_campaign_id,remote_campaign_name?,limit?,only_with_vayapin_seo?} }. vayapin follows what you send here. social_media_enrichment recovers public social-media contact info for businesses with no verified email — only effective if the client''s plan includes it; default ON (send enabled:false to skip). smartlead auto-exports the campaign''s VERIFIED leads into a SmartLead outreach campaign at terminal-close (no separate push) — discover connection_id + remote_campaign_id FIRST via the SpiderMail skill (listOutreachConnections / listOutreachCampaigns). See flows/maps-site-verify-vayapin/recipes/smartlead-export.md.' }
+      workflow:
+        type: object
+        required: false
+        description: 'Per-stage config: { spidersite:{enabled,mode}, spiderverify:{enabled}, vayapin:{enabled}, social_media_enrichment:{enabled}, smartlead:{enabled,connection_id,remote_campaign_id,remote_campaign_name?,limit?,only_with_vayapin_seo?} }. vayapin follows what you send here. social_media_enrichment recovers public social-media contact info for businesses with no verified email — only effective if the client''s plan includes it; default ON (send enabled:false to skip). smartlead auto-exports the campaign''s VERIFIED leads into a SmartLead outreach campaign at terminal-close (no separate push) — discover connection_id + remote_campaign_id FIRST via the SpiderMail skill (listOutreachConnections / listOutreachCampaigns). See flows/maps-site-verify-vayapin/recipes/smartlead-export.md.'
+        properties:
+          spidersite:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              mode: { type: string, values: [contacts, compendium, leads, full] }
+          spiderverify:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          vayapin:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          social_media_enrichment:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          smartlead:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              connection_id: { type: integer }
+              remote_campaign_id: { type: string }
+              remote_campaign_name: { type: string }
+              limit: { type: integer }
+              only_with_vayapin_seo: { type: boolean }
       test:         { type: boolean, required: false, description: 'Route to test queue' }
     response: { format: json }
 
@@ -192,7 +266,37 @@ methods:
       name:         { type: string, required: false, description: 'New campaign label' }
       search_query: { type: string, required: false, description: 'New bare search term' }
       max_results:  { type: integer, required: false, description: 'New per-location cap, 1-500' }
-      workflow:     { type: object, required: false, description: 'New per-stage config' }
+      workflow:
+        type: object
+        required: false
+        description: 'New per-stage config'
+        properties:
+          spidersite:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              mode: { type: string, values: [contacts, compendium, leads, full] }
+          spiderverify:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          vayapin:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          social_media_enrichment:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          smartlead:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              connection_id: { type: integer }
+              remote_campaign_id: { type: string }
+              remote_campaign_name: { type: string }
+              limit: { type: integer }
+              only_with_vayapin_seo: { type: boolean }
     response: { format: json }
 
   retryLocation:
@@ -291,7 +395,42 @@ methods:
       linkedin_url:  { type: string, required: false, description: 'Known LinkedIn company URL — SKIPS LinkedIn discovery' }
       profile_mode:  { type: string, required: false, description: 'Employee detail: short (default) | full | full_email — higher = slower/pricier' }
       max_employees: { type: integer, required: false, description: 'Employees from LinkedIn, 1-2000 (default 20)' }
-      config:        { type: object, required: false, description: 'Per-stage toggles: { discovery, spidersite{mode,max_pages,extract_*}, spidercompanydata{country,include_financials}, spiderverify{max_emails}, spiderpeople{max_employees,profile_mode} } — each has enabled' }
+      config:
+        type: object
+        required: false
+        description: 'Per-stage toggles: { discovery, spidersite{mode,max_pages,extract_*}, spidercompanydata{country,include_financials}, spiderverify{max_emails}, spiderpeople{max_employees,profile_mode} } — each has enabled'
+        properties:
+          discovery:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          spidersite:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              mode: { type: string, values: [contacts, leads, full] }
+              max_pages: { type: integer }
+              extract_team: { type: boolean }
+              extract_company_info: { type: boolean }
+              product_description: { type: string }
+              icp_description: { type: string }
+          spidercompanydata:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              country: { type: string }
+              include_financials: { type: boolean }
+          spiderverify:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              max_emails: { type: integer }
+          spiderpeople:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              max_employees: { type: integer }
+              profile_mode: { type: string, values: [short, full, full_email] }
       test:          { type: boolean, required: false, description: 'Route to test queues' }
     response: { format: json }
 
@@ -307,10 +446,60 @@ methods:
       telemetry_signal_default: "cold"
     http: POST /company-intel/batch
     params:
-      companies:     { type: array,   required: true,  description: '1-50 entries; each a company object {company_name, city?, country_code?, domain?, linkedin_url?, config?}' }
+      companies:
+        type: array
+        required: true
+        description: '1-50 entries; each a company object {company_name, city?, country_code?, domain?, linkedin_url?, config?}'
+        items:
+          type: object
+          properties:
+            company_name: { type: string }
+            city: { type: string }
+            country_code: { type: string }
+            domain: { type: string }
+            linkedin_url: { type: string }
+            profile_mode: { type: string, values: [short, full, full_email] }
+            max_employees: { type: integer }
+            config: { type: object }
+            test: { type: boolean }
       profile_mode:  { type: string,  required: false, description: 'Shared employee detail for all: short | full | full_email' }
       max_employees: { type: integer, required: false, description: 'Shared per-company employee cap, 1-2000' }
-      config:        { type: object,  required: false, description: 'Shared per-stage config (per-company config overrides)' }
+      config:
+        type: object
+        required: false
+        description: 'Shared per-stage config (per-company config overrides)'
+        properties:
+          discovery:
+            type: object
+            properties:
+              enabled: { type: boolean }
+          spidersite:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              mode: { type: string, values: [contacts, leads, full] }
+              max_pages: { type: integer }
+              extract_team: { type: boolean }
+              extract_company_info: { type: boolean }
+              product_description: { type: string }
+              icp_description: { type: string }
+          spidercompanydata:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              country: { type: string }
+              include_financials: { type: boolean }
+          spiderverify:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              max_emails: { type: integer }
+          spiderpeople:
+            type: object
+            properties:
+              enabled: { type: boolean }
+              max_employees: { type: integer }
+              profile_mode: { type: string, values: [short, full, full_email] }
       test:          { type: boolean, required: false, description: 'Route to test queues' }
     response: { format: json }
 
@@ -334,7 +523,20 @@ methods:
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderMaps/submit
     params:
-      payload:  { type: object,  required: true,  description: 'SpiderMapsJobPayload: { search_query (or url), max_results 1-100 (default 20), lang (default en), extract_reviews (false), extract_photos (false), validate_phones (true), store_images (true), test (false) }. Embed the place in search_query — no separate location/country_code.' }
+      payload:
+        type: object
+        required: true
+        description: 'SpiderMapsJobPayload: { search_query (or url), max_results 1-100 (default 20), lang (default en), extract_reviews (false), extract_photos (false), validate_phones (true), store_images (true), test (false) }. Embed the place in search_query — no separate location/country_code.'
+        properties:
+          search_query: { type: string }
+          url: { type: string }
+          max_results: { type: integer }
+          lang: { type: string }
+          extract_reviews: { type: boolean }
+          extract_photos: { type: boolean }
+          validate_phones: { type: boolean }
+          store_images: { type: boolean }
+          test: { type: boolean }
       priority: { type: integer, required: false, description: 'Job priority 0-10 (higher runs sooner)' }
   # ── flow:siteScraper (Site Scraper) ──────────────────────────────────────
   # One website -> a full contact + intelligence profile. SINGLE-WORKER crawl
@@ -361,15 +563,42 @@ methods:
       url:                  { type: string,  required: true,  description: 'Website to crawl, include https:// (1-2048 chars)' }
       mode:                 { type: string,  required: false, description: 'contacts (5p, no AI, default) | compendium (10p, markdown) | leads (50p, team+company AI) | full (100p, everything + lead scoring)' }
       max_pages:            { type: integer, required: false, description: 'Pages to crawl, 1-50 (cannot exceed 50; full mode reaches ~100 via the preset)' }
-      overrides:            { type: object,  required: false, description: 'Override mode defaults, e.g. { max_pages, strategies }' }
+      overrides:
+        type: object
+        required: false
+        description: 'Override mode defaults, e.g. { max_pages, strategies }'
+        properties:
+          max_pages: { type: integer }
+          strategies:
+            type: array
+            items: { type: string }
       enable_spa:           { type: boolean, required: false, description: 'Render JS-heavy sites with a headless browser (default true; slower)' }
       extract_team:         { type: boolean, required: false, description: 'AI team-member extraction (~500 tokens)' }
       extract_company_info: { type: boolean, required: false, description: 'AI company vitals (~500 tokens)' }
       extract_pain_points:  { type: boolean, required: false, description: 'AI pain-point analysis (~500 tokens)' }
       product_description:  { type: string,  required: false, description: 'CHAMP lead scoring — REQUIRES icp_description too (~1500 tokens)' }
       icp_description:      { type: string,  required: false, description: 'CHAMP lead scoring — REQUIRES product_description too' }
-      compendium:           { type: object,  required: false, description: 'Markdown config: { enabled, cleanup_level raw|fit|citations|minimal, max_chars 1e3-1e6, include_in_response, remove_duplicates }' }
-      custom_ai_prompt:     { type: object,  required: false, description: 'Run your own prompt over the compendium: { enabled, system_prompt, user_prompt, model=spideriq/* alias, temperature, max_tokens } -> custom_analysis' }
+      compendium:
+        type: object
+        required: false
+        description: 'Markdown config: { enabled, cleanup_level raw|fit|citations|minimal, max_chars 1e3-1e6, include_in_response, remove_duplicates }'
+        properties:
+          enabled: { type: boolean }
+          cleanup_level: { type: string, values: [raw, fit, citations, minimal] }
+          max_chars: { type: integer }
+          include_in_response: { type: boolean }
+          remove_duplicates: { type: boolean }
+      custom_ai_prompt:
+        type: object
+        required: false
+        description: 'Run your own prompt over the compendium: { enabled, system_prompt, user_prompt, model=spideriq/* alias, temperature, max_tokens } -> custom_analysis'
+        properties:
+          enabled: { type: boolean }
+          system_prompt: { type: string }
+          user_prompt: { type: string }
+          model: { type: string }
+          temperature: { type: number }
+          max_tokens: { type: integer }
       priority:             { type: integer, required: false, description: 'Job priority 0-10' }
       test:                 { type: boolean, required: false, description: 'Route to the test queue' }
     response: { format: json }
@@ -386,7 +615,26 @@ methods:
       telemetry_signal_default: "cold"
     http: POST /flows/siteScraper/run
     params:
-      inputs:   { type: array,   required: true,  description: '1-500 entries; each a full single-site input {url, mode?, max_pages?, extract_*?, compendium?, custom_ai_prompt?, ...}' }
+      inputs:
+        type: array
+        required: true
+        description: '1-500 entries; each a full single-site input {url, mode?, max_pages?, extract_*?, compendium?, custom_ai_prompt?, ...}'
+        items:
+          type: object
+          properties:
+            url: { type: string }
+            mode: { type: string, values: [contacts, compendium, leads, full] }
+            max_pages: { type: integer }
+            overrides: { type: object }
+            enable_spa: { type: boolean }
+            extract_team: { type: boolean }
+            extract_company_info: { type: boolean }
+            extract_pain_points: { type: boolean }
+            product_description: { type: string }
+            icp_description: { type: string }
+            compendium: { type: object }
+            custom_ai_prompt: { type: object }
+            test: { type: boolean }
       priority: { type: integer, required: false, description: 'Job priority 0-10, shared across the batch' }
   # ── flow:emailVerify (standalone email verification) ─────────────────────
   # Verify emails you ALREADY have (one, or a list of ≤100). SMTP handshake +
@@ -411,7 +659,23 @@ methods:
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderVerify/submit
     params:
-      payload:  { type: object,  required: true,  description: 'Verify fields: { email? (single) | emails? (≤100 batch) — provide exactly one; check_gravatar? (def false), check_dnsbl? (def false), smtp_timeout_secs? (10-120, def 45), from_email?, hello_name?, fuzziq_enabled?, fuzziq_unique_only?, test? }' }
+      payload:
+        type: object
+        required: true
+        description: 'Verify fields: { email? (single) | emails? (≤100 batch) — provide exactly one; check_gravatar? (def false), check_dnsbl? (def false), smtp_timeout_secs? (10-120, def 45), from_email?, hello_name?, fuzziq_enabled?, fuzziq_unique_only?, test? }'
+        properties:
+          email: { type: string }
+          emails:
+            type: array
+            items: { type: string }
+          check_gravatar: { type: boolean }
+          check_dnsbl: { type: boolean }
+          smtp_timeout_secs: { type: integer }
+          from_email: { type: string }
+          hello_name: { type: string }
+          fuzziq_enabled: { type: boolean }
+          fuzziq_unique_only: { type: boolean }
+          test: { type: boolean }
       priority: { type: integer, required: false, description: 'Job priority 0-10 (default 0), higher = processed first. Sibling of payload, not inside it.' }
   # ── flow:linkedinProfiles (SpiderPeople — LinkedIn people) ───────────────
   # One endpoint, three modes selected by `mode`: profile (Bright Data datasets,
@@ -468,7 +732,20 @@ methods:
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderCompanyData/submit
     params:
-      payload:  { type: object,  required: true,  description: 'Lookup payload: { mode: search|lookup|vat (default search); name (search, 1-500 chars); identifier + country (lookup; country is ISO-2); vat_number (vat, incl. country prefix); country (ISO-2, narrows search); limit (1-100, search, default 10); include_financials (UK lookup only, ~$0.05); financials_mode: url_only|ixbrl|regex|ocr|auto; test }' }
+      payload:
+        type: object
+        required: true
+        description: 'Lookup payload: { mode: search|lookup|vat (default search); name (search, 1-500 chars); identifier + country (lookup; country is ISO-2); vat_number (vat, incl. country prefix); country (ISO-2, narrows search); limit (1-100, search, default 10); include_financials (UK lookup only, ~$0.05); financials_mode: url_only|ixbrl|regex|ocr|auto; test }'
+        properties:
+          mode: { type: string, values: [search, lookup, vat] }
+          name: { type: string }
+          identifier: { type: string }
+          country: { type: string }
+          vat_number: { type: string }
+          limit: { type: integer }
+          include_financials: { type: boolean }
+          financials_mode: { type: string, values: [url_only, ixbrl, regex, ocr, auto] }
+          test: { type: boolean }
       priority: { type: integer, required: false, description: 'Job priority 1-10 (default 5)' }
     response: { format: json }
 
