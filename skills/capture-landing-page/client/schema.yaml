@@ -50,6 +50,52 @@ methods:
             type: object
             required: false
             description: Optional capture settings (viewport, full_page, wait_for, etc.)
+            properties:
+              capture_screenshot:
+                type: boolean
+                required: false
+                description: Capture a screenshot of the page (default true)
+              capture_full_page:
+                type: boolean
+                required: false
+                description: Capture the full scrollable page, not just the viewport (default true)
+              capture_html_bundle:
+                type: boolean
+                required: false
+                description: Capture a self-contained HTML bundle (default true)
+              extract_content:
+                type: boolean
+                required: false
+                description: Extract page text content (default true)
+              dismiss_popups:
+                type: boolean
+                required: false
+                description: Auto-dismiss cookie/consent popups before capture (default true)
+              scroll_for_lazy_load:
+                type: boolean
+                required: false
+                description: Scroll the page to trigger lazy-loaded content (default true)
+              viewport:
+                type: object
+                required: false
+                description: Browser viewport dimensions
+                properties:
+                  width:
+                    type: integer
+                    required: false
+                    description: Viewport width in px (default 1440)
+                  height:
+                    type: integer
+                    required: false
+                    description: Viewport height in px (default 900)
+              timeout_seconds:
+                type: integer
+                required: false
+                description: Page-load timeout in seconds (default 60)
+              max_redirects:
+                type: integer
+                required: false
+                description: Maximum redirects to follow (default 10)
     response:
       format: json
 

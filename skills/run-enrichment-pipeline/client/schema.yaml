@@ -74,6 +74,42 @@ methods:
         type: object
         required: false
         description: Location filter (mode all/regions/population/city/custom + admin_regions/include_postcodes/min_population/etc.) — the cost lever
+        properties:
+          mode:
+            type: string
+            required: false
+            values: [all, population, cities_only, custom, regions, city]
+            description: "Filter mode — all, population, cities_only, custom, regions, city (default all)"
+          min_population:
+            type: integer
+            required: false
+            description: Minimum population (required for population mode)
+          max_population:
+            type: integer
+            required: false
+            description: Maximum population (for population mode)
+          location_ids:
+            type: array
+            items: integer
+            required: false
+            description: Specific location IDs (required for custom mode)
+          admin_regions:
+            type: array
+            items: string
+            required: false
+            description: Admin regions / states (required for regions mode; scopes a postcode explosion to a state)
+          parent_city:
+            type: string
+            required: false
+            description: Parent city display_name (for city mode / narrowing a postcode explosion to one city)
+          include_postcodes:
+            type: boolean
+            required: false
+            description: Explode the scope into per-ZIP searches (default False; requires admin_regions or parent_city scope)
+          exhaustive:
+            type: boolean
+            required: false
+            description: Search every grid point including known-barren cells (default False)
       max_results:
         type: integer
         required: false
@@ -82,6 +118,39 @@ methods:
         type: object
         required: false
         description: Which downstream stages to estimate (spidersite/spiderverify/vayapin enabled flags)
+        properties:
+          spidersite:
+            type: object
+            required: false
+            description: Website-crawl stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Crawl each business's website for contacts and content
+              mode:
+                type: string
+                required: false
+                values: [contacts, compendium, leads, full]
+                description: "SpiderSite preset: contacts (5p), compendium (5p), leads (25p), full (50p)"
+          spiderverify:
+            type: object
+            required: false
+            description: Email-verification stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: SMTP-verify the extracted emails
+          vayapin:
+            type: object
+            required: false
+            description: VayaPin directory-profile stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Create a VayaPin profile for businesses with email (opt-in)
     response:
       format: json
 
@@ -113,6 +182,77 @@ methods:
           campaign at terminal-close — discover connection_id + remote_campaign_id FIRST via
           the SpiderMail skill (listOutreachConnections / listOutreachCampaigns). Full recipe:
           @spideriq/spiderflows smartlead-export.
+        properties:
+          spidersite:
+            type: object
+            required: false
+            description: Website-crawl stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Crawl each business's website for contacts and content
+              mode:
+                type: string
+                required: false
+                values: [contacts, compendium, leads, full]
+                description: "SpiderSite preset: contacts (5p), compendium (5p), leads (25p), full (50p)"
+          spiderverify:
+            type: object
+            required: false
+            description: Email-verification stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: SMTP-verify the emails extracted by SpiderSite
+          vayapin:
+            type: object
+            required: false
+            description: VayaPin directory-profile stage config
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Create a VayaPin profile for businesses with email (opt-in, irreversible)
+          social_media_enrichment:
+            type: object
+            required: false
+            description: Social Media Enrichment fallback (only effective if your plan includes it)
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Recover public social-media contact info for businesses with no verified email (default ON)
+          smartlead:
+            type: object
+            required: false
+            description: SmartLead finalize step — pushes verified leads into a SmartLead campaign at terminal-close
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Push verified leads into a SmartLead campaign (opt-in, SENDS real email)
+              connection_id:
+                type: integer
+                required: false
+                description: mail_outreach_connections.id — the SmartLead account/sub-account to push into
+              remote_campaign_id:
+                type: string
+                required: false
+                description: SmartLead campaign id (required when enabled — chosen and locked at creation)
+              remote_campaign_name:
+                type: string
+                required: false
+                description: SmartLead campaign name snapshot (display + notification only)
+              limit:
+                type: integer
+                required: false
+                description: Push at most N new leads (also trims to the account cap instead of failing)
+              only_with_vayapin_seo:
+                type: boolean
+                required: false
+                description: Only push leads carrying a VayaPin SEO pin (requires vayapin.enabled)
     response:
       format: json
     errors:

@@ -71,6 +71,34 @@ methods:
           Array of task objects. Each has: title (string, required),
           column_name (string, default "Pending"), description (string),
           custom_fields (object with location, industry, etc.)
+        items:
+          type: object
+          properties:
+            title:
+              type: string
+              required: true
+              description: Task/lead title
+            column_name:
+              type: string
+              required: false
+              description: Column to place the task in (default "Pending")
+            description:
+              type: string
+              required: false
+              description: Markdown description
+            custom_fields:
+              type: object
+              required: false
+              description: Custom field values (e.g. location, industry)
+              properties:
+                location:
+                  type: string
+                  required: false
+                  description: Business location
+                industry:
+                  type: string
+                  required: false
+                  description: Business industry
     response:
       format: json
 
@@ -113,6 +141,43 @@ methods:
         description: >
           Custom field values: email, email_status, phone, job_title,
           company, linkedin_url, location, website, industry, etc.
+        properties:
+          email:
+            type: string
+            required: false
+            description: Contact email address
+          email_status:
+            type: string
+            required: false
+            description: Email verification status
+          phone:
+            type: string
+            required: false
+            description: Contact phone number
+          job_title:
+            type: string
+            required: false
+            description: Contact job title
+          company:
+            type: string
+            required: false
+            description: Company name
+          linkedin_url:
+            type: string
+            required: false
+            description: LinkedIn profile URL
+          location:
+            type: string
+            required: false
+            description: Location
+          website:
+            type: string
+            required: false
+            description: Website URL
+          industry:
+            type: string
+            required: false
+            description: Business industry
       description:
         type: string
         required: false
@@ -141,6 +206,40 @@ methods:
           Enrichment field values: confidence, match_reasoning,
           lead_score, data_completeness, place_id, linkedin_url,
           emails_verified, employees_found, etc.
+        properties:
+          confidence:
+            type: number
+            required: false
+            description: Match confidence score
+          match_reasoning:
+            type: string
+            required: false
+            description: Explanation of why the match was made
+          lead_score:
+            type: number
+            required: false
+            description: Lead quality score
+          data_completeness:
+            type: number
+            required: false
+            description: How complete the enrichment data is
+          place_id:
+            type: string
+            required: false
+            description: Google Maps place_id
+          linkedin_url:
+            type: string
+            required: false
+            description: LinkedIn profile URL
+          emails_verified:
+            type: array
+            items: string
+            required: false
+            description: Verified email addresses
+          employees_found:
+            type: integer
+            required: false
+            description: Number of employees discovered
       agent_result:
         type: string
         required: false

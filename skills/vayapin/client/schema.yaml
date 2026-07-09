@@ -94,7 +94,21 @@ methods:
             type: array
             required: false
             description: Verified email addresses
-            items: object
+            items:
+              type: object
+              properties:
+                email:
+                  type: string
+                  required: true
+                  description: Email address
+                status:
+                  type: string
+                  required: true
+                  description: Verification status
+                is_deliverable:
+                  type: boolean
+                  required: true
+                  description: Whether the email is deliverable
           facebook:
             type: string
             required: false

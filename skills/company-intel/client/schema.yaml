@@ -93,6 +93,97 @@ methods:
         description: >
           Pipeline config — toggle steps on/off. Keys: discovery, site,
           company_data, verify, people. Each has { enabled: bool }.
+        properties:
+          discovery:
+            type: object
+            required: false
+            description: Perplexity discovery stage (finds domain + LinkedIn URL)
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Use Perplexity to discover domain + LinkedIn URL
+          spidersite:
+            type: object
+            required: false
+            description: Website-crawl stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Crawl website for contacts, team, company info
+              mode:
+                type: string
+                required: false
+                description: "contacts / leads / full"
+              max_pages:
+                type: integer
+                required: false
+                description: Max pages to crawl (1-100, default 25)
+              extract_team:
+                type: boolean
+                required: false
+                description: Extract team members via AI
+              extract_company_info:
+                type: boolean
+                required: false
+                description: Extract company info via AI
+              product_description:
+                type: string
+                required: false
+                description: Your product (for CHAMP scoring)
+              icp_description:
+                type: string
+                required: false
+                description: Your ICP (for lead scoring)
+          spidercompanydata:
+            type: object
+            required: false
+            description: Company registry lookup stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Look up company registry (Companies House, SEC, VIES)
+              country:
+                type: string
+                required: false
+                description: Country code or 'auto' to detect
+              include_financials:
+                type: boolean
+                required: false
+                description: Include financial data (UK only)
+          spiderverify:
+            type: object
+            required: false
+            description: Email-verification stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Verify extracted emails via SMTP
+              max_emails:
+                type: integer
+                required: false
+                description: Max emails to verify (1-200, default 50)
+          spiderpeople:
+            type: object
+            required: false
+            description: LinkedIn people-extraction stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Extract employees from LinkedIn
+              max_employees:
+                type: integer
+                required: false
+                description: Max employees to extract (1-200, default 20)
+              profile_mode:
+                type: string
+                required: false
+                values: [short, full, full_email]
+                description: "Employee detail level: short / full / full_email"
       test:
         type: boolean
         required: false
@@ -113,7 +204,29 @@ methods:
         type: array
         required: true
         description: Array of companies — each needs company_name, optional city/country_code/domain/linkedin_url
-        items: object
+        items:
+          type: object
+          properties:
+            company_name:
+              type: string
+              required: true
+              description: Company name to research
+            city:
+              type: string
+              required: false
+              description: City/location hint (helps discovery)
+            country_code:
+              type: string
+              required: false
+              description: ISO 2-letter country code (e.g. "US", "DE")
+            domain:
+              type: string
+              required: false
+              description: Known domain — skips Perplexity discovery
+            linkedin_url:
+              type: string
+              required: false
+              description: Known LinkedIn company URL
       profile_mode:
         type: string
         required: false
@@ -129,6 +242,97 @@ methods:
         type: object
         required: false
         description: Shared pipeline config applied to all companies
+        properties:
+          discovery:
+            type: object
+            required: false
+            description: Perplexity discovery stage (finds domain + LinkedIn URL)
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Use Perplexity to discover domain + LinkedIn URL
+          spidersite:
+            type: object
+            required: false
+            description: Website-crawl stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Crawl website for contacts, team, company info
+              mode:
+                type: string
+                required: false
+                description: "contacts / leads / full"
+              max_pages:
+                type: integer
+                required: false
+                description: Max pages to crawl (1-100, default 25)
+              extract_team:
+                type: boolean
+                required: false
+                description: Extract team members via AI
+              extract_company_info:
+                type: boolean
+                required: false
+                description: Extract company info via AI
+              product_description:
+                type: string
+                required: false
+                description: Your product (for CHAMP scoring)
+              icp_description:
+                type: string
+                required: false
+                description: Your ICP (for lead scoring)
+          spidercompanydata:
+            type: object
+            required: false
+            description: Company registry lookup stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Look up company registry (Companies House, SEC, VIES)
+              country:
+                type: string
+                required: false
+                description: Country code or 'auto' to detect
+              include_financials:
+                type: boolean
+                required: false
+                description: Include financial data (UK only)
+          spiderverify:
+            type: object
+            required: false
+            description: Email-verification stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Verify extracted emails via SMTP
+              max_emails:
+                type: integer
+                required: false
+                description: Max emails to verify (1-200, default 50)
+          spiderpeople:
+            type: object
+            required: false
+            description: LinkedIn people-extraction stage
+            properties:
+              enabled:
+                type: boolean
+                required: false
+                description: Extract employees from LinkedIn
+              max_employees:
+                type: integer
+                required: false
+                description: Max employees to extract (1-200, default 20)
+              profile_mode:
+                type: string
+                required: false
+                values: [short, full, full_email]
+                description: "Employee detail level: short / full / full_email"
       test:
         type: boolean
         required: false
