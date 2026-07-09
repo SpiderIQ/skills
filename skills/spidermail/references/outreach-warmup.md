@@ -93,11 +93,49 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $SPIDERIQ_PAT
   "https://spideriq.ai/api/v1/brands/42/mail/outreach/health/overview"   # → 200
 ```
 
+## Push a campaign's leads into SmartLead (Slice D, brand-admin)
+
+Send a finished SpiderIQ campaign's **verified** leads into a chosen SmartLead campaign:
+
+```bash
+# 1. Pick the target campaign (the picker)
+curl -s -H "Authorization: Bearer $SPIDERIQ_PAT" \
+  ".../brands/42/mail/outreach/connections/5/campaigns" | python3 -m json.tool
+# → [{ remote_campaign_id, name, status, lead_count }, ...]
+
+# 2. Push (brand-admin). Idempotent — already-pushed leads are skipped.
+curl -s -X POST -H "Authorization: Bearer $BRAND_ADMIN_TOKEN" \
+  ".../brands/42/mail/outreach/connections/5/push" \
+  -H "Content-Type: application/json" \
+  -d '{"spideriq_campaign_id":"camp_abc","remote_campaign_id":"1234567"}'
+# → { requested, pushed, already_pushed, provider_skipped, active_after, cap }
+# → 409 {error:"account_lead_cap_reached", current, cap, available} if the cap would be exceeded
+
+# 3. Status: quota + per-campaign counts
+curl -s -H "Authorization: Bearer $SPIDERIQ_PAT" \
+  ".../brands/42/mail/outreach/connections/5/push-status" | python3 -m json.tool
+
+# 4. Remove (frees account lead credits)
+curl -s -X POST -H "Authorization: Bearer $BRAND_ADMIN_TOKEN" \
+  ".../brands/42/mail/outreach/connections/5/remove" \
+  -d '{"remote_campaign_id":"1234567","spideriq_campaign_id":"camp_abc"}'
+```
+
+**Two account models:** tenant's OWN SmartLead key → leave `smartlead_client_id`
+empty. OUR agency/whitelabel account → set the connection's `smartlead_client_id`
+(via `updateOutreachConnection`) so campaigns list + push under the right SmartLead
+client; without it the tenant sees nothing.
+
 ## Gotchas
 
 - **Brand-scoped** (`brand_id`), not a mailbox address — these don't take an `email`.
-- **Writes need brand-admin** (update/delete/sync); reads are PAT-ok.
+- **Writes need brand-admin** (update/delete/sync/push/remove); reads are PAT-ok.
 - **No create route** — connections come from the dashboard IntegrationsTab.
 - Health snapshots are the latest **poll**, not live — check `polled_at`.
 - `deleteOutreachConnection` cascades senders/campaigns/health but leaves the
   underlying `api_integrations` credential — the user removes that separately.
+- **Lead push is SmartLead-only** today — the campaign/push/remove routes return
+  400 on lemlist/Instantly connections.
+- **Push is idempotent** (won't double-add) and only pushes **verified-email** leads.
+- The **lead cap** (`max_active_leads`) is SpiderIQ-tracked, mirroring SmartLead's
+  active-lead-credit ceiling (1 unique email = 1 credit; removing frees it).

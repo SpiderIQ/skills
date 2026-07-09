@@ -578,7 +578,15 @@ methods:
     http: POST /mail/views
     params:
       name:           { type: string,  required: true,  description: 'View name (≤200 chars)' }
-      filter_config:  { type: object,  required: false, description: '{ mailboxes[], unread_only, starred_only, has_attachments }' }
+      filter_config:
+        type: object
+        required: false
+        description: '{ mailboxes[], unread_only, starred_only, has_attachments }'
+        properties:
+          mailboxes:       { type: array,   items: string, required: false, description: 'Email addresses to include; omit/null for all client mailboxes' }
+          unread_only:     { type: boolean, required: false, description: 'Only unread messages (default false)' }
+          starred_only:    { type: boolean, required: false, description: 'Only starred messages (default false)' }
+          has_attachments: { type: boolean, required: false, description: 'Only messages with attachments (null = no filter)' }
       color:          { type: string,  required: false, description: 'Display colour' }
       sort_by:        { type: string,  required: false, description: 'Sort field (default date)' }
       sort_direction: { type: string,  required: false, description: 'ASC | DESC (default DESC)' }
@@ -605,7 +613,15 @@ methods:
     params:
       view_id:        { type: string,  required: true,  description: 'Saved view id' }
       name:           { type: string,  required: false, description: 'New name' }
-      filter_config:  { type: object,  required: false, description: 'New filter config' }
+      filter_config:
+        type: object
+        required: false
+        description: 'New filter config'
+        properties:
+          mailboxes:       { type: array,   items: string, required: false, description: 'Email addresses to include; omit/null for all client mailboxes' }
+          unread_only:     { type: boolean, required: false, description: 'Only unread messages (default false)' }
+          starred_only:    { type: boolean, required: false, description: 'Only starred messages (default false)' }
+          has_attachments: { type: boolean, required: false, description: 'Only messages with attachments (null = no filter)' }
       color:          { type: string,  required: false, description: 'New colour' }
       sort_by:        { type: string,  required: false, description: 'Sort field' }
       sort_direction: { type: string,  required: false, description: 'ASC | DESC' }
@@ -655,19 +671,22 @@ methods:
   updateOutreachConnection:
     description: >
       Edit an outreach connection — workspace_id, warmup_tag (the tag that marks
-      warmup sends), lemwarm_domains, or is_active. BRAND-ADMIN only.
+      warmup sends), lemwarm_domains, is_active, smartlead_client_id (agency
+      sub-account scoping), or max_active_leads (the lead-push cap). BRAND-ADMIN only.
     guidance:
-      use: "change which warmup_tag/domains a connection uses, or pause it (is_active=false)"
-      warn: "requires brand-admin (a plain PAT read-only token gets 403). Does NOT touch the underlying api_integrations credential."
+      use: "change warmup_tag/domains, pause (is_active=false), set the SmartLead agency client_id, or set max_active_leads (the per-account lead cap)"
+      warn: "requires brand-admin (a plain PAT read-only token gets 403). Does NOT touch the underlying api_integrations credential. Set smartlead_client_id only for OUR shared/agency account; leave empty when the tenant uses their own SmartLead key."
       telemetry_signal_default: "cold"
     http: PATCH /brands/{brand_id}/mail/outreach/connections/{connection_id}
     params:
-      brand_id:        { type: string,  required: true,  description: 'Numeric brand id' }
-      connection_id:   { type: string,  required: true,  description: 'Outreach connection id' }
-      workspace_id:    { type: string,  required: false, description: 'Provider workspace id (≤128 chars)' }
-      warmup_tag:      { type: string,  required: false, description: 'Tag marking warmup sends' }
-      lemwarm_domains: { type: array,   items: string, required: false, description: 'lemlist warmup domains' }
-      is_active:       { type: boolean, required: false, description: 'Enable / pause the sidecar' }
+      brand_id:            { type: string,  required: true,  description: 'Numeric brand id' }
+      connection_id:       { type: string,  required: true,  description: 'Outreach connection id' }
+      workspace_id:        { type: string,  required: false, description: 'Provider workspace id (≤128 chars)' }
+      warmup_tag:          { type: string,  required: false, description: 'Tag marking warmup sends' }
+      lemwarm_domains:     { type: array,   items: string, required: false, description: 'lemlist warmup domains' }
+      is_active:           { type: boolean, required: false, description: 'Enable / pause the sidecar' }
+      smartlead_client_id: { type: string,  required: false, description: 'SmartLead agency/whitelabel client id; empty string clears it (own-account mode)' }
+      max_active_leads:    { type: integer, required: false, description: 'Cap on distinct leads pushed via this connection (0+); omit/null = uncapped' }
     response: { format: json }
 
   deleteOutreachConnection:
@@ -738,4 +757,75 @@ methods:
     http: GET /brands/{brand_id}/mail/outreach/health/overview
     params:
       brand_id: { type: string, required: true, description: 'Numeric brand id' }
+    response: { format: json }
+
+  # ── Slice D: push a campaign's verified leads → a chosen SmartLead campaign ──
+
+  listOutreachCampaigns:
+    description: >
+      List the SmartLead campaigns this connection can see (scoped by its agency
+      smartlead_client_id) — remote_campaign_id, name, status, lead_count. The
+      picker you read BEFORE pushing leads.
+    guidance:
+      use: "find the target SmartLead campaign id to push leads into"
+      next: "pushOutreachLeads with the chosen remote_campaign_id"
+      warn: "only SmartLead implements this; lemlist/Instantly return 400. For OUR shared account the list is already client-scoped via the connection's smartlead_client_id."
+      telemetry_signal_default: "warm"
+    http: GET /brands/{brand_id}/mail/outreach/connections/{connection_id}/campaigns
+    params:
+      brand_id:      { type: string, required: true, description: 'Numeric brand id' }
+      connection_id: { type: string, required: true, description: 'Outreach connection id' }
+    response: { format: json }
+
+  pushOutreachLeads:
+    description: >
+      Push a SpiderIQ campaign's verified leads into a chosen SmartLead campaign.
+      Idempotent (already-pushed leads are skipped, never double-added). Returns
+      added/skipped counts + the account's active-lead total. BRAND-ADMIN only.
+    guidance:
+      use: "send a finished campaign's verified leads into a SmartLead campaign for outreach"
+      next: "getOutreachPushStatus to confirm counts; removeOutreachLeads to undo"
+      warn: "BRAND-ADMIN. 409 account_lead_cap_reached if max_active_leads would be exceeded — pass `limit` to trim to the headroom instead of erroring, or removeOutreachLeads to free credits first. Only verified-email leads are pushed."
+      telemetry_signal_default: "cold"
+    http: POST /brands/{brand_id}/mail/outreach/connections/{connection_id}/push
+    params:
+      brand_id:                { type: string,  required: true,  description: 'Numeric brand id' }
+      connection_id:           { type: string,  required: true,  description: 'Outreach connection id' }
+      spideriq_campaign_id:    { type: string,  required: true,  description: 'Source SpiderIQ campaign id' }
+      remote_campaign_id:      { type: string,  required: true,  description: 'Target SmartLead campaign id (from listOutreachCampaigns)' }
+      smartlead_campaign_name: { type: string,  required: false, description: 'Target campaign name (for the confirmation notification)' }
+      limit:                   { type: integer, required: false, description: 'Add at most N new leads; also trims to the account cap instead of erroring' }
+    response: { format: json }
+
+  removeOutreachLeads:
+    description: >
+      Remove tracked leads from a SmartLead campaign (frees account lead credits).
+      Scope by spideriq_campaign_id and/or an explicit email list; with neither,
+      removes ALL leads SpiderIQ pushed to that campaign. BRAND-ADMIN only.
+    guidance:
+      use: "pull leads back out of a SmartLead campaign / free account lead credits"
+      next: "getOutreachPushStatus to confirm the freed headroom"
+      warn: "BRAND-ADMIN. Only removes leads SpiderIQ itself pushed (tracked by lead id); leads added directly in SmartLead are untouched. No undo."
+      telemetry_signal_default: "cold"
+    http: POST /brands/{brand_id}/mail/outreach/connections/{connection_id}/remove
+    params:
+      brand_id:             { type: string, required: true,  description: 'Numeric brand id' }
+      connection_id:        { type: string, required: true,  description: 'Outreach connection id' }
+      remote_campaign_id:   { type: string, required: true,  description: 'Target SmartLead campaign id' }
+      spideriq_campaign_id: { type: string, required: false, description: 'Only remove leads from this source campaign' }
+      emails:               { type: array,  items: string, required: false, description: 'Only remove these specific lead emails' }
+    response: { format: json }
+
+  getOutreachPushStatus:
+    description: >
+      Quota usage (active_leads / max_active_leads / available) + per-campaign push
+      counts (pushed / skipped / removed) for a connection.
+    guidance:
+      use: "see how many leads are in each SmartLead campaign and how much account headroom is left"
+      next: "pushOutreachLeads (if headroom) or removeOutreachLeads (to free credits)"
+      telemetry_signal_default: "warm"
+    http: GET /brands/{brand_id}/mail/outreach/connections/{connection_id}/push-status
+    params:
+      brand_id:      { type: string, required: true, description: 'Numeric brand id' }
+      connection_id: { type: string, required: true, description: 'Outreach connection id' }
     response: { format: json }
