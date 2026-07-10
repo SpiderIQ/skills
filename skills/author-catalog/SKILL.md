@@ -1,6 +1,6 @@
 ---
 name: author-catalog
-version: 0.1.0
+version: 0.2.0
 description: >
   Author the SpiderGate model-catalog editorial — the human-written copy the
   client-facing catalog and model leaderboard show: a model's description /
@@ -18,7 +18,7 @@ description: >
   the fields you supply change) and stamps the row as curated so the 6h
   discovery sync stops overwriting it.
 client: author-catalog
-client_version: "0.1.0"
+client_version: "0.2.0"
 category: admin
 triggers:
   - author the model catalog
@@ -47,6 +47,7 @@ gate_catalog_model_set_meta (model_id, …)  ─▶  description / long_desc / t
 gate_catalog_alias_set_meta (alias, …)      ─▶  display_name / description / use_case / badges / sort_order / hidden  (upsert)
 gate_catalog_media_set_meta (media_id, …)   ─▶  media-model editorial (display_name real; rest → metadata.editorial)
 gate_catalog_links_set (action, model_id, …) ─▶  add / remove a reference link (youtube | article | study | paper)
+setProviderMeta (provider_name, …)           ─▶  provider editorial: description / free_tier_description / docs_url / signup_url  (HTTP only — no MCP tool/CLI yet)
 ```
 
 > **AUTH:** every `gate_catalog_*` call carries the platform admin key
@@ -79,14 +80,32 @@ gate_catalog_links_set (action, model_id, …) ─▶  add / remove a reference 
   (`source` / `attribution` / `is_authored_by_us`). Fill provenance for anything
   not authored by us. → [references/manage-links.md](references/manage-links.md)
 
-<HARD-GATE name="provenance-on-third-party-links">
-When you `gate_catalog_links_set` (action=add) a link to content **we did not
-write** (a third-party review, a vendor benchmark, an academic paper), you MUST
-set `is_authored_by_us=false` and fill `source` + `attribution` (and
-`source_url` where the license requires a link-back). The catalog renders that
-attribution; shipping a third-party link with no provenance is a licensing
-defect. Only set `is_authored_by_us=true` for content SpiderIQ authored.
+<HARD-GATE name="licensing-facts-our-words-provenance">
+Everything a client reads must be **facts + OUR words + provenance** — never
+third-party prose, never an unattributed link:
+- **Descriptions** (`description` / `long_description`) are composed by YOU from
+  STRUCTURED FACTS (developer, modality, release, license, context, price, lineage)
+  the enrichment layer already gathered. **NEVER paste a vendor's marketing blurb, a
+  model card, or a Wikipedia paragraph** — that's copyright / CC-BY-SA share-alike (a
+  copyleft trap for our DB). A sentence built from facts is provably not a copy. If
+  you have only prose and no facts, write LESS.
+- **Third-party links** (`setLink` on a review / vendor benchmark / paper we did not
+  write) MUST set `is_authored_by_us=false` + `source` + `attribution` (+ `source_url`
+  where the license needs a link-back).
+A copied description and an unattributed link are the **same** licensing defect. Only
+set `is_authored_by_us=true` for content SpiderIQ authored.
 </HARD-GATE>
+
+> **This skill authors COPY, not FACTS.** It writes the *editorial* — description,
+> tags, badges, links, visibility, sort. It does **NOT** fill a model's *factual*
+> fields: `context_window`, `max_output`, pricing, `capabilities`, `supports_tools`,
+> benchmarks (`gate_catalog_benchmarks`), or per-provider performance
+> (`gate_catalog_provider_perf`). Those come from the **enrichment** path
+> (OpenRouter / LLM-Stats / Wikidata → the discovery sync or a curator agent), NOT
+> from here. Authoring a description does **not** make a model "filled" — if
+> `context_window` is 0 and there are no benchmarks, the facts still need the
+> enrichment pass. Ground your copy in facts the enrichment already wrote; if they
+> aren't there yet, the model isn't ready to author.
 
 ## Rules (Non-Negotiable)
 
@@ -110,6 +129,12 @@ model (a `link_id` can only be removed through the model it belongs to).
 **super_admin-ONLY, PLATFORM-WIDE.** `X-Admin-Key` (`SPIDERIQ_ADMIN_API_KEY`),
 never a client PAT, no brand scoping — one shared catalog. Never echo the key.
 
+**VERIFY WITH THE SCRIPT, NOT BY EYE.** After filling/authoring a provider's models,
+run [`scripts/verify-catalog-fill.sh <provider>`](scripts/verify-catalog-fill.sh) and
+**paste its output verbatim** into your summary — it asserts the invariants above
+(is_curated + real description, facts-present-before-authored, no badge monoculture)
+as PASS/FAIL/INFO the model can't fudge. "Looks good" is not a verification.
+
 ## Decision tree — pick a reference
 
 | The situation… | Read |
@@ -132,10 +157,21 @@ super_admin-only. The MCP tools ship in the **mcp-admin** slice
 | Author a media model's editorial | `PATCH /media-models/{id}/meta` | `gate_catalog_media_set_meta` | `spideriq gate catalog media set-meta <id> …` |
 | Add a reference link | `POST /models/{id}/links` | `gate_catalog_links_set` (action=add) | `spideriq gate catalog links add <id> --kind … --url …` |
 | Remove a reference link | `DELETE /models/{id}/links/{link_id}` | `gate_catalog_links_set` (action=remove) | `spideriq gate catalog links rm <id> <link_id>` |
+| Author a **provider's** editorial | `PATCH /providers/{name}/metadata` | ⚠ none yet — follow-up | ⚠ none yet — follow-up |
 
 > **4 MCP tools, 5 CLI verbs.** The MCP `gate_catalog_links_set` (one tool,
 > `action: add|remove`) is split on the CLI into `links add` + `links rm`. They
 > hit the same split REST endpoints (`POST /links` · `DELETE /links/{id}`).
+>
+> **`setProviderMeta` is HTTP-only for now.** Provider editorial (`provider_metadata`
+> — the logo caption/description, free-tier blurb, docs/signup URLs a client sees on
+> a provider) has a live admin endpoint but **no MCP tool or CLI verb yet** — a
+> `gate_catalog_provider_set_meta` tool + `spideriq gate catalog providers set-meta`
+> verb are a tracked follow-up (mcp-admin slice). Foreign HTTP agents can call the
+> endpoint directly today; our own MCP/CLI agents cannot until the tool ships.
+> Note: this endpoint's editable set is `description` / `free_tier_description` /
+> `docs_url` / `signup_url` — **`logo_url` is NOT editable here** (it's managed by
+> the provider-logo surface, not this endpoint).
 
 ## Methods (native tool calls — from client/schema.yaml)
 
@@ -145,6 +181,7 @@ super_admin-only. The MCP tools ship in the **mcp-admin** slice
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
 | `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
 | `setLink` | add / remove a reference link (action=add\|remove) | [references/manage-links.md](references/manage-links.md) |
+| `setProviderMeta` | author a provider's editorial (description/free-tier/docs/signup) — **HTTP only, no MCP tool/CLI yet** | [references/author-provider.md](references/author-provider.md) |
 
 The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
 `telemetry_signal_default`, plus skill-level `intent_aliases`) lives in
@@ -154,21 +191,41 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
 
 - **[references/author-editorial.md](references/author-editorial.md)** — the
   COALESCE-preserve model + WRONG→RIGHT for partial edits, badges/tags as
-  list-replaces, and the is_curated guard. **Read before your first set-meta.**
+  list-replaces, the is_curated guard, the **description-licensing rule** (compose
+  from facts, never copy prose), the **badge vocabulary** (house tones/labels), how
+  to **find a model's integer id**, and the **un-curate / rollback** runbook.
+  **Read before your first set-meta.**
 - **[references/manage-links.md](references/manage-links.md)** — add/remove
   reference links, the (model, url) idempotency, and the provenance HARD-GATE.
   Steps / Gotchas / Verify.
+- **[references/author-provider.md](references/author-provider.md)** — author a
+  provider's editorial (`provider_metadata`) via the HTTP endpoint; the editable
+  field set; and why there's no MCP tool/CLI yet.
+- **[scripts/verify-catalog-fill.sh](scripts/verify-catalog-fill.sh)** — a
+  deterministic PASS/FAIL/INFO check the model can't fudge. Run it after a fill and
+  paste the output verbatim. Reads the admin catalog (X-Admin-Key) and asserts every
+  is_curated row has a real description, flags authored-but-factless stubs, and flags
+  badge monoculture. **Enforcement lives in the script, not just this prose.**
 
 ## See also
 
 - `learnings/` — `coalesce-preserve-and-curated-guard-2026-07-08` (why a partial
   PATCH + the `is_curated` stamp is what keeps authored copy alive across the 6h
-  discovery sync — the A.1 G4 guard). Starting points, not ground truth — verify
-  against current code.
+  discovery sync — the A.1 G4 guard) and `df1-fill-judgment-calls-2026-07-10` (the
+  OpenAI pilot's judgment calls: a delisted model has no spec source, a source that
+  returns nothing, sources that disagree — never fabricate, leave a visible gap or
+  fall back per-field). Starting points, not ground truth — verify against current code.
+- **The FACTS half is a different job.** Filling a model's specs / benchmarks /
+  pricing (the fields this skill does NOT write — see the boundary note above) is
+  the **enrichment** path (OpenRouter / LLM-Stats / Wikidata → provenance-stamped
+  facts). Today that runs as backend code (`app/services/gate/catalog_enrichment/`)
+  and the 6h discovery sync; the agent-facing `enrich-catalog` skill for it is a
+  tracked follow-up. Author copy here only AFTER the facts are in.
 - **Sibling skills in this package** (`@spideriq/admin-skills`): `manage-routing`
   (change WHICH model an alias routes to — different surface, same auth),
   `opvs-admin`, `auth`, `integrations`.
 - **Not this skill:** changing the model behind an alias is `manage-routing`
   (`gate_routing_*`); sending completions is `@spideriq/gateway-skills`
-  (`use-the-gateway`); the client-facing catalog READ is the gateway read skill.
-  This skill authors the *copy clients read about a model*, not routing.
+  (`use-the-gateway`); the client-facing catalog READ is the gateway read skill;
+  filling a model's factual specs/benchmarks is the enrichment path (above). This
+  skill authors the *copy clients read about a model*, not routing, not facts.

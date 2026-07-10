@@ -12,13 +12,16 @@
 # DELETE /links/{id}) via an action=add|remove argument.
 
 name: author-catalog
-version: "0.1.0"
+version: "0.2.0"
 description: >
-  Author the SpiderGate model-catalog editorial — model/alias/media description,
-  tags, badges, sort order, visibility, and per-model reference links (the copy
-  the client catalog + model leaderboard render). Partial + COALESCE-preserve;
-  authoring stamps the row is_curated so the discovery sync stops overwriting it.
-  super_admin-only, platform-wide.
+  Author the SpiderGate model-catalog editorial — model/alias/media/provider
+  description, tags, badges, sort order, visibility, and per-model reference links
+  (the copy the client catalog + model leaderboard render). Partial +
+  COALESCE-preserve; authoring stamps the row is_curated so the discovery sync
+  stops overwriting it. super_admin-only, platform-wide. Authors EDITORIAL COPY
+  only — a model's factual fields (context/pricing/benchmarks/perf) come from the
+  enrichment path, not here; descriptions are composed from facts, never copied
+  from vendor prose.
 category: admin
 base_url: /api/v1/admin/gate
 auth:
@@ -62,6 +65,10 @@ guidance:
     - "setModelMeta stamps is_curated=TRUE — intended: the 6h discovery sync then stops overwriting the row's display_name (that is how authored copy survives). Not reversible via this surface."
     - "setLink is idempotent per (model, url) — re-adding a url UPDATES that link; removal is by link_id, scoped to the model. Third-party links MUST carry is_authored_by_us=false + source + attribution (HARD-GATE)."
     - "alias and media_id can contain a slash (opvs/coding, provider/model) — the tools URL-encode it; pass the value plain."
+    - "description / long_description are OUR OWN words — NEVER copy vendor marketing blurb, model-card prose, or Wikipedia text (copyright / CC-BY-SA). Compose from structured facts; if you only have prose, write less. A copied description is a licensing defect (HARD-GATE)."
+    - "This skill authors COPY, not FACTS: it does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf. Those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model."
+    - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first via the admin read GET /admin/gate/catalog/models (the client READ surface returns the string id, not the int)."
+    - "setProviderMeta is HTTP-only (PATCH /providers/{name}/metadata) — no MCP tool or CLI verb yet. Editable set is description / free_tier_description / docs_url / signup_url; logo_url is NOT editable here."
 
 methods:
   setModelMeta:
@@ -304,5 +311,45 @@ methods:
         type: integer
         required: false
         description: "remove: the gate_catalog_links row id to delete (≥1)."
+    response:
+      format: json
+
+  setProviderMeta:
+    description: >
+      Author a PROVIDER's editorial (provider_metadata) — the description, free-tier
+      blurb, and docs/signup URLs a client sees for a provider (openai, anthropic,
+      groq, …). Upsert + COALESCE-preserve: only the fields you supply change.
+      Editable set is description / free_tier_description / docs_url / signup_url —
+      logo_url is NOT editable here (managed by the provider-logo surface). An empty
+      edit (no editable fields) is a 400. HTTP-ONLY: this endpoint has no MCP tool or
+      CLI verb yet — foreign HTTP agents can call it directly; our MCP/CLI cannot
+      until a gate_catalog_provider_set_meta tool ships (tracked follow-up).
+    guidance:
+      use: "Write the description, free-tier text, or docs/signup URLs a client sees for a whole provider (not a single model)."
+      next: "setModelMeta (author the provider's individual models), setProviderMeta again (adjust another field)"
+      warn: "HTTP-only (no MCP tool/CLI yet). Upsert + COALESCE-preserve. Editable: description / free_tier_description / docs_url / signup_url — NOT logo_url. Provider editorial is a SEPARATE path from model enrichment. Description is OUR words, never copied vendor prose (HARD-GATE)."
+      telemetry_signal_default: "warm"
+    http: PATCH /providers/{provider_name}/metadata
+    params:
+      provider_name:
+        type: string
+        required: true
+        description: The provider registry name, e.g. openai / anthropic / groq. 404 if unknown.
+      description:
+        type: string
+        required: false
+        description: Short editorial description of the provider (OUR words, not copied prose).
+      free_tier_description:
+        type: string
+        required: false
+        description: Free-tier / trial-credit blurb shown to clients (empty string if the provider has no free tier).
+      docs_url:
+        type: string
+        required: false
+        description: Provider documentation URL (or an internal /docs/providers/{name} route).
+      signup_url:
+        type: string
+        required: false
+        description: Where a client signs up / gets an API key for this provider.
     response:
       format: json
