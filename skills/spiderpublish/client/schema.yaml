@@ -366,7 +366,7 @@ methods:
       body:
         type: object
         required: false
-        description: 'Post body — Tiptap JSON document'
+        description: 'Post body. Canonical shape is a Tiptap JSON document ({type:"doc",content:[...]}). You MAY also send {markdown:"..."} or {html:"..."} — the server converts either to Tiptap on save. Prefer Tiptap when you have it.'
         properties:
           type:
             type: string

@@ -1,0 +1,15 @@
+{
+  "title": "A {markdown:\"...\"} post body renders BLANK in the dashboard editor (and on default-template sites) — the body must be a Tiptap doc; the server now converts markdown/html on save",
+  "summary": "Agents (markdown is an LLM's native output) sent createPost/updatePost a body shaped {\"markdown\": \"...\"} instead of a Tiptap document ({type:\"doc\",content:[...]}). Both the MCP tool and the skill correctly documented 'Tiptap JSON', but neither VALIDATED the shape — the schema was a bare object — so the markdown blob saved silently. The TipTap dashboard editor and the default renderer's tiptap_html filter only read type/content, so the post body rendered BLANK in the editor and had empty body_text (broken search). 56 posts across 7 tenants (incl. spideriq.ai) were affected. The public sites of 6 Antigravity-built tenants still rendered because they ship a CUSTOM blog-post.liquid that renders body.markdown client-side via marked.js — which is exactly why a naive convert-to-Tiptap backfill would have broken them. Fix (2026-07-09): the backend normalizes {markdown} / {html} to Tiptap at the write boundary (create_post/update_post via markdown_to_tiptap + html2text), keeping a TRANSITIONAL markdown mirror + an _authored marker so the custom marked.js sites keep rendering until their templates switch to {{ post.body | tiptap_html }}. Editor gains a mode badge from _authored. Skill + MCP descriptions now state markdown/html are accepted and converted.",
+  "created_at": "2026-07-09",
+  "updated_at": "2026-07-09",
+  "tags": ["spiderpublish", "content", "blog", "tiptap", "markdown", "renderer", "editor", "silent-shape"],
+  "references": [
+    "app/services/content_service.py _normalize_post_body_for_storage — the write-boundary normalizer (markdown/html → Tiptap + transitional mirror + _authored)",
+    "app/services/content_markdown.py markdown_to_tiptap / render_tiptap_markdown — the converters reused",
+    "apps/liquid-renderer/src/filters.ts tiptapToHtml (line ~170) — the server-side renderer that returns '' for a non-Tiptap body",
+    "apps/web/src/routes/client/content/post-editor.tsx — editor reads existingPost.body as JSONContent; a {markdown} body → blank TipTap; mode badge added",
+    "app/scripts/backfill_post_body_tiptap.py — additive backfill for the 56 existing posts (keeps the markdown mirror)",
+    "Custom sites read body.markdown via marked.js (raw = data.markdown || data.content || data) — why the mirror is preserved during transition"
+  ]
+}
