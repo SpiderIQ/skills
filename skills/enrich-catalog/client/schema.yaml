@@ -1,0 +1,85 @@
+# Enrich-Catalog Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md.
+#
+# Wraps POST /api/v1/admin/gate/catalog/enrich (DF.2) — the admin mirror of the
+# gate_catalog_enrich MCP tool (mcp-admin slice) and `spideriq gate catalog enrich`.
+# Auth is the PLATFORM admin key (X-Admin-Key), NOT a client PAT — super_admin only.
+# Fetches FACTS (specs/pricing/benchmarks/perf/lineage) from the free stack and
+# writes them provenance-stamped; it does NOT author editorial copy (author-catalog).
+
+name: enrich-catalog
+version: "0.1.0"
+description: >
+  Go get the facts for the SpiderGate model catalog — run a scoped free-stack
+  enrichment pass over a provider (or model_ids) and fill specs + pricing
+  (OpenRouter), benchmarks + per-provider perf (LLM-Stats), and lineage (Wikidata),
+  each provenance-stamped. Fetches FACTS, not editorial; authored (is_curated) copy is
+  preserved; the fleet cron stays dark. super_admin-only, platform-wide.
+category: admin
+base_url: /api/v1/admin/gate
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 120000
+requires_brand: false
+triggers:
+  - fill the model catalog
+  - enrich the gateway catalog
+  - fetch facts for a provider
+  - get benchmarks and pricing for a model
+  - populate a model's specs
+
+guidance:
+  use: >
+    Reach for this to FETCH a provider's (or specific models') factual fields —
+    context window, pricing, benchmarks, per-provider performance, and developer/
+    release/license lineage — from the free public sources, provenance-stamped.
+    Enrich the facts FIRST, then author the copy with author-catalog. super_admin +
+    X-Admin-Key.
+  not:
+    - "author-catalog → WRITE the human copy (description/badges/links) — this only fetches facts"
+    - "model-catalog (@spideriq/gateway-skills) → READ the catalog to pick a model — this fills it"
+    - "manage-routing (gate_routing_*) → change WHICH model an alias routes to"
+  # No free-text search field on this surface; scope is a typed provider name or an
+  # id list. intent_aliases explicitly empty (Q1).
+  intent_aliases: []
+  pitfalls:
+    - "Supply EXACTLY ONE of provider or model_ids — both, or neither, is a 422."
+    - "Bounded to ~30 models/call (live web fetches). result.catalog_rows > result.matched ⇒ the rest were DEFERRED; narrow with model_ids or re-call. Never assume one call covered a huge provider."
+    - "Fetches FACTS, not editorial: it does NOT write description/badges/tags. Author those in author-catalog AFTER enriching."
+    - "is_curated authored copy is PRESERVED — only facts refresh; you can safely re-enrich a curated model."
+    - "Never fabricate a missing fact: a source that returns nothing leaves a visible null; a delisted model's spec stays null (HARD-GATE). Benchmarks are self_reported vendor numbers — carry the flag."
+    - "The fleet-wide 6h cron is NOT armed by this — it's on-demand + scoped."
+
+methods:
+  enrich:
+    description: >
+      Run a scoped free-stack enrichment pass and fill the scoped models' factual
+      fields, provenance-stamped: specs + pricing (OpenRouter), benchmarks +
+      per-provider perf (LLM-Stats), lineage (Wikidata). Supply EXACTLY ONE of
+      `provider` or `model_ids`. Bounded to ~30 models/call. Authored (is_curated)
+      copy is preserved. Never arms the fleet cron. Returns the aggregate result
+      (rows/matched/benchmarks/perf/links/facts/spec/deferred).
+    guidance:
+      use: "Fetch + fill a provider's (or specific models') facts before authoring their copy."
+      next: "verify-enrichment.sh (confirm the facts landed), then gate_catalog_model_set_meta (author the copy in author-catalog)"
+      warn: "Exactly one of provider/model_ids. Bounded ~30/call (deferred = catalog_rows - matched). Facts only — author copy separately. Never fabricate a missing fact (HARD-GATE)."
+      telemetry_signal_default: "cold"
+    http: POST /catalog/enrich
+    params:
+      provider:
+        type: string
+        required: false
+        description: Enrich every non-hidden model under this provider (e.g. openai). Exactly one of provider/model_ids.
+      model_ids:
+        type: array
+        required: false
+        description: Enrich these specific gate_model_catalog ids (≤30). Exactly one of provider/model_ids.
+        items:
+          type: integer
+    response:
+      format: json

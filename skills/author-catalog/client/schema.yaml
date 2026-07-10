@@ -12,7 +12,7 @@
 # DELETE /links/{id}) via an action=add|remove argument.
 
 name: author-catalog
-version: "0.2.0"
+version: "0.3.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -68,7 +68,7 @@ guidance:
     - "description / long_description are OUR OWN words — NEVER copy vendor marketing blurb, model-card prose, or Wikipedia text (copyright / CC-BY-SA). Compose from structured facts; if you only have prose, write less. A copied description is a licensing defect (HARD-GATE)."
     - "This skill authors COPY, not FACTS: it does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf. Those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model."
     - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first via the admin read GET /admin/gate/catalog/models (the client READ surface returns the string id, not the int)."
-    - "setProviderMeta is HTTP-only (PATCH /providers/{name}/metadata) — no MCP tool or CLI verb yet. Editable set is description / free_tier_description / docs_url / signup_url; logo_url is NOT editable here."
+    - "setProviderMeta (gate_catalog_provider_set_meta / CLI providers set-meta) authors PROVIDER editorial (description / free_tier_description / docs_url / signup_url); logo_url is NOT editable here. To fill a provider's models' FACTS first, use the enrich-catalog skill."
 
 methods:
   setModelMeta:
@@ -321,13 +321,12 @@ methods:
       groq, …). Upsert + COALESCE-preserve: only the fields you supply change.
       Editable set is description / free_tier_description / docs_url / signup_url —
       logo_url is NOT editable here (managed by the provider-logo surface). An empty
-      edit (no editable fields) is a 400. HTTP-ONLY: this endpoint has no MCP tool or
-      CLI verb yet — foreign HTTP agents can call it directly; our MCP/CLI cannot
-      until a gate_catalog_provider_set_meta tool ships (tracked follow-up).
+      edit (no editable fields) is a 400. Available as the MCP tool
+      gate_catalog_provider_set_meta and CLI `spideriq gate catalog providers set-meta`.
     guidance:
       use: "Write the description, free-tier text, or docs/signup URLs a client sees for a whole provider (not a single model)."
       next: "setModelMeta (author the provider's individual models), setProviderMeta again (adjust another field)"
-      warn: "HTTP-only (no MCP tool/CLI yet). Upsert + COALESCE-preserve. Editable: description / free_tier_description / docs_url / signup_url — NOT logo_url. Provider editorial is a SEPARATE path from model enrichment. Description is OUR words, never copied vendor prose (HARD-GATE)."
+      warn: "Upsert + COALESCE-preserve. Editable: description / free_tier_description / docs_url / signup_url — NOT logo_url. Provider editorial is a SEPARATE path from model enrichment (see the enrich-catalog skill). Description is OUR words, never copied vendor prose (HARD-GATE)."
       telemetry_signal_default: "warm"
     http: PATCH /providers/{provider_name}/metadata
     params:

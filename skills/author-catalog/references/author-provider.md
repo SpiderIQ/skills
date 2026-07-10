@@ -6,14 +6,13 @@ blurb, and the docs/signup links a client sees for the provider itself. It lives
 in `provider_metadata`, keyed by `provider_name`, and is a **different path from
 model enrichment**.
 
-## ⚠ HTTP-only (no MCP tool or CLI yet)
+## Surface
 
-Unlike the model/alias/media/link surfaces, provider editorial has **no MCP tool
-and no CLI verb** — only the HTTP endpoint. Foreign HTTP agents can call it
-directly today; our own MCP/CLI agents cannot until a
-`gate_catalog_provider_set_meta` tool + `spideriq gate catalog providers set-meta`
-verb ship (tracked follow-up in the mcp-admin slice). If you're an MCP/CLI agent,
-this is a gap, not a workflow you can complete yet.
+| Do | HTTP | MCP tool | CLI |
+|---|---|---|---|
+| Author provider editorial | `PATCH /providers/{name}/metadata` | `gate_catalog_provider_set_meta` | `spideriq gate catalog providers set-meta <name> …` |
+
+All under `/api/v1/admin/gate`, `X-Admin-Key` (`SPIDERIQ_ADMIN_API_KEY`), super_admin.
 
 ## Endpoint
 

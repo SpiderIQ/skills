@@ -1,6 +1,6 @@
 ---
 name: author-catalog
-version: 0.2.0
+version: 0.3.0
 description: >
   Author the SpiderGate model-catalog editorial — the human-written copy the
   client-facing catalog and model leaderboard show: a model's description /
@@ -18,7 +18,7 @@ description: >
   the fields you supply change) and stamps the row as curated so the 6h
   discovery sync stops overwriting it.
 client: author-catalog
-client_version: "0.2.0"
+client_version: "0.3.0"
 category: admin
 triggers:
   - author the model catalog
@@ -47,7 +47,7 @@ gate_catalog_model_set_meta (model_id, …)  ─▶  description / long_desc / t
 gate_catalog_alias_set_meta (alias, …)      ─▶  display_name / description / use_case / badges / sort_order / hidden  (upsert)
 gate_catalog_media_set_meta (media_id, …)   ─▶  media-model editorial (display_name real; rest → metadata.editorial)
 gate_catalog_links_set (action, model_id, …) ─▶  add / remove a reference link (youtube | article | study | paper)
-setProviderMeta (provider_name, …)           ─▶  provider editorial: description / free_tier_description / docs_url / signup_url  (HTTP only — no MCP tool/CLI yet)
+gate_catalog_provider_set_meta (provider_name, …) ─▶  provider editorial: description / free_tier_description / docs_url / signup_url
 ```
 
 > **AUTH:** every `gate_catalog_*` call carries the platform admin key
@@ -157,21 +157,18 @@ super_admin-only. The MCP tools ship in the **mcp-admin** slice
 | Author a media model's editorial | `PATCH /media-models/{id}/meta` | `gate_catalog_media_set_meta` | `spideriq gate catalog media set-meta <id> …` |
 | Add a reference link | `POST /models/{id}/links` | `gate_catalog_links_set` (action=add) | `spideriq gate catalog links add <id> --kind … --url …` |
 | Remove a reference link | `DELETE /models/{id}/links/{link_id}` | `gate_catalog_links_set` (action=remove) | `spideriq gate catalog links rm <id> <link_id>` |
-| Author a **provider's** editorial | `PATCH /providers/{name}/metadata` | ⚠ none yet — follow-up | ⚠ none yet — follow-up |
+| Author a **provider's** editorial | `PATCH /providers/{name}/metadata` | `gate_catalog_provider_set_meta` | `spideriq gate catalog providers set-meta <name> …` |
 
-> **4 MCP tools, 5 CLI verbs.** The MCP `gate_catalog_links_set` (one tool,
+> **5 MCP tools, 6 CLI verbs.** The MCP `gate_catalog_links_set` (one tool,
 > `action: add|remove`) is split on the CLI into `links add` + `links rm`. They
 > hit the same split REST endpoints (`POST /links` · `DELETE /links/{id}`).
 >
-> **`setProviderMeta` is HTTP-only for now.** Provider editorial (`provider_metadata`
-> — the logo caption/description, free-tier blurb, docs/signup URLs a client sees on
-> a provider) has a live admin endpoint but **no MCP tool or CLI verb yet** — a
-> `gate_catalog_provider_set_meta` tool + `spideriq gate catalog providers set-meta`
-> verb are a tracked follow-up (mcp-admin slice). Foreign HTTP agents can call the
-> endpoint directly today; our own MCP/CLI agents cannot until the tool ships.
-> Note: this endpoint's editable set is `description` / `free_tier_description` /
-> `docs_url` / `signup_url` — **`logo_url` is NOT editable here** (it's managed by
-> the provider-logo surface, not this endpoint).
+> **Provider editorial** (`provider_metadata` — the description, free-tier blurb, and
+> docs/signup URLs a client sees on a provider) is authored with
+> `gate_catalog_provider_set_meta` / `spideriq gate catalog providers set-meta`. Its
+> editable set is `description` / `free_tier_description` / `docs_url` / `signup_url` —
+> **`logo_url` is NOT editable here** (it's managed by the provider-logo surface). To
+> FILL a provider's models' facts first, see the sibling **`enrich-catalog`** skill.
 
 ## Methods (native tool calls — from client/schema.yaml)
 
@@ -181,7 +178,7 @@ super_admin-only. The MCP tools ship in the **mcp-admin** slice
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
 | `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
 | `setLink` | add / remove a reference link (action=add\|remove) | [references/manage-links.md](references/manage-links.md) |
-| `setProviderMeta` | author a provider's editorial (description/free-tier/docs/signup) — **HTTP only, no MCP tool/CLI yet** | [references/author-provider.md](references/author-provider.md) |
+| `setProviderMeta` | author a provider's editorial (description/free-tier/docs/signup) → `gate_catalog_provider_set_meta` | [references/author-provider.md](references/author-provider.md) |
 
 The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
 `telemetry_signal_default`, plus skill-level `intent_aliases`) lives in
@@ -199,8 +196,8 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
   reference links, the (model, url) idempotency, and the provenance HARD-GATE.
   Steps / Gotchas / Verify.
 - **[references/author-provider.md](references/author-provider.md)** — author a
-  provider's editorial (`provider_metadata`) via the HTTP endpoint; the editable
-  field set; and why there's no MCP tool/CLI yet.
+  provider's editorial (`provider_metadata`) via `gate_catalog_provider_set_meta` /
+  `spideriq gate catalog providers set-meta`; the editable field set.
 - **[scripts/verify-catalog-fill.sh](scripts/verify-catalog-fill.sh)** — a
   deterministic PASS/FAIL/INFO check the model can't fudge. Run it after a fill and
   paste the output verbatim. Reads the admin catalog (X-Admin-Key) and asserts every
@@ -215,12 +212,12 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
   OpenAI pilot's judgment calls: a delisted model has no spec source, a source that
   returns nothing, sources that disagree — never fabricate, leave a visible gap or
   fall back per-field). Starting points, not ground truth — verify against current code.
-- **The FACTS half is a different job.** Filling a model's specs / benchmarks /
-  pricing (the fields this skill does NOT write — see the boundary note above) is
-  the **enrichment** path (OpenRouter / LLM-Stats / Wikidata → provenance-stamped
-  facts). Today that runs as backend code (`app/services/gate/catalog_enrichment/`)
-  and the 6h discovery sync; the agent-facing `enrich-catalog` skill for it is a
-  tracked follow-up. Author copy here only AFTER the facts are in.
+- **The FACTS half is a different job → the `enrich-catalog` skill.** Filling a
+  model's specs / benchmarks / pricing (the fields this skill does NOT write — see the
+  boundary note above) is the **enrichment** path (OpenRouter / LLM-Stats / Wikidata →
+  provenance-stamped facts). Its agent surface is the sibling **`enrich-catalog`** skill
+  (`gate_catalog_enrich` / `spideriq gate catalog enrich`). Enrich the facts FIRST, then
+  author copy here.
 - **Sibling skills in this package** (`@spideriq/admin-skills`): `manage-routing`
   (change WHICH model an alias routes to — different surface, same auth),
   `opvs-admin`, `auth`, `integrations`.
