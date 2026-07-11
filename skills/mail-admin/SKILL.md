@@ -9,8 +9,10 @@ description: >
   off", "rotate / reset passwords for a domain", "register a mailbox in
   SpiderMail", "health-check a mailbox (IMAP/SMTP login)", "connect a Zoho org",
   "add a mailbox to Smartlead as a sender", "read the email-admin audit log".
-  This is the platform CONTROL plane (org-admin actions over a provider's API),
-  super_admin / X-Admin-Key only — it is NOT how you read or send mail from a
+  This is the platform CONTROL plane (org-admin actions over a provider's API);
+  authorise with a PAT carrying the `email:admin` scope (a human admin grants it
+  at approval time), or the platform X-Admin-Key / a super_admin session — it is
+  NOT how you read or send mail from a
   mailbox (that is SpiderMail / @spideriq/mail-skills), and NOT how you manage
   provider API keys / the vault (that is the integrations surface). Read it
   before touching any email_* tool — provisioning consumes paid license seats and

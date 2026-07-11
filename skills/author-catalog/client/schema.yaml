@@ -5,11 +5,16 @@
 #
 # These wrap /api/v1/admin/gate/* (the C.1 authoring endpoints) and are the admin
 # mirror of the gate_catalog_* MCP tools (mcp-admin slice) and the
-# `spideriq gate catalog …` CLI. Auth is the PLATFORM admin key (X-Admin-Key),
-# NOT a client PAT — super_admin only, platform-wide (one shared catalog, no brand
+# `spideriq gate catalog …` CLI. Platform-wide (one shared catalog, no brand
 # scoping). Every write is COALESCE-preserve: only the fields you supply change.
 # The setLink method fans out to the split REST endpoints (POST /links |
 # DELETE /links/{id}) via an action=add|remove argument.
+#
+# AUTH (scoped-PAT, 2026-07): an agent authorises with its OWN PAT carrying the
+# `gate:catalog:write` scope — NOT the shared platform X-Admin-Key. A human admin
+# grants the scope at PAT-approval time, so access is least-privilege and every
+# authored row is attributed to the agent (curated_by = "pat:<prefix>"). The
+# platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
 version: "0.3.0"
@@ -24,10 +29,14 @@ description: >
   from vendor prose.
 category: admin
 base_url: /api/v1/admin/gate
+# Agent path: a PAT granted the `gate:catalog:write` scope (Authorization: Bearer).
+# Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:
-  type: api_key
-  header: X-Admin-Key
-  env_var: SPIDERIQ_ADMIN_API_KEY
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+  required_scope: gate:catalog:write
 defaults:
   format: json
   timeout_ms: 30000

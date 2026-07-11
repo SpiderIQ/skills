@@ -4,11 +4,16 @@
 # per-method use/next/warn/telemetry_signal_default Q4).
 #
 # These wrap /api/v1/mail-admin/* and are the admin mirror of the email_* MCP
-# tools (mcp-admin slice) and the `spideriq email …` CLI. Auth is the PLATFORM
-# admin key (X-Admin-Key), NOT a client PAT — super_admin only, cross-tenant
-# god-mode (one super-admin acting over many brands' provider orgs). This is the
+# tools (mcp-admin slice) and the `spideriq email …` CLI. This is a cross-tenant
 # CONTROL plane (org-admin actions over a provider's API); reading/sending mail
 # from a mailbox is the DATA plane (SpiderMail / @spideriq/mail-skills).
+#
+# AUTH (scoped-PAT, 2026-07): an agent authorises with its OWN PAT carrying the
+# `email:admin` scope — NOT the shared platform X-Admin-Key. A human admin grants
+# the scope at PAT-approval time (`spideriq auth request` → the approver ticks
+# email:admin), so the agent gets least-privilege access and every action is
+# attributed to it (audit kind="pat"). The platform X-Admin-Key still works for
+# server-side automation; super_admin dashboard sessions also pass.
 
 name: mail-admin
 version: "0.1.0"
@@ -17,13 +22,18 @@ description: >
   connect an org, provision mailboxes, enable IMAP, set passwords, register them
   into SpiderMail, health-check with a real login, run the full provision→link
   chain, and (opt-in) add a registered mailbox to Smartlead as a sender. Every
-  mutating action is audited. super_admin-only, X-Admin-Key.
+  mutating action is audited. Requires a PAT with the `email:admin` scope (or the
+  platform X-Admin-Key / a super_admin session).
 category: admin
 base_url: /api/v1/mail-admin
+# Agent path: a PAT granted the `email:admin` scope (Authorization: Bearer).
+# Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:
-  type: api_key
-  header: X-Admin-Key
-  env_var: SPIDERIQ_ADMIN_API_KEY
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+  required_scope: email:admin
 defaults:
   format: json
   timeout_ms: 30000
