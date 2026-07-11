@@ -9,7 +9,8 @@ description: >
   Trigger on: "fill the model catalog", "enrich the gateway catalog", "go get the
   facts for openai", "fetch benchmarks / pricing / specs for a provider", "populate
   a model's context window and price", "refresh a model's benchmarks", "which models
-  are missing facts". This is the ADMIN FACTS surface (super_admin, X-Admin-Key) — it
+  are missing facts". This is the ADMIN FACTS surface (a PAT with `gate:catalog:enrich`
+  or `gate:catalog:write`, or X-Admin-Key / super_admin) — it
   fetches + writes FACTS, not editorial. Authoring the human COPY (description /
   badges / links) is the sibling `author-catalog` skill; picking a model to use is the
   gateway `model-catalog` read skill.
@@ -45,9 +46,11 @@ gate_catalog_enrich(provider | model_ids) ─▶ specs + pricing  (OpenRouter)
             gate_catalog_provider_perf · gate_catalog_links  (all provenance-stamped)
 ```
 
-> **AUTH:** `gate_catalog_enrich` carries the platform admin key (`X-Admin-Key`, from
-> `SPIDERIQ_ADMIN_API_KEY`) — **not** a client PAT. super_admin, platform-wide (one
-> shared catalog). Never echo the key.
+> **AUTH:** `gate_catalog_enrich` authorises with a PAT carrying `gate:catalog:enrich`
+> (the narrow fetch-the-facts scope) OR `gate:catalog:write` (a full curator), granted
+> at PAT-approval time. Platform automation may instead use `X-Admin-Key`
+> (`SPIDERIQ_ADMIN_API_KEY`); a super_admin session also works. Never echo the key.
+> Platform-wide (one shared catalog) — enrich is read → enrich → author with author-catalog.
 
 ## Approach
 
@@ -103,7 +106,7 @@ provenance stamped) as PASS/FAIL/INFO the model can't fudge.
 
 ## Surface (quick map)
 
-Under `/api/v1/admin/gate`, `X-Admin-Key`, super_admin.
+Under `/api/v1/admin/gate`; PAT `gate:catalog:enrich`/`gate:catalog:write`, or `X-Admin-Key`/super_admin.
 
 | Do | HTTP | MCP tool | CLI |
 |---|---|---|---|

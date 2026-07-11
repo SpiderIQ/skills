@@ -4,9 +4,14 @@
 #
 # Wraps POST /api/v1/admin/gate/catalog/enrich (DF.2) — the admin mirror of the
 # gate_catalog_enrich MCP tool (mcp-admin slice) and `spideriq gate catalog enrich`.
-# Auth is the PLATFORM admin key (X-Admin-Key), NOT a client PAT — super_admin only.
 # Fetches FACTS (specs/pricing/benchmarks/perf/lineage) from the free stack and
 # writes them provenance-stamped; it does NOT author editorial copy (author-catalog).
+#
+# AUTH (scoped-PAT, 2026-07): a curation agent authorises with its OWN PAT carrying
+# `gate:catalog:enrich` (the narrow fetch-the-facts scope) OR `gate:catalog:write`
+# (a full curator who authors copy can also enrich). A human admin grants the scope
+# at PAT-approval time. The platform X-Admin-Key / a super_admin session still work.
+# This makes read → enrich → author a single PAT can drive end-to-end.
 
 name: enrich-catalog
 version: "0.1.0"
@@ -15,13 +20,18 @@ description: >
   enrichment pass over a provider (or model_ids) and fill specs + pricing
   (OpenRouter), benchmarks + per-provider perf (LLM-Stats), and lineage (Wikidata),
   each provenance-stamped. Fetches FACTS, not editorial; authored (is_curated) copy is
-  preserved; the fleet cron stays dark. super_admin-only, platform-wide.
+  preserved; the fleet cron stays dark. Requires a PAT with `gate:catalog:enrich`
+  or `gate:catalog:write` (or the platform X-Admin-Key / a super_admin session).
 category: admin
 base_url: /api/v1/admin/gate
+# Agent path: a PAT granted `gate:catalog:enrich` OR `gate:catalog:write` (Bearer).
+# Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:
-  type: api_key
-  header: X-Admin-Key
-  env_var: SPIDERIQ_ADMIN_API_KEY
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+  required_scope: gate:catalog:enrich
 defaults:
   format: json
   timeout_ms: 120000
