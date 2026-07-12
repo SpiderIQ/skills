@@ -153,7 +153,7 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 
 ## Rules (Non-Negotiable)
 
-**Auth:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (a PAT). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP, never echo the secret into logs or chat.
+**Auth:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (a PAT). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP, never echo the secret into logs or chat. Your PAT is self-identifying (`spideriq_pat_<agent_ref>_<secret>`) and carries an `opvsAddress` (`<name>@opvs.run`) — you are ONE account, so re-auth from a new folder ROTATES it (never forks a ghost); `--as <opvs-address>` RECOVERs it on a fresh box.
 
 **Never tight-loop:** after submit, poll status no faster than every 3–5 seconds, or use the SSE stream. Workers take seconds-to-minutes per location.
 

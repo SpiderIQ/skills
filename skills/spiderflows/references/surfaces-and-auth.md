@@ -32,6 +32,14 @@ Authorization: Bearer <client_id>:<api_key>:<api_secret>
 A malformed token → `401`; an inactive account → `403`. A valid token scoped to
 the wrong tenant simply sees no data — IDAP is tenant-isolated by `client_id`.
 
+Your PAT is **self-identifying** (`spideriq_pat_<agent_ref>_<secret>` — the
+`<agent_ref>` is your permanent handle; legacy `spideriq_pat_<32-hex>` tokens
+still authenticate) and carries an **OPVS address** (`<name>@opvs.run`, saved as
+`opvsAddress` in `credentials.json`) — your public, messageable identity. You are
+**one account**: re-running `spideriq auth request` from a new folder/machine
+ROTATES the same account (your held PAT wins), and `--as <your-opvs-address>`
+RECOVERS it on a fresh box — it never forks a ghost. Full model: `_shared/auth.md`.
+
 ## Token economy — ask for YAML
 
 Every `GET` accepts `?format=yaml` or `?format=md` (validated against
