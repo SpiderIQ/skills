@@ -1,6 +1,6 @@
 ---
 name: author-catalog
-version: 0.3.0
+version: 0.3.1
 description: >
   Author the SpiderGate model-catalog editorial — the human-written copy the
   client-facing catalog and model leaderboard show: a model's description /
@@ -11,14 +11,14 @@ description: >
   a model from the catalog", "set the display name for an alias", "attach a
   review link / a paper to a model", "curate the model catalog", "reorder the
   models on the leaderboard", "author the catalog copy". This is the ADMIN
-  WRITE surface (super_admin, X-Admin-Key) for CATALOG EDITORIAL — the copy
+  WRITE surface (PAT scope `gate:catalog:write` or X-Admin-Key) for CATALOG EDITORIAL — the copy
   clients read. It is NOT how you change which model the gateway routes to
   (that's manage-routing / gate_routing_*) and NOT how you send a completion
   (that's the gateway consumer skill). Every write is COALESCE-preserve (only
   the fields you supply change) and stamps the row as curated so the 6h
   discovery sync stops overwriting it.
 client: author-catalog
-client_version: "0.3.0"
+client_version: "0.3.1"
 category: admin
 triggers:
   - author the model catalog
@@ -50,10 +50,11 @@ gate_catalog_links_set (action, model_id, …) ─▶  add / remove a reference 
 gate_catalog_provider_set_meta (provider_name, …) ─▶  provider editorial: description / free_tier_description / docs_url / signup_url
 ```
 
-> **AUTH:** every `gate_catalog_*` call carries the platform admin key
-> (`X-Admin-Key`, from `SPIDERIQ_ADMIN_API_KEY`) — **not** a client PAT. These
-> are **super_admin-only** and apply **platform-wide** (the catalog is one shared
-> catalog; there is no per-brand editorial). Never echo the key into logs or chat.
+> **AUTH:** every `gate_catalog_*` write authorises with a PAT carrying the
+> `gate:catalog:write` capability scope (granted at PAT-approval time), OR the
+> platform `X-Admin-Key` (`SPIDERIQ_ADMIN_API_KEY`), OR a super_admin session. A
+> normal PAT without the scope gets a `403`. Platform-wide — the catalog is one
+> shared catalog; there is no per-brand editorial. Never echo the key into logs or chat.
 
 ## The two mental models that prevent every mistake
 
@@ -126,8 +127,10 @@ model (a `link_id` can only be removed through the model it belongs to).
 
 **PROVENANCE ON THIRD-PARTY CONTENT.** See the HARD-GATE.
 
-**super_admin-ONLY, PLATFORM-WIDE.** `X-Admin-Key` (`SPIDERIQ_ADMIN_API_KEY`),
-never a client PAT, no brand scoping — one shared catalog. Never echo the key.
+**SCOPED-PAT OR ADMIN-KEY, PLATFORM-WIDE.** Authorise with a PAT carrying
+`gate:catalog:write` (an agent's own capability token), the platform `X-Admin-Key`
+(`SPIDERIQ_ADMIN_API_KEY`), or a super_admin session. A PAT without the scope gets
+`403`. No brand scoping — one shared catalog. Never echo the key.
 
 **VERIFY WITH THE SCRIPT, NOT BY EYE.** After filling/authoring a provider's models,
 run [`scripts/verify-catalog-fill.sh <provider>`](scripts/verify-catalog-fill.sh) and
@@ -146,8 +149,8 @@ as PASS/FAIL/INFO the model can't fudge. "Looks good" is not a verification.
 
 ## Surface (quick map)
 
-All under `/api/v1/admin/gate` on `https://spideriq.ai`, `X-Admin-Key` auth,
-super_admin-only. The MCP tools ship in the **mcp-admin** slice
+All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
+`gate:catalog:write` or `X-Admin-Key`. The MCP tools ship in the **mcp-admin** slice
 (`@spideriq/mcp-admin`); the CLI is `spideriq gate catalog …`.
 
 | Do | HTTP | MCP tool | CLI |
