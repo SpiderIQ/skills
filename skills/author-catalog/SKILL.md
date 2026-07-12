@@ -177,6 +177,7 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 
 | Method | Does | Reference |
 |---|---|---|
+| `listModels` | READ the admin catalog — resolve a model name → its numeric id + current copy + is_curated (the id source for the writes below). Accepts either catalog scope. | [references/author-editorial.md](references/author-editorial.md) |
 | `setModelMeta` | author a model's description/tags/badges/sort/hidden (COALESCE-preserve) | [references/author-editorial.md](references/author-editorial.md) |
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
 | `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |

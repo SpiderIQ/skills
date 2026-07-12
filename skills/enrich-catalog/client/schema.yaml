@@ -14,10 +14,11 @@
 # This makes read → enrich → author a single PAT can drive end-to-end.
 
 name: enrich-catalog
-version: "0.1.0"
+version: "0.2.0"
 description: >
-  Go get the facts for the SpiderGate model catalog — run a scoped free-stack
-  enrichment pass over a provider (or model_ids) and fill specs + pricing
+  Go get the facts for the SpiderGate model catalog — `listModels` to enumerate the
+  admin catalog (numeric ids + specs + is_curated) and pick targets, then `enrich` to
+  run a scoped free-stack pass over a provider (or model_ids) and fill specs + pricing
   (OpenRouter), benchmarks + per-provider perf (LLM-Stats), and lineage (Wikidata),
   each provenance-stamped. Fetches FACTS, not editorial; authored (is_curated) copy is
   preserved; the fleet cron stays dark. Requires a PAT with `gate:catalog:enrich`
@@ -51,8 +52,8 @@ guidance:
     Enrich the facts FIRST, then author the copy with author-catalog. super_admin +
     X-Admin-Key.
   not:
-    - "author-catalog → WRITE the human copy (description/badges/links) — this only fetches facts"
-    - "model-catalog (@spideriq/gateway-skills) → READ the catalog to pick a model — this fills it"
+    - "author-catalog → WRITE the human copy (description/badges/links) — this fetches facts (and lists rows to fill)"
+    - "model-catalog (@spideriq/gateway-skills) → the CLIENT-facing catalog read (string ids, what clients see); listModels here is the ADMIN read (numeric ids + is_curated) for curation"
     - "manage-routing (gate_routing_*) → change WHICH model an alias routes to"
   # No free-text search field on this surface; scope is a typed provider name or an
   # id list. intent_aliases explicitly empty (Q1).
@@ -66,6 +67,49 @@ guidance:
     - "The fleet-wide 6h cron is NOT armed by this — it's on-demand + scoped."
 
 methods:
+  listModels:
+    description: >
+      Enumerate the admin catalog to pick enrichment targets — the FIRST step of a
+      curation pass. Returns each row's numeric `id`, provider, model_id,
+      spidergate_id, the flat spec (context_window / max_output / pricing / capabilities),
+      `is_curated` + authored copy, reference `links`, and an evals rollup. Filter by
+      `provider`, `curated` (false = only un-curated rows still needing work), `search`,
+      or `tag`. Read-only, not metered. Accepts either catalog scope (`gate:catalog:enrich`
+      or `gate:catalog:write`). Use this to find what to enrich, then call `enrich`.
+    guidance:
+      use: "List catalog rows (filter by provider / curated=false) to see what still needs enriching before you fetch facts."
+      next: "enrich (fetch this provider's/model's facts), then verify-enrichment.sh, then author-catalog.setModelMeta"
+      warn: "Read-only. The numeric `id` here is what enrich's model_ids and author-catalog's setModelMeta take (NOT the string id the client catalog returns). context_window=0 + no benchmarks ⇒ an un-enriched stub."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/models
+    params:
+      provider:
+        type: string
+        required: false
+        description: Filter to one provider (exact match, e.g. deepseek).
+      curated:
+        type: boolean
+        required: false
+        description: true = only curated rows; false = only un-curated (the enrichment backlog); omit = all.
+      search:
+        type: string
+        required: false
+        description: Substring match on model_id / display_name / spidergate_id.
+      tag:
+        type: string
+        required: false
+        description: Filter to models carrying this authored tag.
+      limit:
+        type: integer
+        required: false
+        description: Max rows (1–2000; default 1000 loads the catalog in one page).
+      offset:
+        type: integer
+        required: false
+        description: Pagination offset (default 0).
+    response:
+      format: json
+
   enrich:
     description: >
       Run a scoped free-stack enrichment pass and fill the scoped models' factual

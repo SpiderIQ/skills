@@ -36,8 +36,8 @@ over one provider (or an explicit model-id list) and writes the factual fields,
 each stamped with `{source, url, retrieved_at, attribution}`.
 
 ```
-enumerate → gate_catalog_enrich → verify → hand to author-catalog
-  (read)      (fetch the facts)    (script)   (write the copy)
+listModels → gate_catalog_enrich → verify → hand to author-catalog
+ (read/pick)   (fetch the facts)    (script)   (write the copy)
 
 gate_catalog_enrich(provider | model_ids) ─▶ specs + pricing  (OpenRouter)
                                           ─▶ benchmarks + perf (LLM-Stats)
@@ -110,12 +110,16 @@ Under `/api/v1/admin/gate`; PAT `gate:catalog:enrich`/`gate:catalog:write`, or `
 
 | Do | HTTP | MCP tool | CLI |
 |---|---|---|---|
+| Enumerate the catalog (pick targets) | `GET /catalog/models` | — (skill_call `listModels`) | — |
 | Fetch facts for a provider / models | `POST /catalog/enrich` | `gate_catalog_enrich` | `spideriq gate catalog enrich --provider … \| --model-ids …` |
+
+> The admin read (`GET /catalog/models`) returns the numeric `id` + `is_curated` + curation fields and is reached via the `listModels` skill method (HTTP; accepts either catalog scope). It is NOT the same as the CLIENT-facing `gate_catalog_list` tool / `spideriq gate catalog list`, which read `/api/gate/v1/catalog/*` (string ids, consumer leaderboard).
 
 ## Methods (from client/schema.yaml)
 
 | Method | Does | Reference |
 |---|---|---|
+| `listModels` | enumerate the admin catalog (numeric id + spec + is_curated + links) to pick targets; filter by provider / curated=false. Read-only, either catalog scope. | [references/run-enrichment.md](references/run-enrichment.md) |
 | `enrich` | fetch specs/pricing/benchmarks/perf/lineage for a provider or model_ids, provenance-stamped | [references/run-enrichment.md](references/run-enrichment.md) |
 
 ## See also

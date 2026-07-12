@@ -17,7 +17,7 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.3.1"
+version: "0.4.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -76,10 +76,54 @@ guidance:
     - "alias and media_id can contain a slash (opvs/coding, provider/model) — the tools URL-encode it; pass the value plain."
     - "description / long_description are OUR OWN words — NEVER copy vendor marketing blurb, model-card prose, or Wikipedia text (copyright / CC-BY-SA). Compose from structured facts; if you only have prose, write less. A copied description is a licensing defect (HARD-GATE)."
     - "This skill authors COPY, not FACTS: it does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf. Those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model."
-    - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first via the admin read GET /admin/gate/catalog/models (the client READ surface returns the string id, not the int)."
+    - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first with the listModels method (GET /catalog/models), which returns the int id + is_curated + current copy. The client-facing catalog READ returns the STRING id, not the int, so it can't drive these writes."
     - "setProviderMeta (gate_catalog_provider_set_meta / CLI providers set-meta) authors PROVIDER editorial (description / free_tier_description / docs_url / signup_url); logo_url is NOT editable here. To fill a provider's models' FACTS first, use the enrich-catalog skill."
 
 methods:
+  listModels:
+    description: >
+      Read the admin catalog to resolve a model name → its numeric id and see its
+      current authored copy before you write. Returns each row's numeric `id`,
+      provider, model_id, spidergate_id, flat spec (context_window / max_output /
+      pricing / capabilities), `is_curated` + description / long_description / tags /
+      badges / sort_order / hidden, reference `links`, and an evals rollup. Filter by
+      `provider`, `curated`, `search`, or `tag`. Read-only, not metered. Accepts either
+      catalog scope. This is the id source for setModelMeta / setLink (the client-facing
+      catalog read returns the STRING id, not the int these writes need).
+    guidance:
+      use: "Look up a model's numeric id + current copy before authoring (setModelMeta/setLink take the int id)."
+      next: "setModelMeta (author this row's copy), setLink (attach a reference)"
+      warn: "Read-only. Use the numeric `id` from here for setModelMeta/setLink — NOT the string id the client catalog returns. context_window=0 + no benchmarks ⇒ an un-enriched stub (enrich it first via enrich-catalog)."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/models
+    params:
+      provider:
+        type: string
+        required: false
+        description: Filter to one provider (exact match, e.g. deepseek).
+      curated:
+        type: boolean
+        required: false
+        description: true = only curated rows; false = only un-curated; omit = all.
+      search:
+        type: string
+        required: false
+        description: Substring match on model_id / display_name / spidergate_id.
+      tag:
+        type: string
+        required: false
+        description: Filter to models carrying this authored tag.
+      limit:
+        type: integer
+        required: false
+        description: Max rows (1–2000; default 1000).
+      offset:
+        type: integer
+        required: false
+        description: Pagination offset (default 0).
+    response:
+      format: json
+
   setModelMeta:
     description: >
       Author the editorial copy on a gate_model_catalog row (partial update). Set
