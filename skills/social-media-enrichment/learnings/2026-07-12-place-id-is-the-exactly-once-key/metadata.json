@@ -1,0 +1,14 @@
+{
+  "title": "No idempotency key — place_id is the exactly-once recovery key",
+  "summary": "Social Media Enrichment (spiderSocial) has NO idempotency key, so a retried submit for the same business recovers — and is charged — again. The stable place_id (the business's Google place_id) is the exactly-once recovery/meter key: pass it and the service recognises a business it has already recovered, avoiding a double-spend. A credit is consumed ONLY when the job actually recovers a field (credits_spent > 0); every self-skip (has_email, no_social_handle, …) costs nothing. So: always pass place_id when you have one, submit once, and check the job's result before resubmitting — omit place_id only for a genuine one-off with no stable id.",
+  "created_at": "2026-07-12",
+  "updated_at": "2026-07-12",
+  "tags": ["social-media-enrichment", "spiderSocial", "idempotency", "place_id", "cost", "credits"],
+  "references": [
+    "app/schemas/spider_social.py — SpiderSocialJobPayload.place_id ('Stable business identifier (Google place_id). Used as the exactly-once recovery/meter key.') + SpiderSocialResult.credits_spent / cost_usd",
+    "app/api/v1/jobs/spidersocial.py — POST /api/v1/jobs/spiderSocial/submit; per-client usage cap enforced worker-side (over_cap skip)",
+    "packages/cli/src/commands/social.ts — spideriq social enrich --place-id (documented as the exactly-once recovery key)",
+    "packages/mcp-tools/src/leads/jobs.ts — submit_social_enrichment.place_id ('Used as the exactly-once recovery key.')",
+    "Postmark support: 'What is an Idempotency Key?' — async submit APIs without an idempotency key double-execute on retry (https://postmarkapp.com/support/article/what-is-an-idempotency-key)"
+  ]
+}

@@ -1,0 +1,172 @@
+# Social Media Enrichment Skill — API Surface Definition
+# Source of truth for Tier 3 client generation + the marketplace envelope.
+# Regenerate plugin with: opvs-skills generate social-media-enrichment
+#
+# Recover a missing email / phone / real website / socials for ONE business from
+# its public social handles. Client-facing name is "Social Media Enrichment" —
+# the vendor name never surfaces in any field, example, or description.
+
+name: social-media-enrichment
+version: "1.0.0"
+description: >
+  Social Media Enrichment — recover a missing email, phone, real website, or
+  social links for ONE business from its public social handles (Facebook,
+  Instagram, LinkedIn, Twitter/X, TikTok) or a single social-only website. Folds
+  recovered fields in additively; self-skips (with a typed reason) when there is
+  nothing to recover or the business already has an email. A paid, plan-gated
+  capability.
+category: data-collection
+base_url: /api/v1/spideriq
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - social media enrichment
+  - enrich from social media
+  - recover email from facebook
+  - recover email from instagram
+  - find contact from social handles
+  - no email but has social
+
+guidance:
+  use: >
+    Recover a missing email / phone / real website / socials for ONE business
+    from its public social handles (or a single social-only website). The rescue
+    step when a lead has social profiles but no usable contact email.
+  not:
+    - "scrape-website-extract-leads → pull emails already on a website"
+    - "verify-email-deliverability → check whether a recovered email is deliverable"
+    - "find-people-extract-linkedin-profile → look up a named PERSON, not a business"
+    - "lead-search / run-enrichment-pipeline → bulk enrichment across a campaign (workflow.social_media_enrichment toggle)"
+  # Q1 — no method takes a free-text search query (input is social handles, not a
+  # query string), so intent_aliases is explicitly empty. Declared, never guessed.
+  intent_aliases: []
+  pitfalls:
+    - "The submit returns job_id + status:queued, NOT the recovered contact — poll getJobResults until terminal."
+    - "A status:skipped result with a reason (has_email / no_social_handle / …) is a NORMAL outcome, not a failure — do not retry it."
+    - "No idempotency key: re-submitting the same business is charged again. Pass a stable place_id as the exactly-once recovery key."
+    - "Provide at least one social handle OR a website, or the job self-skips no_social_handle."
+    - "Paid + plan-gated: a non-entitled account self-skips not_entitled; a credit is spent only when a field is actually recovered."
+
+methods:
+  submitJob:
+    description: >
+      Submit a Social Media Enrichment (spiderSocial) job for ONE business.
+      Reads the business's known social handles (Facebook preferred, then
+      Instagram) and any single social-only website, and recovers a missing
+      email / phone / real website / socials — folded in additively. If the
+      business already has a usable email, the job self-skips (has_email).
+    guidance:
+      use: "one business that has social profiles but no usable email"
+      next: "getJobStatus, then getJobResults for the recovered fields (or the typed skip reason)"
+      warn: "returns job_id + status:queued, NOT the recovered contact — the recovery runs in a worker; poll getJobResults. Pass place_id (no idempotency key → a re-submit is charged again)."
+      telemetry_signal_default: "cold"
+    http: POST /spiderSocial/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: >
+          The business to enrich. Provide at least one social handle (inside
+          social_media) or a website, or the job self-skips no_social_handle.
+        properties:
+          social_media:
+            type: object
+            description: >
+              Known social handles/URLs for the business, e.g.
+              {"facebook": "https://facebook.com/acme", "instagram": "acme"}.
+              Recovery prefers Facebook, then Instagram.
+            properties:
+              facebook:  { type: string, description: "Facebook page URL or handle (preferred source)." }
+              instagram: { type: string, description: "Instagram profile URL or handle." }
+              linkedin:  { type: string, description: "LinkedIn page URL or handle." }
+              twitter:   { type: string, description: "Twitter/X profile URL or handle." }
+              tiktok:    { type: string, description: "TikTok profile URL or handle." }
+          website:
+            type: string
+            description: "A single social-only website (linktr.ee / facebook / instagram URL), if known."
+          email:
+            type: string
+            description: "An email already known for the business. If present, the job self-skips (has_email)."
+          phone:
+            type: string
+            description: "A phone already known for the business (folded in, never overwritten)."
+          place_id:
+            type: string
+            description: "Stable business identifier (Google place_id). The exactly-once recovery key — pass it to avoid double-charging a re-submit."
+          business_name:
+            type: string
+            description: "Business name (context only)."
+          country_code:
+            type: string
+            description: "ISO-2 country code, e.g. US, DE (context only)."
+          test:
+            type: boolean
+            description: "Route to the test queue (default false)."
+      priority:
+        type: integer
+        required: false
+        description: "Job priority 0-10 (higher = processed first; default 0)."
+    response:
+      format: json
+
+  getJobStatus:
+    description: >
+      Check the current status of an enrichment job (queued, processing,
+      completed, failed).
+    guidance:
+      use: "poll after submitJob until the job is terminal"
+      next: "getJobResults once status is completed"
+      warn: "poll no faster than every 3-5s"
+      telemetry_signal_default: "hot"
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID returned from submitJob.
+    response:
+      format: yaml
+
+  getJobResults:
+    description: >
+      Retrieve the recovered contact fields — status (recovered / skipped),
+      recovered {email, phone, website, socials}, recovered_fields, and
+      credits_spent / cost_usd; OR status:skipped with a typed reason.
+    guidance:
+      use: "read the recovered fields (or the typed skip reason) once the job is completed"
+      next: "verify-email-deliverability on any recovered email before outreach"
+      warn: "a status:skipped result with a reason is a NORMAL outcome, not a failure — surface the reason, do not retry"
+      telemetry_signal_default: "warm"
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to get results for.
+    response:
+      format: yaml
+
+  cancelJob:
+    description: >
+      Cancel a queued or running enrichment job. Cannot cancel an already
+      completed job.
+    guidance:
+      use: "abandon a job you no longer need before it runs"
+      next: "list jobs to confirm it is cancelled"
+      warn: "a completed job cannot be cancelled"
+      telemetry_signal_default: "cold"
+    http: DELETE /jobs/{job_id}
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job ID to cancel.
+    response:
+      format: json

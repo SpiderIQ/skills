@@ -1,0 +1,14 @@
+{
+  "title": "A skipped enrichment is a healthy outcome, not a failure — read the typed reason",
+  "summary": "A Social Media Enrichment (spiderSocial) job completes with either status:recovered or status:skipped. A skip is NORMAL, not an error: the most common reason, has_email, means the business already had a usable email so no credit was spent. Other reasons — no_social_handle (nothing to try), not_entitled (plan lacks the capability), over_cap (usage cap hit), sc_unavailable (backend temporarily off, fail-open) — each tell you exactly what happened and what to do. Both recovered and skipped are status:completed jobs; the distinction lives in the result body, not the job status. Reporting a recovered email off the submit's 201 (which is just {job_id, status:queued}) is a silent lie — poll getJobResults until terminal, and never auto-retry a skip: the reason is the answer.",
+  "created_at": "2026-07-12",
+  "updated_at": "2026-07-12",
+  "tags": ["social-media-enrichment", "spiderSocial", "skip-reason", "async", "job-queue"],
+  "references": [
+    "app/schemas/spider_social.py — SpiderSocialResult (status recovered|skipped, skipped, reason) + SpiderSocialSkipReason (has_email, no_social_handle, not_entitled, opted_out, over_cap, sc_unavailable)",
+    "app/api/v1/jobs/spidersocial.py — POST /api/v1/jobs/spiderSocial/submit → 201 {job_id, status:queued}; self-skips documented in the route description",
+    "packages/cli/src/commands/social.ts — spideriq social enrich / social results (poll for recovered fields or the skip reason)",
+    "packages/mcp-tools/src/leads/jobs.ts — submit_social_enrichment (convenience wrapper for submit_job type=spiderSocial; poll get_job_results)",
+    "TL-3.1 test-live (brand-9, 2026-07-12) — Katz's Deli recovered E2E: email cs@katzsdelicatessen.com, phone (212) 254-2246, cost $0.008, 1 credit"
+  ]
+}
