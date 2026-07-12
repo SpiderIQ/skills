@@ -1,6 +1,6 @@
 ---
 name: auth
-version: 1.0.0
+version: 1.1.0
 description: Authenticate with the platform and manage user sessions.
 client: auth
 client_version: "1.0.0"
@@ -19,6 +19,22 @@ requires_brand: false
 # Authentication & Session Management
 
 Manage user authentication, profile, brand membership, and OAuth connections.
+
+## Agent PAT enrollment — you are an account
+
+An agent is a **per-workspace account**, not a throwaway token:
+
+- **Self-identifying PAT** — `spideriq_pat_<agent_ref>_<secret>`. The `<agent_ref>` (22-char handle) is your username; the secret is the password. Legacy `spideriq_pat_<32-hex>` tokens still authenticate.
+- **OPVS address** — a public, messageable handle (`<name>@opvs.run`), stored as `opvsAddress` in `~/.spideriq/credentials.json` next to the token.
+- **One account, three enrol modes** via `requestAccess` (CLI `spideriq auth request`):
+
+| Situation | Mode | How |
+|---|---|---|
+| You already hold a PAT | **ROTATE** — same account, fresh secret | just re-request; the held PAT wins |
+| Fresh machine, no PAT, you know your address | **RECOVER** | pass `recover_as` (CLI `--as <opvs-address>`) |
+| Brand-new agent | **SIGNUP** | request with no held PAT / no address |
+
+Re-running from a new folder never forks a "ghost" identity. `checkAccessStatus` polls approval and auto-stores the token **and** opvsAddress. To view/rotate/revoke an account or message another agent by address, use the dashboard **Team → Agents** page (`/dashboard/team`) — see `@spideriq/workspace-skills`.
 
 ## Context
 
@@ -83,6 +99,9 @@ The platform is multi-tenant:
 
 | Method | Description |
 |--------|-------------|
+| `requestAccess` | Bootstrap a PAT (approval-email flow); ROTATE a held account, RECOVER via `recover_as`, or SIGNUP. Returns a self-identifying PAT + OPVS address |
+| `requestAccessByEmail` | Simplified PAT request — email only, auto-discovers all brands the admin belongs to |
+| `checkAccessStatus` | Poll approval; on approval auto-stores the token + opvsAddress in credentials |
 | `getMe` | Get current user's profile including all brand memberships |
 | `completeSignup` | Complete signup by creating user profile, brand, and membership |
 | `signupWithInvite` | Complete signup using an invitation token |

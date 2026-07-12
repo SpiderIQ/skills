@@ -3,7 +3,7 @@
 # Regenerate plugin with: opvs-skills generate auth
 
 name: auth
-version: "1.0.0"
+version: "1.1.0"
 description: >
   Multi-brand authentication and session management — user profile,
   brand memberships, OAuth connectors, and profile photo upload.
@@ -25,14 +25,35 @@ triggers:
   - brand
   - switch
 
+# On-demand envelope (§4.6). The gateway proxy decorates every response with
+# `_guidance` + `telemetry_signal` from this block.
+guidance:
+  use: >
+    Bootstrap and manage an agent's identity: request a PAT (approval-email flow),
+    rotate/recover the SAME account, and read/update the user profile + brand
+    memberships. You are a per-workspace ACCOUNT — a self-identifying PAT
+    (spideriq_pat_<agent_ref>_<secret>) plus a public OPVS address (<name>@opvs.run).
+  not:
+    - "@spideriq/workspace-skills → manage the brand's team, invites, settings (not your own token)"
+    - "The dashboard Team → Agents page (/dashboard/team) → view/rotate/revoke/message agent accounts (no PAT tool yet)"
+  intent_aliases: ["owner_email", "email", "admin_email", "opvs_address", "recover_as"]
+  pitfalls:
+    - "Re-auth from a new folder does NOT fork a new identity — a held PAT ROTATES the same account."
+    - "On a fresh box with no held PAT, pass recover_as/--as <opvs-address> or you SIGN UP a stranger."
+    - "Legacy spideriq_pat_<32-hex> tokens still authenticate — don't force a re-issue."
+
 methods:
   # -- PAT Bootstrap (no auth required) -------------------------------------
   requestAccess:
     description: >
-      Request a PAT token for API access. No authentication required —
-      this is the bootstrap entry point. Sends an approval email to
-      the workspace admin. Returns a request_id and poll_token for
-      polling approval status.
+      Request a PAT for API access — the bootstrap entry point (no auth
+      required). Sends an approval email to the workspace admin; returns a
+      request_id + poll_token to poll. On approval you get a SELF-IDENTIFYING
+      PAT `spideriq_pat_<agent_ref>_<secret>` plus a public OPVS address
+      (`<name>@opvs.run`). This is idempotent per account: if you already hold a
+      PAT it ROTATES the SAME account (held PAT wins); pass recover_as to
+      RECOVER an existing account by its OPVS address on a fresh machine;
+      otherwise it SIGNS UP a new account. It never forks a per-folder ghost.
     http: POST /pat/request
     params:
       workspace_slug:
@@ -43,6 +64,13 @@ methods:
         type: string
         required: true
         description: Email of the workspace admin who will approve the request
+      recover_as:
+        type: string
+        required: false
+        description: >
+          Your existing OPVS address (`<name>@opvs.run`) to RECOVER that account
+          on a fresh machine with no held PAT. Ignored if a PAT is already held
+          (held PAT wins → rotate). Mirrors the CLI `--as` flag.
       project_name:
         type: string
         required: false
@@ -57,6 +85,11 @@ methods:
         required: false
         default: 72
         description: Token lifetime in hours (1-8760, default 72)
+    guidance:
+      use: "First-time enrollment, OR re-enrolling/rotating/recovering the same agent account."
+      next: "checkAccessStatus (poll the request_id until approved → token auto-stored)"
+      warn: "A held PAT always wins (rotate). To recover on a new box you MUST pass recover_as/--as, else you sign up a stranger."
+      telemetry_signal_default: "cold"
     response:
       format: json
 
@@ -89,9 +122,11 @@ methods:
 
   checkAccessStatus:
     description: >
-      Poll for PAT request approval status. When approved, auto-stores
-      the token in OPVS_PAT so all subsequent tool calls are authenticated.
-      Returns status: pending, approved, denied, or expired.
+      Poll for PAT request approval status. When approved, auto-stores the
+      self-identifying token in OPVS_PAT (and the account's opvsAddress
+      alongside it) so all subsequent tool calls are authenticated and the
+      account is addressable. Returns status: pending, approved, denied, or
+      expired.
     http: GET /pat/request/{request_id}/status
     auth_override:
       type: bearer
@@ -108,6 +143,10 @@ methods:
         type: string
         required: true
         description: Poll token from requestAccess response
+    guidance:
+      use: "Poll after requestAccess until status=approved; the PAT + opvsAddress land in credentials.json automatically."
+      warn: "Same subject on every approval email → Gmail threads them; the mail is delivered, check the thread."
+      telemetry_signal_default: "hot"
 
   # -- Current User ----------------------------------------------------------
   getMe:
