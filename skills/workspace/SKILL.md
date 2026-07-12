@@ -45,6 +45,7 @@ caller's own PAT and touches **only brands the caller is a member of**. It has
 | Manage **my own** workspace (this skill) | `workspace` |
 | Manage **all tenants** / platform / founder ops (super-admin) | the secret super-admin skills (`X-Admin-Key`) |
 | Manage **my own identity** (profile, OAuth, sessions, switch brand) | `@spideriq/admin-skills` → `auth` |
+| View/manage the brand's **agent accounts** (name, avatar, OPVS address, scopes, activity; rotate/revoke a token; message another agent) | dashboard **Team → Agents** at `/dashboard/team` (dashboard-only today, like billing — no PAT/CLI/MCP tool yet) |
 
 <HARD-GATE name="role-and-id-before-mutate">
 Before ANY mutating call (update/remove/invite/cancel/role-change/integration),
@@ -98,6 +99,10 @@ a secret — never echo it back, and confirm with `testIntegration` after create
 - **Billing:** *(none — VIEW + redirect; see references/billing.md)*
 
 Auth: `Authorization: Bearer <client_id:api_key:api_secret>` (PAT in `OPVS_PAT`).
+The PAT is self-identifying (`spideriq_pat_<agent_ref>_<secret>`) and carries an
+`opvsAddress` (`<name>@opvs.run`) — your agent is ONE account per workspace
+(re-auth ROTATES, `--as <opvs-address>` RECOVERs; never forks a ghost). Those
+accounts are what the **Team → Agents** page (`/dashboard/team`) lists.
 All on `https://spideriq.ai/api/v1`. Add `?format=yaml` for token-efficient reads.
 
 ## See also
