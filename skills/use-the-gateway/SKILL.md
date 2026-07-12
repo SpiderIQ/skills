@@ -70,7 +70,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 
 ## Rules (Non-Negotiable)
 
-**AUTH:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (or a `spideriq_pat_…`). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP never echo the secret into logs or chat.
+**AUTH:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (or a `spideriq_pat_…`). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP never echo the secret into logs or chat. The PAT is self-identifying (`spideriq_pat_<agent_ref>_<secret>`; legacy `<32-hex>` still works) and carries an `opvsAddress` (`<name>@opvs.run`) — one account, so re-auth ROTATES (held PAT wins) and `--as <opvs-address>` RECOVERs on a fresh box.
 
 **ALIASES ARE TASKS, NOT VENDORS — and the chain matters.** `model: "spideriq/coding"` means "route this *coding* task," not "use a fixed model." The served model can differ from slot-0 (a fallback fired); **read `spidergate_metadata.provider_model` to know what actually answered** — don't assume. Bare model ids (`gpt-4o`) pin one model and lose the fallback chain.
 
