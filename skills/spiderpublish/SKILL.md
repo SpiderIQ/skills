@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.5.0"
+version: "0.6.0"
 category: content
 ---
 
@@ -41,7 +41,10 @@ Your job: land changes in STORE correctly, then trigger SERVE via **deploy**.
 ## Auth + two URL surfaces (one PAT)
 
 `SPIDERIQ_PAT` = Bearer `client_id:api_key:api_secret`. The token identifies the
-brand — you do **not** put a workspace id in the URL.
+brand — you do **not** put a workspace id in the URL. The PAT is self-identifying
+(`spideriq_pat_<agent_ref>_<secret>`; legacy `<32-hex>` still works) and carries an
+`opvsAddress` (`<name>@opvs.run`) — you are ONE account, so re-auth from a new
+directory ROTATES it and `--as <opvs-address>` RECOVERs it (no ghost identities).
 
 | Surface | Path | Use for |
 |---|---|---|
@@ -102,6 +105,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
 | Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
+| Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
 | Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
 | Change site settings / SEO / colors | `getSettings` · `updateSettings` | `references/content.md` |
 | Connect a custom domain | `addDomain`→`verifyDomain`→`setPrimaryDomain` (or `addSubdomain`) | `references/content.md` |
@@ -171,6 +175,8 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 
 ## References (loaded on demand)
 
+- `references/collections.md` — custom collections: define a schema, bulk-fill
+  records, publish + expose (is_public), and render them as a dynamic component.
 - `references/content.md` — pages, posts, docs, authors/tags/categories, nav,
   settings, domains. **Read before any content write.**
 - `references/components.md` — reusable components: create, the css-field rule,
@@ -210,6 +216,9 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 - `learnings/2026-06-11-dead-spideriq-content-prefix/` — the marketplace base is
   `/api/v1`, writes are on `/dashboard/content`, reads on `/content`; the old
   `/api/v1/spideriq/content` prefix 404'd.
+- `learnings/2026-07-12-collection-record-slug-vs-id-asymmetry/` — custom-collection
+  records READ by slug but WRITE by id; unknown `data` fields are REJECTED (422),
+  not silently dropped like posts.
 
 ## See also
 

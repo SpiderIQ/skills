@@ -1,0 +1,15 @@
+{
+  "title": "Custom-collection records READ by slug but WRITE by id — and unknown data fields are rejected, not dropped",
+  "summary": "The custom-collections write surface (slice 1.8, wrapping dashboard_collections.py) has two agent traps. (1) Slug/id asymmetry: getCollectionRecord takes the record SLUG (GET .../records/{record_slug}), but updateCollectionRecord and deleteCollectionRecord take the record ID (PATCH/DELETE .../records/{record_id}). An agent that reads a record by slug and then feeds that slug back into update/delete hits a 404. Grab the `id` from the read/create response for writes. (2) Unlike posts (which silently DROP unknown keys — see the sibling learning), collection records VALIDATE `data` against the collection's schema_json and REJECT unknown fields with a 422 carrying {errors, warnings} (reject-with-warning, fail-loud for agents). Declare every field in schema_json at createCollection time. Also: a collection is private (≡ unknown to the public /items door) until is_public=true, and a status change (publish/archive/unpublish) is a two-phase gated mutation (dry_run→confirm_token) while draft-field edits apply immediately.",
+  "created_at": "2026-07-12",
+  "updated_at": "2026-07-12",
+  "tags": ["spiderpublish", "collections", "records", "schema", "slug-vs-id", "reject-unknown-fields", "gate"],
+  "references": [
+    "app/api/v1/dashboard_collections.py — GET .../records/{record_slug} (get_record, ~line 462) vs PATCH .../records/{record_id} (update_record, ~479) vs DELETE .../records/{record_id} (delete_record, ~567): the slug-read / id-write asymmetry",
+    "app/api/v1/dashboard_collections.py — RecordCreate/RecordUpdate reject unknown fields via the collection_service schema validation → 422 {errors, warnings} (_validation_http)",
+    "app/api/v1/dashboard_collections.py — update_record: a `status` change is gated (gate_destructive_mutation, dry_run→confirm_token); non-status draft edits are not gated (mirrors create_post)",
+    "packages/mcp-tools/src/publish/collections.ts — collection_record_get (record_slug) vs collection_record_update / collection_record_delete (record_id); resolveGateOptIn on update, resolveGate on delete",
+    "marketplace/spideriq-publish-skills/skills/spiderpublish/references/collections.md — the call path + Gotchas section codifying both traps",
+    "learnings/2026-06-11-post-field-names-silently-dropped/ — the CONTRAST: posts silently drop unknown keys; collection records reject them"
+  ]
+}

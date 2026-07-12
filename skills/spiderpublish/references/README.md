@@ -19,6 +19,7 @@ domain file re-explains deploy, the block schema, the booking model, or the tool
 | File | Read when… |
 |---|---|
 | [`content.md`](content.md) | Building or editing a landing page, blog post, docs page, nav menu, custom domain, site settings, a dynamic (data-bound) list/item page, a scroll-video hero — or duplicating, locking, restoring, exporting, or previewing a page. |
+| [`collections.md`](collections.md) | Defining a CUSTOM content type (case studies, team, FAQs, products) — declare a `schema_json`, bulk-fill records, publish (gated `status` transition), expose via `is_public`, and render as a `kind='dynamic'` component. The reads-use-slug / writes-use-id trap and the reject-unknown-fields rule. |
 | [`components.md`](components.md) | Creating a reusable component, finding one by slug, propagating an edit to every consuming page (`component_update_and_propagate`), rolling a component back, or uploading a gallery preview image. |
 | [`templates-deploy.md`](templates-deploy.md) | Applying a theme, applying a curated starter site, previewing a deploy without going live, or rolling back a bad deploy. |
 | [`forms-booking.md`](forms-booking.md) | Building a form or booking flow, wiring conditional logic/variables, embedding a form, cloning a form/booking template, test-submitting, locking for review, sharing a standalone URL, or inviting staff to connect calendars. |

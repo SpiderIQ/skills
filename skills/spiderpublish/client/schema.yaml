@@ -1566,3 +1566,203 @@ methods:
       email:    { type: string, required: false }
       include:  { type: string, required: false, description: 'Comma list of extra includes' }
     response: { format: json }
+
+  # ──────────────────────── CUSTOM COLLECTIONS (slice 1.8) ─────────────────────
+  # Define your OWN content types (schema + records) and fill them from an agent.
+  # Project-scoped — bind a project first. See references/collections.md.
+  listCollections:
+    description: List the project's custom collections (slug, label, route_base, is_public).
+    guidance:
+      use: "see what custom collections exist before creating one or adding records"
+      next: "getCollection to inspect a schema; createCollection to define a new one; listCollectionRecords to read rows"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/collections
+    params:
+      format: { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  getCollection:
+    description: Get one collection definition (its schema_json field spec) by slug.
+    guidance:
+      use: "read a collection's field schema before authoring records against it"
+      next: "createCollectionRecord / bulkCreateCollectionRecords to fill it"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/collections/{slug}
+    params:
+      slug:   { type: string, required: true,  description: 'Collection slug' }
+      format: { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  createCollection:
+    description: >
+      Define a custom collection: a slug, a label, and a schema_json field spec
+      that records validate against. Non-destructive (no gate). Enforces the
+      max_collections plan cap.
+    guidance:
+      use: "create a new content type (e.g. case studies, team, FAQs) the built-in types don't cover"
+      next: "createCollectionRecord / bulkCreateCollectionRecords to add rows; set is_public + a dynamic component to render them"
+      warn: "Records reject-with-warning on fields not in schema_json — declare every field you intend to store."
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/collections
+    params:
+      slug:  { type: string, required: true,  description: 'URL-safe collection slug (unique in the project)' }
+      label: { type: string, required: true,  description: 'Human-readable collection name' }
+      schema_json:
+        type: object
+        required: false
+        description: 'Field schema — {fields: {field_name: {type: string|richtext|number|boolean|image|..., ...}}}. Records validate against this.'
+      route_base: { type: string,  required: false, description: 'Optional URL base for detail pages (e.g. "case-studies")' }
+      is_public:  { type: boolean, required: false, description: 'Expose records via the public /items door (default false)' }
+    response: { format: json }
+
+  updateCollection:
+    description: Update a collection's label / schema_json / route_base / is_public. Non-destructive (no gate).
+    guidance:
+      use: "rename a collection, evolve its schema, or flip is_public to expose/hide its rows"
+      next: "deploySite after flipping is_public so the live site reflects the change"
+      telemetry_signal_default: "hot"
+    http: PATCH /dashboard/content/collections/{slug}
+    params:
+      slug:  { type: string, required: true, description: 'Collection slug to update' }
+      label: { type: string, required: false, description: 'New label' }
+      schema_json: { type: object, required: false, description: 'Replacement field schema' }
+      route_base:  { type: string,  required: false, description: 'New URL base' }
+      is_public:   { type: boolean, required: false, description: 'Expose (true) / hide (false) via the public /items door' }
+    response: { format: json }
+
+  deleteCollection:
+    description: >
+      Delete a collection — DESTRUCTIVE (cascades to ALL its records). Two-phase
+      gated: dry_run returns a preview + confirm_token; call again with the token.
+    guidance:
+      use: "remove a collection and everything in it"
+      warn: "Cascades to every record. dry_run defaults safe — you get a confirm_token, then repeat with confirm_token to commit."
+      telemetry_signal_default: "hot"
+    http: DELETE /dashboard/content/collections/{slug}
+    params:
+      slug:          { type: string,  required: true,  description: 'Collection slug to delete' }
+      dry_run:       { type: boolean, required: false, description: 'true -> preview + confirm_token (default safe)' }
+      confirm_token: { type: string,  required: false, description: 'cft_… from a prior dry_run to actually delete' }
+    response: { format: json }
+
+  listCollectionRecords:
+    description: List a page of a collection's records (drafts AND published — the author surface).
+    guidance:
+      use: "read the rows in a collection, including drafts, before editing or publishing"
+      next: "getCollectionRecord for one row; updateCollectionRecord to edit or publish"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/collections/{slug}/records
+    params:
+      slug:   { type: string,  required: true,  description: 'Collection slug' }
+      limit:  { type: integer, required: false, description: 'Page size (1-500, default 50)' }
+      offset: { type: integer, required: false, description: 'Pagination offset' }
+      sort:   { type: string,  required: false, description: 'Sort expression' }
+      format: { type: string,  required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  getCollectionRecord:
+    description: Get one record by its record slug (drafts included).
+    guidance:
+      use: "read a single record's full data by slug"
+      next: "updateCollectionRecord to edit it (by its id)"
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/content/collections/{slug}/records/{record_slug}
+    params:
+      slug:        { type: string, required: true, description: 'Collection slug' }
+      record_slug: { type: string, required: true, description: "The record's slug" }
+      format:      { type: string, required: false, description: 'json | yaml | md' }
+    response: { format: json }
+
+  createCollectionRecord:
+    description: >
+      Create ONE draft record. `data` is validated against the collection's
+      schema_json (unknown fields are rejected with a warning). Non-destructive.
+      Enforces the max_records plan cap.
+    guidance:
+      use: "add a single row to a collection"
+      next: "updateCollectionRecord status=published (gated) then deploySite to make it live; use bulkCreateCollectionRecords for many rows"
+      warn: "data fields must match the collection schema_json — unknown fields 422 with {errors, warnings}."
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/collections/{slug}/records
+    params:
+      slug: { type: string, required: true, description: 'Collection slug' }
+      record_slug: { type: string, required: true, description: 'URL-safe record slug (unique in the collection)' }
+      data:
+        type: object
+        required: false
+        description: 'Field values, validated against the collection schema_json.'
+      seo_title:       { type: string,  required: false, description: 'SEO <title> for the record detail page' }
+      seo_description: { type: string,  required: false, description: 'SEO meta description' }
+      og_image_url:    { type: string,  required: false, description: 'Open Graph image URL' }
+      sort:            { type: integer, required: false, description: 'Sort weight (ascending, default 0)' }
+      publish_at:      { type: string,  required: false, description: 'Scheduled publish timestamp (ISO 8601)' }
+    response: { format: json }
+
+  updateCollectionRecord:
+    description: >
+      Update a record BY ID. Editing draft fields (data/slug/seo/sort/publish_at)
+      applies immediately. A `status` change (published/archived/draft) is the
+      GATED transition — pass dry_run for a preview + confirm_token.
+    guidance:
+      use: "edit a record's fields, or publish/archive it via a status change"
+      next: "deploySite after publishing so the live site updates"
+      warn: "A status change is gated (dry_run -> confirm_token). record_id here is the id, NOT the slug."
+      telemetry_signal_default: "hot"
+    http: PATCH /dashboard/content/collections/{slug}/records/{record_id}
+    params:
+      slug:      { type: string, required: true, description: 'Collection slug' }
+      record_id: { type: string, required: true, description: "The record's id (NOT slug)" }
+      record_slug: { type: string, required: false, description: 'New record slug' }
+      data:      { type: object, required: false, description: 'Replacement field values (validated against schema_json)' }
+      seo_title:       { type: string,  required: false }
+      seo_description: { type: string,  required: false }
+      og_image_url:    { type: string,  required: false }
+      sort:            { type: integer, required: false }
+      publish_at:      { type: string,  required: false, description: 'Scheduled publish timestamp (ISO 8601)' }
+      status:          { type: string,  required: false, values: [draft, published, archived], description: 'Lifecycle transition (GATED)' }
+      dry_run:         { type: boolean, required: false, description: 'For a status change: preview + confirm_token' }
+      confirm_token:   { type: string,  required: false, description: 'cft_… from a prior dry_run to apply the status change' }
+    response: { format: json }
+
+  deleteCollectionRecord:
+    description: Delete one record BY ID — DESTRUCTIVE. Two-phase gated (dry_run -> confirm_token).
+    guidance:
+      use: "remove a single record"
+      warn: "dry_run defaults safe — you get a confirm_token, then repeat with confirm_token to commit."
+      telemetry_signal_default: "hot"
+    http: DELETE /dashboard/content/collections/{slug}/records/{record_id}
+    params:
+      slug:          { type: string,  required: true,  description: 'Collection slug' }
+      record_id:     { type: string,  required: true,  description: "The record's id" }
+      dry_run:       { type: boolean, required: false, description: 'true -> preview + confirm_token (default safe)' }
+      confirm_token: { type: string,  required: false, description: 'cft_… from a prior dry_run to actually delete' }
+    response: { format: json }
+
+  bulkCreateCollectionRecords:
+    description: >
+      Create 1–100 draft records ATOMICALLY in one transaction. Every record is
+      validated before any insert — ANY failure 422s the whole batch and inserts
+      nothing. Enforces the max_records cap for the full batch size.
+    guidance:
+      use: "seed a collection with many rows at once (the fast path vs one-at-a-time createCollectionRecord)"
+      next: "publish rows via updateCollectionRecord status=published, then deploySite"
+      warn: "All-or-nothing: one bad record rejects the entire batch. Max 100 per call."
+      telemetry_signal_default: "hot"
+    http: POST /dashboard/content/collections/{slug}/records/bulk
+    params:
+      slug: { type: string, required: true, description: 'Collection slug' }
+      records:
+        type: array
+        required: true
+        description: '1–100 record objects to create in one transaction.'
+        items:
+          type: object
+          properties:
+            slug: { type: string, required: true, description: 'URL-safe record slug (unique in the collection)' }
+            data: { type: object, required: false, description: 'Field values, validated against the collection schema_json.' }
+            seo_title:       { type: string,  required: false }
+            seo_description: { type: string,  required: false }
+            og_image_url:    { type: string,  required: false }
+            sort:            { type: integer, required: false }
+            publish_at:      { type: string,  required: false }
+    response: { format: json }
