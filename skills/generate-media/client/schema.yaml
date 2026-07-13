@@ -1,0 +1,115 @@
+# Generate-Media Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# base_url is the OpenAI-compatible gateway core (/api/gate/v1); the media
+# endpoints live at /api/gate/v1/media/{models,generations} (SF-17). Every method
+# resolves to a real endpoint — no phantom paths. `list` is a read (not metered);
+# `generate` is a BILLED media generation (raw provider cost + markup, or 0 for BYOK).
+
+name: generate-media
+version: "0.1.0"
+description: >
+  Generate an image, video, or audio clip through SpiderGate and get a stored
+  media URL back — schema-aware, honoring each model's declared inputs. Discover
+  models + their tunables, then generate; the result is uploaded to SpiderMedia.
+category: ai-gateway
+base_url: /api/gate/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 60000
+requires_brand: false
+triggers:
+  - generate an image
+  - make a picture or logo
+  - text to image
+  - generate a video
+  - text to video
+  - text to speech
+  - generate a voiceover
+  - which media models can I use
+
+guidance:
+  use: >
+    Reach for this to CREATE media: list media-generation models + their declared
+    `inputs`, then generate one image / video / audio clip through the schema-aware
+    pipeline. The result is a SpiderMedia-stored URL plus a cost breakdown. Read a
+    model's schema BEFORE generating — you pass only the tunables that model declares.
+  not:
+    - "use-the-gateway → SEND a chat completion (this skill is media generation, not chat)"
+    - "model-catalog → pick a CHAT model (media models are listed by this skill's `list` method)"
+    - "spideriq-media-catalog (@spideriq/media-skills) → BROWSE a tenant's already-stored assets (read-only DAM) — not generation"
+  # intent_aliases maps free-text picks onto method params. `generate.model` and
+  # `list.modality` are the free-text fields; declare them explicitly (Q1).
+  intent_aliases:
+    - "\"make an image of X\" → generate(model=<a text-to-image id>, params={prompt: X})"
+    - "\"say this out loud / voiceover\" → generate(model=openai/tts-1, params={text: …, voice: …})"
+    - "\"what video models are there\" → list(modality=text-to-video)"
+  pitfalls:
+    - "Undeclared params are SILENTLY DROPPED before the provider call — read the model's `inputs` first (list), pass only declared keys. Run scripts/validate-media-params.mjs to prove it."
+    - "`model` is `<provider>/<model>` (e.g. fal/flux-dev, kie/veo-3-fast, openai/tts-1) — the slash is part of the id, pass it whole. Get valid ids from `list`."
+    - "Video generation is SYNCHRONOUS and can take minutes (the provider is polled server-side) — a slow call is not a hang; set a generous client timeout."
+    - "billed_usd = 0 is EXPECTED, not free — generation uses the brand's own provider key (BYOK), monetized monthly by key-count, not per request."
+    - "503 no_<provider>_key means the brand has no key for that provider registered — a paid media key is never pooled; register one in the vault."
+    - "The stored URL is the deliverable — verify it resolves to real media (run scripts/verify-media-result.mjs) before reporting success; don't trust a 200 alone."
+
+methods:
+  list:
+    description: >
+      List media-generation models (image / video / audio) and each model's
+      declared `inputs` schema — the per-model tunables plus their type / enum /
+      min / max / default. This is the discovery surface: read a model's `inputs`
+      BEFORE `generate` so you pass only params it accepts. Filter with `modality`.
+    guidance:
+      use: "Discover which media models exist and exactly which tunables each one declares."
+      next: "validate-media-params.mjs (pre-flight your params), generate (create the media)"
+      warn: "Read the target model's `inputs` before generating — undeclared params are dropped."
+      telemetry_signal_default: "cold"
+    http: GET /media/models
+    params:
+      modality:
+        type: string
+        required: false
+        description: 'Filter to one modality: text-to-image | text-to-video | tts | stt | image-to-image | image-to-video.'
+      include_inactive:
+        type: boolean
+        required: false
+        description: Also return coming_soon/disabled models (not generatable yet).
+    response:
+      format: json
+
+  generate:
+    description: >
+      Generate one image / video / audio clip through the schema-aware adapter
+      pipeline. `model` is the `<provider>/<model>` id from `list`; `params` is an
+      object of that model's declared tunables (validated against its `inputs` —
+      undeclared keys are dropped). Returns a SpiderMedia-stored URL + an `est_cost`
+      breakdown. BILLED (raw provider cost + markup on OUR key; 0 for BYOK).
+    guidance:
+      use: "Create one media asset once you've read the model's schema and pre-flighted the params."
+      next: "verify-media-result.mjs (confirm the URL is real media), use-the-gateway (unrelated: chat)"
+      warn: "Read `list` first; video can take minutes (synchronous); billed_usd=0 is BYOK, not free."
+      telemetry_signal_default: "warm"
+    http: POST /media/generations
+    params:
+      model:
+        type: string
+        required: true
+        description: 'Descriptor id "<provider>/<model>" from `list` (e.g. fal/flux-dev, kie/veo-3-fast, openai/tts-1).'
+      params:
+        type: object
+        required: false
+        description: >
+          Per-model tunables, validated server-side against the model's declared
+          `inputs` (undeclared keys dropped). Image: prompt, negative_prompt, seed,
+          guidance_scale, aspect_ratio, num_images. Video: prompt, duration,
+          aspect_ratio, image_url. TTS: text, voice, speed, format. Read `list` for
+          the exact set THIS model declares.
+    response:
+      format: json

@@ -1,0 +1,1 @@
+Generate images, video, and voiceovers through SpiderGate — schema-aware, one Bearer call, a stored URL back

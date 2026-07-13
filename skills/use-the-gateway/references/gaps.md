@@ -9,7 +9,14 @@ SpiderGate CLI/MCP owners, not a `needs-replan` escalation.
 > **Gaps 1 + 2 are now CLOSED** (SpiderGate tools parity S1, 2026-06-11) — published as
 > **cli@1.25.0 · mcp@1.31.0 · mcp-gate@1.3.0 · core@1.26.0**. An agent on those versions
 > should prefer the CLI / MCP tool; the raw-HTTP examples in the references still work and
-> remain the fallback for older clients. Gaps 3 + 4 are still open.
+> remain the fallback for older clients.
+>
+> **Gap 4 — media GENERATION half now CLOSED** (SF-17, 2026-07-13): schema-aware
+> `gate_media_generate` + `gate_media_models` (MCP + `spideriq gate media-generate` /
+> `media-models` CLI, core `gateMediaGenerate`/`gateMediaModels`) reach the adapter-backed
+> `POST /api/gate/v1/media/generations` — image/video/audio with per-model declared `inputs`.
+> See the **`generate-media`** skill. Still open under gap 4: the `gate_embed` tool (embeddings
+> stay HTTP-only) and MCP wrappers for the raw OpenAI-compat `/audio/*` passthrough (STT). Gap 3 open.
 
 ## Gap 1 — ✅ CLOSED — there was NO `gate` CLI command (was HIGH)
 

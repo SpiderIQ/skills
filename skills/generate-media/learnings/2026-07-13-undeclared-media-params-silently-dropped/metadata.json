@@ -1,0 +1,14 @@
+{
+  "title": "Undeclared media-generation params are silently dropped — read the schema, then pre-flight",
+  "summary": "SpiderGate media generation is schema-aware: each model's `inputs` declares the exact params it accepts, and the endpoint SILENTLY DROPS anything undeclared (SF-16.1b) before the provider call. So an agent that carries habits across models — passing OpenAI's `size`/`quality`/`cfg_scale` to a fal model that declares `aspect_ratio`/`guidance_scale`, or `input` to a TTS model that declares `text` — pays for a generation that ignored those params (no error, just a result that disregarded half the request; a dropped `seed` means the output isn't reproducible). The fix is a two-step discipline: (1) call gate_media_models and read THIS model's `inputs` before generating; (2) run scripts/validate-media-params.mjs, which classifies every param HONORED/DROPPED/OUT-OF-ENUM/OUT-OF-RANGE/MISSING-REQ against the live schema and exits non-zero on any problem — turning 'schema-aware' from a claim into a check you paste. Sibling silent traps in this surface: billed_usd=0 is BYOK (monthly key-count billing), not free; video generation is synchronous and can take minutes (not a hang); the TTS text field is `text` (not `input`/`prompt`); a stored-URL 200 isn't proof the asset rendered (verify content-type).",
+  "created_at": "2026-07-13",
+  "updated_at": "2026-07-13",
+  "tags": ["media-generation", "schema", "params", "byok", "billing", "tts", "video", "SF-17", "SF-16.1b"],
+  "references": [
+    "app/services/gate/media_generation.py — _openai_image_dispatch / _openai_tts_dispatch: `declared = set(descriptor.inputs or {})`; only declared keys forwarded (SF-16.1b allowlist)",
+    "app/api/v1/gate/media.py — POST /media/generations + GET /media/models (SF-17 Bearer surface over generate_media)",
+    "app/database/migrations/387_gate_media_models.sql + 423 — the `inputs` control schema per model (type/enum/min/max/required)",
+    "docs/services/SpiderGate/LEARNINGS.md — SF-16.1b declared-param allowlist must fence structural fields; STT verbose_json/$0 cost (#41)",
+    "scripts/validate-media-params.mjs — the deterministic pre-flight (HONORED/DROPPED/OUT-OF-ENUM/OUT-OF-RANGE report)"
+  ]
+}
