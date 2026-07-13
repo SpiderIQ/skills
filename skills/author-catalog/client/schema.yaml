@@ -17,7 +17,7 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.4.0"
+version: "0.6.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -72,6 +72,7 @@ guidance:
     - "badges and tags are WHOLESALE per-field replaces (not merges) — send the COMPLETE list you want for that field, or omit it to leave it untouched."
     - "An empty edit (no editorial fields) is a 422 ('No editorial fields supplied.'). Supply at least one field."
     - "setModelMeta stamps is_curated=TRUE — intended: the 6h discovery sync then stops overwriting the row's display_name (that is how authored copy survives). Not reversible via this surface."
+    - "settings_schema (setModelMeta) drives the Studio/Playground SETTINGS PANEL for that model — it is data, not code, so adding/changing a model's controls needs NO deploy. It uses the unified dialect: control `type` + an `x-control` render hint; slider/stepper bounds are `min`/`max`/`step` (NOT JSON-schema `minimum`/`maximum` → those silently fall back to 0–100). It REPLACES the whole panel schema (not merged); NULL inherits the provider default. Media models (image/video/audio) DON'T use this field — their panel schema lives on gate_media_models.inputs, seeded via migration, not this curator surface."
     - "setLink is idempotent per (model, url) — re-adding a url UPDATES that link; removal is by link_id, scoped to the model. Third-party links MUST carry is_authored_by_us=false + source + attribution (HARD-GATE)."
     - "alias and media_id can contain a slash (opvs/coding, provider/model) — the tools URL-encode it; pass the value plain."
     - "description / long_description are OUR OWN words — NEVER copy vendor marketing blurb, model-card prose, or Wikipedia text (copyright / CC-BY-SA). Compose from structured facts; if you only have prose, write less. A copied description is a licensing defect (HARD-GATE)."
@@ -97,6 +98,12 @@ methods:
       telemetry_signal_default: "cold"
     http: GET /catalog/models
     params:
+      ids:
+        type: array
+        required: false
+        description: Fetch EXACTLY these numeric catalog ids (the by-id read). Resolve one card/model's row directly instead of scanning a whole provider. Bypasses the hidden filter.
+        items:
+          type: integer
       provider:
         type: string
         required: false
@@ -133,8 +140,8 @@ methods:
       empty edit is a 422.
     guidance:
       use: "Write or adjust a model's client-facing copy (description, tags, badges, sort, visibility)."
-      next: "setLink (attach a review/paper to the model), setModelMeta again (adjust another field)"
-      warn: "Partial + COALESCE-preserve — send ONLY the fields you want to change. badges/tags REPLACE the whole list. This flips the row to is_curated (sync stops managing display_name)."
+      next: "setLink (attach a review/paper to the model), setModelMeta again (adjust the settings_schema or another field)"
+      warn: "Partial + COALESCE-preserve — send ONLY the fields you want to change. badges/tags REPLACE the whole list. settings_schema REPLACES the whole per-model panel schema (it is not merged). This flips the row to is_curated (sync stops managing display_name); settings_schema survives the sync too (it is absent from both ON-CONFLICT set-lists)."
       telemetry_signal_default: "warm"
     http: PATCH /models/{model_id}/meta
     params:
@@ -181,6 +188,23 @@ methods:
         type: boolean
         required: false
         description: Hide this model from the client catalog.
+      settings_schema:
+        type: object
+        required: false
+        description: >
+          Per-model Studio/Playground settings-panel control schema, in the UNIFIED
+          dialect (SF-16). A JSON-schema-shaped object: a `type: "object"` root with a
+          non-empty `properties` map of control-name → control definition. Each control
+          carries a canonical `type` (string | integer | number | boolean | array |
+          object | image), an `x-control` render hint (text | textarea | select |
+          segmented | slider | stepper | seed | dropzone | toggle), and any of
+          `title` / `description` / `default` / `enum` / `min` / `max` / `step` /
+          `required`. Slider/stepper bounds use `min` / `max` / `step` (NOT the
+          JSON-schema `minimum` / `maximum` — those silently fall back to 0–100).
+          REPLACES the row's whole panel schema (not merged); an empty object or one
+          with no `properties` is a 422. NULL on the row inherits the provider default
+          (resolved server-side) — this is the per-model OVERRIDE. See the
+          author-settings-schema reference for a worked example.
     response:
       format: json
 

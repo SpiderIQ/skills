@@ -80,6 +80,11 @@ gate_catalog_provider_set_meta (provider_name, …) ─▶  provider editorial: 
   study, paper) is idempotent per (model, url) and carries licensing provenance
   (`source` / `attribution` / `is_authored_by_us`). Fill provenance for anything
   not authored by us. → [references/manage-links.md](references/manage-links.md)
+- **Author a model's settings panel** — set `settings_schema` on `setModelMeta` to
+  drive the Studio/Playground controls a client sees for a chat/LLM model. Data,
+  not code — schema-driven, no deploy. Unified dialect (`type` + `x-control`,
+  `min`/`max`/`step`); a per-model OVERRIDE of the provider default.
+  → [references/author-settings-schema.md](references/author-settings-schema.md)
 
 <HARD-GATE name="licensing-facts-our-words-provenance">
 Everything a client reads must be **facts + OUR words + provenance** — never
@@ -144,6 +149,7 @@ as PASS/FAIL/INFO the model can't fudge. "Looks good" is not a verification.
 |---|---|
 | write/adjust a model's description, tags, badges, sort order, or visibility | [references/author-editorial.md](references/author-editorial.md) |
 | set an alias's display name / use case, or a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
+| author the Studio/Playground settings panel for a chat/LLM model (`settings_schema`) | [references/author-settings-schema.md](references/author-settings-schema.md) |
 | attach or remove a review video / article / study / paper on a model | [references/manage-links.md](references/manage-links.md) |
 | understand why authoring stamps is_curated (the sync-clobber guard) | [learnings/](learnings/) |
 
@@ -178,7 +184,7 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 | Method | Does | Reference |
 |---|---|---|
 | `listModels` | READ the admin catalog — resolve a model name → its numeric id + current copy + is_curated (the id source for the writes below). Accepts either catalog scope. | [references/author-editorial.md](references/author-editorial.md) |
-| `setModelMeta` | author a model's description/tags/badges/sort/hidden (COALESCE-preserve) | [references/author-editorial.md](references/author-editorial.md) |
+| `setModelMeta` | author a model's description/tags/badges/sort/hidden + `settings_schema` (the Studio settings-panel dialect) — COALESCE-preserve | [references/author-editorial.md](references/author-editorial.md) · [references/author-settings-schema.md](references/author-settings-schema.md) |
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
 | `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
 | `setLink` | add / remove a reference link (action=add\|remove) | [references/manage-links.md](references/manage-links.md) |
@@ -196,6 +202,13 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/
   from facts, never copy prose), the **badge vocabulary** (house tones/labels), how
   to **find a model's integer id**, and the **un-curate / rollback** runbook.
   **Read before your first set-meta.**
+- **[references/author-settings-schema.md](references/author-settings-schema.md)** —
+  author a chat/LLM model's Studio/Playground **settings panel** via
+  `settings_schema` on `setModelMeta`: the unified dialect (`type` + `x-control`
+  vocab, `min`/`max`/`step` NOT `minimum`/`maximum`), the two-level resolution
+  (per-model override → provider default → shared chat default), the
+  discovery-sync durability guarantee, and a worked example. Data, not code —
+  schema-driven, no deploy. **Read before authoring a settings panel.**
 - **[references/manage-links.md](references/manage-links.md)** — add/remove
   reference links, the (model, url) idempotency, and the provenance HARD-GATE.
   Steps / Gotchas / Verify.

@@ -14,7 +14,7 @@
 # This makes read → enrich → author a single PAT can drive end-to-end.
 
 name: enrich-catalog
-version: "0.2.0"
+version: "0.3.0"
 description: >
   Go get the facts for the SpiderGate model catalog — `listModels` to enumerate the
   admin catalog (numeric ids + specs + is_curated) and pick targets, then `enrich` to
@@ -83,6 +83,12 @@ methods:
       telemetry_signal_default: "cold"
     http: GET /catalog/models
     params:
+      ids:
+        type: array
+        required: false
+        description: Fetch EXACTLY these numeric catalog ids (the by-id read). Use this to pull one model's row directly instead of scanning a whole provider. Bypasses the hidden filter.
+        items:
+          type: integer
       provider:
         type: string
         required: false
