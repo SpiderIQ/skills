@@ -3,10 +3,10 @@
 # Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
 # per-method use/next/warn/telemetry_signal_default Q4).
 #
-# base_url is the OpenAI-compatible gateway core (/api/gate/v1). Brand analytics
-# (usage/traces) live under a DIFFERENT root (/api/v1/brands/{brand_id}/gate/*) and
-# are surfaced via the gate_usage/gate_traces MCP tools, not generated here — so
-# every method below resolves to a real /api/gate/v1 endpoint (no phantom paths).
+# base_url is the OPVS marketplace PROXY path (/api/v1/spideriq/gate) — OPVS rewrites
+# it to SpiderGate /api/gate/v1/. NEVER the service-native /api/gate/v1 here (that 404s
+# the OPVS route). Brand analytics (usage/traces) are surfaced via the gate_usage/
+# gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
 version: "0.2.0"
@@ -15,7 +15,7 @@ description: >
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
   per-request cost cap, response cache, and per-call cost readback.
 category: ai-gateway
-base_url: /api/gate/v1
+base_url: /api/v1/spideriq/gate
 auth:
   type: pat
   header: Authorization

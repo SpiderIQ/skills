@@ -3,9 +3,9 @@
 # Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
 # per-method use/next/warn/telemetry_signal_default Q4).
 #
-# base_url is the OpenAI-compatible gateway core (/api/gate/v1); the media
-# endpoints live at /api/gate/v1/media/{models,generations} (SF-17). Every method
-# resolves to a real endpoint — no phantom paths. `list` is a read (not metered);
+# base_url is the OPVS marketplace PROXY path (/api/v1/spideriq/gate) — OPVS rewrites
+# it to SpiderGate /api/gate/v1/, then appends the method path (/media/{models,generations},
+# SF-17). NEVER the service-native /api/gate/v1 here (that 404s the OPVS route). `list` is a read;
 # `generate` is a BILLED media generation (raw provider cost + markup, or 0 for BYOK).
 
 name: generate-media
@@ -15,7 +15,7 @@ description: >
   media URL back — schema-aware, honoring each model's declared inputs. Discover
   models + their tunables, then generate; the result is uploaded to SpiderMedia.
 category: ai-gateway
-base_url: /api/gate/v1
+base_url: /api/v1/spideriq/gate
 auth:
   type: pat
   header: Authorization

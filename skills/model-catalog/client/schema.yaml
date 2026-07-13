@@ -3,9 +3,9 @@
 # Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
 # per-method use/next/warn/telemetry_signal_default Q4).
 #
-# base_url is the OpenAI-compatible gateway core (/api/gate/v1); the catalog
-# READ endpoints live under /api/gate/v1/catalog/* (GateBoard D.1). Every method
-# below resolves to a real endpoint — no phantom paths. Reads are LIST-ONLY:
+# base_url is the OPVS marketplace PROXY path (/api/v1/spideriq/gate) — OPVS rewrites
+# it to SpiderGate /api/gate/v1/; the catalog READ methods are /catalog/* (GateBoard D.1).
+# NEVER the service-native /api/gate/v1 here (that 404s the OPVS route). Reads are LIST-ONLY:
 # not metered, not billable (same class as listModels).
 
 name: model-catalog
@@ -16,7 +16,7 @@ description: >
   under a budget. Facts + benchmarks + live per-provider pricing + eval scores,
   every sourced field carrying provenance.
 category: ai-gateway
-base_url: /api/gate/v1
+base_url: /api/v1/spideriq/gate
 auth:
   type: pat
   header: Authorization
