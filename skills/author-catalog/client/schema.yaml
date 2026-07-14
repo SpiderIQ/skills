@@ -17,7 +17,7 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.8.0"
+version: "0.9.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -136,6 +136,14 @@ methods:
         type: boolean
         required: false
         description: true = only rows that HAVE at least one provider_perf row; false = only rows missing it.
+      has_vendor_direct_provider_perf:
+        type: boolean
+        required: false
+        description: true = only rows with a VENDOR-DIRECT price (an llm-stats.com provider_perf row whose provider matches the model owner, priced — the 'clean price' the flat pricing should reconcile to); false = only rows without one. Use to find models whose price you can author with confidence.
+      has_routed_provider_perf:
+        type: boolean
+        required: false
+        description: true = only rows with a ROUTED provider_perf row (source=openrouter, a third-party route — NOT the vendor's own price); false = only rows without one.
       has_links:
         type: boolean
         required: false
