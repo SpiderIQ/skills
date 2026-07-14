@@ -1,0 +1,175 @@
+# Gate-Health-Watch Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# The autonomous 24/7 gate-health WATCHER's surface (WS3b, owner-lock #6). The
+# watcher ("Kevin") reads the probe-truth routing catalog every hour, spots a
+# dead slot in a live alias (delisted / no_tools / errored past the debounce
+# streak), and FILES a Tier-2 routing proposal for a human to adjudicate. It can
+# read + propose; it can NEVER set, roll back, or approve a chain — those routing
+# WRITES have no PAT path (they stay master-key / super_admin). This is the whole
+# point of the split: a headless watcher that flags routing problems and queues a
+# fix, but can never change live routing on its own.
+#
+# Wraps a READ-ONLY + PROPOSE-ONLY slice of /api/v1/admin/gate/routing/*. The
+# human super-admin surface (setAlias / rollback / approve-proposal) lives in the
+# separate `manage-routing` skill (X-Admin-Key) — deliberately NOT here.
+
+name: gate-health-watch
+version: "0.1.0"
+description: >
+  The autonomous SpiderGate health watcher's read + propose surface. Read the
+  probe-truth routing catalog (which configured models are delisted / no-tools /
+  errored) and the pending-proposal queue, and FILE a Tier-2 routing proposal
+  when a live alias has a dead slot — queued for a human to approve. Least
+  privilege: this surface can propose a fix but never apply one; setting,
+  rolling back, and approving a chain are not reachable here.
+category: admin
+base_url: /api/v1/admin/gate/routing
+# Agent path: a PAT granted the `gate:routing:read` (read) + `gate:routing:propose`
+# (file) scopes (Authorization: Bearer). `gate:routing:write` also satisfies both.
+# Platform automation may instead send X-Admin-Key. The routing WRITES
+# (setAlias/rollback/approve) intentionally have NO PAT path — use manage-routing.
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+  required_scope: gate:routing:read
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - watch gate health
+  - check which models are probing bad
+  - find dead slots in routing
+  - file a routing proposal
+  - propose a routing fix
+  - gate health watch tick
+
+guidance:
+  use: >
+    Reach for this on the hourly gate-health watch: read the probe-truth catalog
+    to find configured models that are delisted / no_tools / errored, see which
+    live aliases reference them, and FILE a Tier-2 proposal to swap a dead slot
+    for a healthy one. The proposal is queued for a human — this surface never
+    applies it. Pair with author-catalog / manage-routing only through a human.
+  not:
+    - "manage-routing (X-Admin-Key, human) → SET / ROLL BACK / APPROVE a chain. This watcher surface deliberately CANNOT do those — it only reads + files a proposal a human then approves in manage-routing."
+    - "author-catalog / enrich-catalog → write model catalog COPY / facts — not routing health."
+    - "consume-discovery-feed → poll the NEW-provider feed + propose onboarding — a different autonomy loop (provider discovery, not routing repair)."
+  # Every selector is a typed alias / provider / status — no free-text search.
+  intent_aliases: []
+  pitfalls:
+    - "PROBE STATUS IS THE TRUTH, not GET /models — a model can sit in a chain and be delisted at the provider; only catalogStatus.last_probe_status sees it. Propose off probe truth, never off the chain listing."
+    - "DEBOUNCE `error`. last_probe_status collapses every transient (429 / 5xx / auth / timeout) into 'error'; free `:free` slugs flap ok<->error every cycle. Only `delisted` / `no_tools` are deterministic-dead. Treat a lone 'error' as suspect — propose on it only if it is persistent, or corroborated by key-failures / error-rate. A proposal filed on a flap wastes a human review."
+    - "A chain is a LEAST-BUSY POOL, not a priority list — only slot 0 is load-bearing (codex bypass). Do not propose 'add a redundant tail'; a dead peer fails its ~1/N share regardless of chain length. Propose REMOVING/REPLACING the dead slot, not padding."
+    - "agent/* aliases are HARD-GATED: you may FILE a proposal for one, but it is human-approved by definition (tier 2). Never expect it to auto-apply — nothing here applies anything."
+    - "fileProposal is IDEMPOTENT per alias (one open pending proposal per alias). A re-file while one is pending returns created=false — check listProposals(status=pending) first so you don't assume a second problem was queued."
+    - "Always ALSO file a board card on the routing board (424629e2, gate-dynamic-routing) so a human sees it immediately — the DB proposal only emails on the digest tick."
+
+methods:
+  catalogStatus:
+    description: >
+      Read the model catalog projected to its probe-truth columns:
+      supports_tools, last_probe_status (ok | no_tools | delisted | error | NULL
+      un-probed), last_probe_latency_ms, last_probe_at, is_configured, and
+      in_task_aliases (which alias chains reference the model). The authoritative
+      source for spotting dead slots. Read-only. Filter to problems with
+      ?status=delisted|no_tools|error.
+    guidance:
+      use: "Find configured models probing bad (delisted/no_tools/error) and which live aliases they sit in — the start of every watch tick."
+      next: "listProposals (is one already queued?), fileProposal (queue a swap for a human)"
+      warn: "This — not GET /models — is the truth. Debounce a lone 'error' (transient flap); act on 'delisted'/'no_tools' immediately."
+      telemetry_signal_default: "cold"
+    http: GET /catalog
+    params:
+      provider:
+        type: string
+        required: false
+        description: Filter to one provider (e.g. openrouter, mistral).
+      status:
+        type: string
+        required: false
+        description: Filter by last_probe_status (ok | no_tools | error | delisted | 'unprobed'). Use delisted/no_tools/error to see just the problems.
+    response:
+      format: json
+
+  listProposals:
+    description: >
+      List the routing proposals queue (self-heal Tier-2 suggestions + any you
+      have filed). Each row carries current_chain, proposed_chain, reason,
+      detected_from (errorrate | drift | probe) and status (pending | approved |
+      rejected | applied | auto-rolled-back). Newest first. Read-only — use it to
+      avoid filing a duplicate for an alias that already has an open proposal.
+    guidance:
+      use: "Check whether an alias already has an open pending proposal BEFORE filing a new one (filing is idempotent per alias, but check so you interpret created=false correctly)."
+      next: "fileProposal (only if no open proposal exists for the alias)"
+      warn: "A human approves/rejects these in manage-routing — you cannot. An empty list (no pending) is the normal healthy state."
+      telemetry_signal_default: "warm"
+    http: GET /proposals
+    params:
+      status:
+        type: string
+        required: false
+        description: Filter by status (pending | approved | rejected | applied | auto-rolled-back). Default 'pending'; empty/'all' for every status.
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (default 100, max 500).
+    response:
+      format: json
+
+  fileProposal:
+    description: >
+      FILE a Tier-2 routing proposal — the ONLY write this surface has, and it
+      changes NOTHING in live routing. Inserts a status='pending', tier=2 row for
+      a human to approve in manage-routing. The current chain is resolved
+      server-side from the live alias (you cannot spoof it); you supply the alias,
+      the proposed chain, and WHY. Idempotent per alias: created=false (HTTP 200)
+      means an open pending proposal already existed, created=true (HTTP 201) means
+      a new one was queued. 404 if the alias is unknown.
+    guidance:
+      use: "Queue a fix after catalogStatus shows a dead slot in a live alias — propose the alias's chain with the dead slot removed/replaced by a probe-ok slot."
+      next: "Also file a board card on 424629e2 (gate-dynamic-routing) so a human sees it now; the proposal emails on the digest tick."
+      warn: "NEVER expect this to apply — it only queues. Propose REMOVING/REPLACING the dead slot, not padding the pool. For agent/* it is human-gated by definition."
+      telemetry_signal_default: "warm"
+    http: POST /proposals
+    params:
+      alias:
+        type: string
+        required: true
+        description: The alias to propose a change for (e.g. spideriq/extraction, agent/coding). Must be a real, configured alias.
+      proposed_chain:
+        type: array
+        required: true
+        description: >
+          The chain you propose (ordered slots, 1–32) — typically the current
+          chain with the dead slot removed or swapped for a probe-ok slot. Order
+          is load-bearing only for slot 0 (codex bypass); the rest is a pool.
+        items:
+          type: object
+          properties:
+            provider:
+              type: string
+              required: true
+              description: Provider key (1–64 chars), e.g. openrouter, mistral.
+            model:
+              type: string
+              required: true
+              description: Model id (1–256 chars).
+      reason:
+        type: string
+        required: true
+        description: >
+          Why — name the detected problem (which slot is delisted/no_tools/errored,
+          the probe evidence) and the intended fix. ≤500 chars. Attribution is
+          prepended server-side.
+      detected_from:
+        type: string
+        required: false
+        description: The signal that fired the detection — probe (default) | errorrate | drift.
+    response:
+      format: json

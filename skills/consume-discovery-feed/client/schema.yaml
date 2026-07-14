@@ -1,0 +1,108 @@
+# Consume-Discovery-Feed Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md.
+#
+# The CONSUME half of the free-LLM discovery loop (WS3b, owner-lock #6). The daily
+# discovery monitor (WS2.3, migration 432) is the PRODUCER: it finds newly-listed
+# free LLM providers/models, writes them to gate_discovered_providers, and emails
+# super_admins. It does NOT file cards — the api-gateway holds no board-write
+# credential. This skill is the CONSUMER: the curator ("Kevin") polls the
+# un-carded, already-notified rows, files a "research + onboard provider X" card
+# on its board, researches, PROPOSES onboarding (a brand-NEW provider is
+# propose-only — a human approves the signup) via the author-catalog skill's
+# addModel, and stamps the row carded so it is never carded twice.
+#
+# Wraps GET/POST /api/v1/admin/gate/catalog/discovery-feed*. The actual onboarding
+# PROPOSAL is author-catalog.addModel (POST /admin/gate/models) — NOT in this skill.
+
+name: consume-discovery-feed
+version: "0.1.0"
+description: >
+  Consume the SpiderGate free-LLM discovery feed. Poll the newly-discovered
+  providers/models the daily monitor has flagged (and emailed super_admins about)
+  but not yet carded, so the curator can file a research + onboarding card for
+  each and stamp it consumed. Card-once, propose-only: a brand-new provider's
+  onboarding is proposed for a human to approve, never auto-wired.
+category: admin
+base_url: /api/v1/admin/gate
+# Agent path: a PAT granted `gate:catalog:write` (Authorization: Bearer) — the same
+# scope the curator uses to author + propose model cards. Read needs either catalog
+# scope; the carded stamp is a catalog write. Platform automation may send X-Admin-Key.
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+  required_scope: gate:catalog:write
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - consume the discovery feed
+  - poll for new free LLM providers
+  - onboard a newly discovered provider
+  - card the discovery feed
+  - what new models were discovered
+
+guidance:
+  use: >
+    Reach for this to drain the discovery feed on a schedule: listDiscoveryFeed to
+    get the un-carded, already-notified rows; for each, file a "research + onboard
+    provider X" card on the curation board and (after research) PROPOSE onboarding
+    via author-catalog.addModel; then markCarded so the row is never processed
+    twice. A brand-new provider is propose-only — a human approves the signup.
+  not:
+    - "author-catalog (addModel) → the actual onboarding PROPOSAL (POST /models). This skill only lists the feed + stamps it carded; it does NOT itself add a model. Card -> research -> author-catalog.addModel -> markCarded."
+    - "gate-health-watch → the routing-repair loop (dead slots -> file a routing proposal). A different autonomy loop; this one is provider DISCOVERY."
+    - "enrich-catalog → fetch facts for an EXISTING model. Onboarding a NEW provider comes first (author-catalog.addModel, propose-only), then enrichment."
+  intent_aliases: []
+  pitfalls:
+    - "listDiscoveryFeed returns ONLY rows with notified_at IS NOT NULL AND kevin_carded_at IS NULL — the monitor's cold-seed rows (notified_at NULL) are excluded on purpose so you don't spam the board with the initial 80-row seed. Don't try to card seed rows."
+    - "markCarded AFTER you file the card, not before. If you stamp first and then crash, the provider is silently dropped (never carded again). Stamp last so a crash re-cards (at-least-once), never loses a provider."
+    - "A brand-NEW provider is PROPOSE-ONLY. author-catalog.addModel with a new provider records a 'proposed' onboarding row (HTTP 202) — a human approves the signup before it is wired. Never assume the provider is live after you propose it."
+    - "markCarded is idempotent: stamped=false (HTTP 200) means the row was already carded — treat as done, not an error. 404 means the id doesn't exist."
+    - "The feed row is a LEAD, not verified truth. Research the provider (is it real, free, tool-capable, an API we can reach?) BEFORE proposing onboarding — the same never-fabricate rule as catalog authoring."
+
+methods:
+  listDiscoveryFeed:
+    description: >
+      List the un-carded slice of the discovery feed — rows the daily monitor has
+      already notified super_admins about (notified_at set) but which have not been
+      carded yet (kevin_carded_at NULL), oldest-discovered first. Each row carries
+      provider_slug, model_slug ('' = a provider-level marker), provider_name,
+      provider_url, is_free, limits, requirements, source. Read-only. An empty list
+      is the normal healthy steady state.
+    guidance:
+      use: "Get the queue of new providers/models to research + onboard this tick."
+      next: "file a board card per row, then author-catalog.addModel (propose), then markCarded"
+      warn: "Only notified + un-carded rows appear (cold-seed rows are excluded). Empty = nothing new; stop."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/discovery-feed
+    params:
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (default 100, max 500).
+    response:
+      format: json
+
+  markCarded:
+    description: >
+      Stamp kevin_carded_at on a discovery-feed row so it is carded exactly once.
+      Call it AFTER filing the onboarding card (stamp-last = at-least-once, never
+      drops a provider on a crash). Idempotent: stamped=true (this call stamped it)
+      vs stamped=false (already carded, HTTP 200 no-op). 404 if the id is unknown.
+    guidance:
+      use: "Mark a feed row consumed once you have filed its research+onboard card."
+      next: "listDiscoveryFeed (next un-carded row) or stop if the queue is drained"
+      warn: "Stamp LAST, after the card exists. stamped=false is a healthy idempotent no-op, not an error."
+      telemetry_signal_default: "warm"
+    http: POST /catalog/discovery-feed/{item_id}/carded
+    params:
+      item_id:
+        type: integer
+        required: true
+        description: The gate_discovered_providers row id (from listDiscoveryFeed).
+    response:
+      format: json

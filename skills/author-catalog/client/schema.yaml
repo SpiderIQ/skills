@@ -17,16 +17,16 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.6.0"
+version: "0.7.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
-  (the copy the client catalog + model leaderboard render). Partial +
-  COALESCE-preserve; authoring stamps the row is_curated so the discovery sync
-  stops overwriting it. super_admin-only, platform-wide. Authors EDITORIAL COPY
-  only — a model's factual fields (context/pricing/benchmarks/perf) come from the
-  enrichment path, not here; descriptions are composed from facts, never copied
-  from vendor prose.
+  (the copy the client catalog + model leaderboard render) — AND ADD new model
+  cards (addModel INSERT, owner-locked auto/propose). Partial + COALESCE-preserve;
+  authoring stamps the row is_curated so the discovery sync stops overwriting it.
+  super_admin-only, platform-wide. Authors EDITORIAL COPY only — a model's factual
+  fields (context/pricing/benchmarks/perf) come from the enrichment path, not here;
+  descriptions are composed from facts, never copied from vendor prose.
 category: admin
 base_url: /api/v1/admin/gate
 # Agent path: a PAT granted the `gate:catalog:write` scope (Authorization: Bearer).
@@ -50,6 +50,9 @@ triggers:
   - set an alias display name
   - attach a reference link to a model
   - reorder the model leaderboard
+  - add a new model to the catalog
+  - onboard a new provider
+  - propose a provider
 
 guidance:
   use: >
@@ -79,6 +82,7 @@ guidance:
     - "This skill authors COPY, not FACTS: it does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf. Those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model."
     - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first with the listModels method (GET /catalog/models), which returns the int id + is_curated + current copy. The client-facing catalog READ returns the STRING id, not the int, so it can't drive these writes."
     - "setProviderMeta (gate_catalog_provider_set_meta / CLI providers set-meta) authors PROVIDER editorial (description / free_tier_description / docs_url / signup_url); logo_url is NOT editable here. To fill a provider's models' FACTS first, use the enrich-catalog skill."
+    - "addModel is INSERT-only + OWNER-LOCKED: a model of an APPROVED provider inserts directly; a brand-NEW provider is PROPOSE-ONLY — addModel wires NO model and returns status='proposed', and a HUMAN (super_admin / X-Admin-Key, NOT the curator PAT) must approve the provider before its models can be added. Check listProviderOnboarding to see approved vs proposed. addModel is idempotent on (provider, model_id): an existing card is created=false — edit it with setModelMeta, not addModel. `provider` MUST be the TRUE logical name (minimax/zhipu/openai), never the litellm wire prefix 'openai'."
 
 methods:
   listModels:
@@ -205,6 +209,160 @@ methods:
           with no `properties` is a 422. NULL on the row inherits the provider default
           (resolved server-side) — this is the per-model OVERRIDE. See the
           author-settings-schema reference for a worked example.
+    response:
+      format: json
+
+  addModel:
+    description: >
+      ADD a NEW model card to the catalog (INSERT into gate_model_catalog). The
+      set-meta methods only EDIT existing rows — reach for this when a model is not
+      in the catalog yet. Stamps is_curated=TRUE so the 6h discovery sync never
+      clobbers it. Idempotent on (provider, model_id): re-adding an existing card
+      is a no-op (created=false — edit it with setModelMeta instead). OWNER-LOCKED
+      autonomy: a model of an already-APPROVED provider inserts directly; a
+      brand-NEW provider (not approved, not already serving) is PROPOSE-ONLY — no
+      model is wired, a provider proposal is recorded (status='proposed') and a
+      HUMAN must approve it before models can be added. Supply the provider_*
+      fields to make that proposal complete. MCP tool gate_catalog_model_upsert;
+      CLI `spideriq gate catalog models add`.
+    guidance:
+      use: "Create a catalog card for a model that isn't there yet (INSERT). For a model already in the catalog, use setModelMeta to edit its copy instead."
+      next: "enrich-catalog (fill the new card's FACTS — context/pricing/benchmarks), setModelMeta (adjust its copy or settings_schema)"
+      warn: "OWNER-LOCK: an APPROVED provider inserts directly; a brand-NEW provider returns status='proposed' and wires NO model until a human approves it (approval is super-admin-only — a curator PAT cannot approve). `provider` is the TRUE logical provider (minimax/zhipu/openai), NOT the litellm wire prefix. Idempotent on (provider, model_id) — an existing card is created=false. This authors a card + editorial copy; FACTS still come from enrich-catalog."
+      telemetry_signal_default: "warm"
+    http: POST /models
+    params:
+      provider:
+        type: string
+        required: true
+        description: TRUE logical provider name (lowercased) — minimax / zhipu / openai — NOT the litellm wire prefix.
+      model_id:
+        type: string
+        required: true
+        description: The provider's model id (e.g. glm-4.6, gpt-4o). Unique per provider; the natural key with provider.
+      spidergate_id:
+        type: string
+        required: false
+        description: Optional stable served ref (e.g. glm-4.6-zhipu); defaults to provider/model_id.
+      display_name:
+        type: string
+        required: false
+        description: Human display name (≤256 chars).
+      owned_by:
+        type: string
+        required: false
+        description: Model owner / vendor (≤128 chars).
+      context_window:
+        type: integer
+        required: false
+        description: Context window in tokens.
+      max_output:
+        type: integer
+        required: false
+        description: Max output tokens.
+      pricing_input:
+        type: number
+        required: false
+        description: Input price per 1M tokens (USD).
+      pricing_output:
+        type: number
+        required: false
+        description: Output price per 1M tokens (USD).
+      is_free:
+        type: boolean
+        required: false
+        description: True if the model is free to call.
+      capabilities:
+        type: array
+        required: false
+        description: Capability tags (e.g. vision, tools).
+        items: string
+      supports_tools:
+        type: boolean
+        required: false
+        description: True if the model supports tool / function calling.
+      tier:
+        type: string
+        required: false
+        description: Access tier — free | subscription | paid.
+      cost_type:
+        type: string
+        required: false
+        description: Economic class — free | subscription | paid | unknown (mirrors api_integrations.cost_type).
+      description:
+        type: string
+        required: false
+        description: Short editorial description (≤2000 chars, OUR words from facts).
+      long_description:
+        type: string
+        required: false
+        description: Long-form editorial copy (≤20000 chars).
+      tags:
+        type: array
+        required: false
+        description: Editorial tags (each 1–64 chars, ≤50).
+        items: string
+      badges:
+        type: array
+        required: false
+        description: Authored badges — each {label (1–48), tone? (≤24)}. ≤20.
+        items:
+          type: object
+          properties:
+            label:
+              type: string
+              required: true
+              description: Badge label (1–48 chars).
+            tone:
+              type: string
+              required: false
+              description: Optional display hint (≤24 chars), e.g. gold/blue/green.
+      sort_order:
+        type: integer
+        required: false
+        description: Manual sort weight, lower first (0–1000000).
+      hidden:
+        type: boolean
+        required: false
+        description: Hide the new card from the client catalog.
+      provider_api_base:
+        type: string
+        required: false
+        description: NEW provider only — the provider's OpenAI-compat base URL (e.g. https://api.example.com/v1). Populates the proposal.
+      provider_auth_style:
+        type: string
+        required: false
+        description: NEW provider only — auth style — bearer | x-api-key | x-goog-api-key | query | none.
+      provider_models_endpoint:
+        type: string
+        required: false
+        description: NEW provider only — models-list path relative to api base (default /models).
+      provider_modality:
+        type: string
+        required: false
+        description: NEW provider only — surface served — chat | media | embedding | rerank (default chat).
+    response:
+      format: json
+
+  listProviderOnboarding:
+    description: >
+      List the provider-onboarding taxonomy — the registry of providers plus the
+      pending review queue. Each row: provider_name, api_base, auth_style,
+      models_endpoint, modality, cost_type, is_passthrough, approval_status
+      (approved | proposed | rejected), and attribution. Proposed rows sort first.
+      Read-only; accepts either catalog scope. Use it to see which providers
+      addModel will auto-accept vs. which are awaiting human approval.
+    guidance:
+      use: "See which providers are approved (addModel inserts directly) vs proposed (awaiting a human). Optional status filter."
+      next: "addModel (add a model of an approved provider)"
+      warn: "Read-only. A 'proposed' provider needs super-admin approval (NOT available to the curator PAT) before its models can be added."
+      telemetry_signal_default: "cold"
+    http: GET /providers/onboarding
+    params:
+      status:
+        type: string
+        required: false
+        description: Filter by approval_status — approved | proposed | rejected. Omit for all.
     response:
       format: json
 

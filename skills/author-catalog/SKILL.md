@@ -1,6 +1,6 @@
 ---
 name: author-catalog
-version: 0.3.1
+version: 0.4.0
 description: >
   Author the SpiderGate model-catalog editorial — the human-written copy the
   client-facing catalog and model leaderboard show: a model's description /
@@ -18,7 +18,7 @@ description: >
   the fields you supply change) and stamps the row as curated so the 6h
   discovery sync stops overwriting it.
 client: author-catalog
-client_version: "0.3.1"
+client_version: "0.4.0"
 category: admin
 triggers:
   - author the model catalog
@@ -29,6 +29,8 @@ triggers:
   - set an alias display name
   - attach a reference link to a model
   - reorder the model leaderboard
+  - add a new model to the catalog
+  - onboard a new provider
 requires_auth: true
 requires_brand: false
 ---
@@ -43,12 +45,21 @@ catalog + model leaderboard render. This skill is the privileged WRITE surface
 for that editorial. The read surface (what clients see) is a separate skill.
 
 ```
+gate_catalog_model_upsert (provider, model_id, …) ─▶ ADD a NEW model card (INSERT, is_curated) — owner-locked auto/propose
 gate_catalog_model_set_meta (model_id, …)  ─▶  description / long_desc / tags / badges / sort_order / hidden  (stamps is_curated)
 gate_catalog_alias_set_meta (alias, …)      ─▶  display_name / description / use_case / badges / sort_order / hidden  (upsert)
 gate_catalog_media_set_meta (media_id, …)   ─▶  media-model editorial (display_name real; rest → metadata.editorial)
 gate_catalog_links_set (action, model_id, …) ─▶  add / remove a reference link (youtube | article | study | paper)
 gate_catalog_provider_set_meta (provider_name, …) ─▶  provider editorial: description / free_tier_description / docs_url / signup_url
 ```
+
+> **ADD vs EDIT.** `gate_catalog_model_upsert` (method `addModel`) **INSERTs a new
+> card** — the `set_meta` tools only EDIT rows that already exist. It is
+> **owner-locked**: a model of an already-APPROVED provider inserts directly; a
+> **brand-new provider** is **propose-only** — no model is wired, a provider
+> proposal is recorded (`status='proposed'`) and a **human** (super_admin /
+> X-Admin-Key — *not* the curator PAT) must approve it first. `listProviderOnboarding`
+> shows approved vs. pending providers. → [references/add-model.md](references/add-model.md)
 
 > **AUTH:** every `gate_catalog_*` write authorises with a PAT carrying the
 > `gate:catalog:write` capability scope (granted at PAT-approval time), OR the
@@ -147,6 +158,7 @@ as PASS/FAIL/INFO the model can't fudge. "Looks good" is not a verification.
 
 | The situation… | Read |
 |---|---|
+| ADD a model that isn't in the catalog yet (INSERT), or onboard/propose a new provider | [references/add-model.md](references/add-model.md) |
 | write/adjust a model's description, tags, badges, sort order, or visibility | [references/author-editorial.md](references/author-editorial.md) |
 | set an alias's display name / use case, or a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
 | author the Studio/Playground settings panel for a chat/LLM model (`settings_schema`) | [references/author-settings-schema.md](references/author-settings-schema.md) |
@@ -161,6 +173,9 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 
 | Do | HTTP | MCP tool | CLI |
 |---|---|---|---|
+| **Add a NEW model card** (owner-locked) | `POST /models` | `gate_catalog_model_upsert` | `spideriq gate catalog models add …` |
+| List the provider-onboarding taxonomy | `GET /providers/onboarding` | — | `spideriq gate catalog providers onboarding` |
+| Approve a proposed provider (**human only**) | `POST /providers/onboarding/{name}/approve` | — *(super-admin, no PAT)* | — |
 | Author a model's editorial copy | `PATCH /models/{id}/meta` | `gate_catalog_model_set_meta` | `spideriq gate catalog models set-meta <id> …` |
 | Author a task alias's editorial | `PATCH /routing/aliases/{alias}/meta` | `gate_catalog_alias_set_meta` | `spideriq gate catalog aliases set-meta <alias> …` |
 | Author a media model's editorial | `PATCH /media-models/{id}/meta` | `gate_catalog_media_set_meta` | `spideriq gate catalog media set-meta <id> …` |
@@ -168,9 +183,12 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 | Remove a reference link | `DELETE /models/{id}/links/{link_id}` | `gate_catalog_links_set` (action=remove) | `spideriq gate catalog links rm <id> <link_id>` |
 | Author a **provider's** editorial | `PATCH /providers/{name}/metadata` | `gate_catalog_provider_set_meta` | `spideriq gate catalog providers set-meta <name> …` |
 
-> **5 MCP tools, 6 CLI verbs.** The MCP `gate_catalog_links_set` (one tool,
+> **6 MCP tools.** `gate_catalog_model_upsert` (add a new card) joins the five
+> set-meta/link tools. The MCP `gate_catalog_links_set` (one tool,
 > `action: add|remove`) is split on the CLI into `links add` + `links rm`. They
-> hit the same split REST endpoints (`POST /links` · `DELETE /links/{id}`).
+> hit the same split REST endpoints (`POST /links` · `DELETE /links/{id}`). The
+> **approve** endpoint is deliberately NOT an MCP tool — it is the human gate
+> (super_admin / X-Admin-Key), which a curator PAT can never call.
 >
 > **Provider editorial** (`provider_metadata` — the description, free-tier blurb, and
 > docs/signup URLs a client sees on a provider) is authored with
@@ -184,6 +202,8 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 | Method | Does | Reference |
 |---|---|---|
 | `listModels` | READ the admin catalog — resolve a model name → its numeric id + current copy + is_curated (the id source for the writes below). Accepts either catalog scope. | [references/author-editorial.md](references/author-editorial.md) |
+| `addModel` | ADD a NEW model card (INSERT, is_curated) → `gate_catalog_model_upsert`. Owner-locked: approved provider auto-inserts; brand-new provider is propose-only (human approves). Idempotent on (provider, model_id). | [references/add-model.md](references/add-model.md) |
+| `listProviderOnboarding` | READ the provider-onboarding taxonomy — which providers are approved (addModel auto-inserts) vs proposed (awaiting human approval). | [references/add-model.md](references/add-model.md) |
 | `setModelMeta` | author a model's description/tags/badges/sort/hidden + `settings_schema` (the Studio settings-panel dialect) — COALESCE-preserve | [references/author-editorial.md](references/author-editorial.md) · [references/author-settings-schema.md](references/author-settings-schema.md) |
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
 | `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |

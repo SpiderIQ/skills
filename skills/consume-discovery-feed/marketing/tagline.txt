@@ -1,0 +1,1 @@
+Drain the free-LLM discovery feed — card each newly-found provider, propose onboarding (human-approved), stamp it consumed exactly once.
