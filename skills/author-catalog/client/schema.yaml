@@ -17,7 +17,7 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.7.0"
+version: "0.8.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -116,6 +116,34 @@ methods:
         type: boolean
         required: false
         description: true = only curated rows; false = only un-curated; omit = all.
+      model_id:
+        type: string
+        required: false
+        description: Exact model_id lookup (pair with provider for a single-row fetch by name).
+      is_configured:
+        type: boolean
+        required: false
+        description: Filter by is_configured (models actually wired into routing).
+      last_probe_status:
+        type: string
+        required: false
+        description: Filter by exact last_probe_status (ok / delisted / no_tools / error).
+      has_description:
+        type: boolean
+        required: false
+        description: true = only rows WITH a non-empty description; false = only rows MISSING one.
+      has_provider_perf:
+        type: boolean
+        required: false
+        description: true = only rows that HAVE at least one provider_perf row; false = only rows missing it.
+      has_links:
+        type: boolean
+        required: false
+        description: true = only rows with at least one reference link; false = only rows missing links.
+      view:
+        type: string
+        required: false
+        description: "full (default) = the editor row; summary = a compact curation-state projection (id/provider/model_id/model_ref/is_curated + counts + needs_curation + reasons[]) — use for inventory/queue scans to avoid huge payloads."
       search:
         type: string
         required: false
@@ -132,6 +160,29 @@ methods:
         type: integer
         required: false
         description: Pagination offset (default 0).
+    response:
+      format: json
+
+  providerSummary:
+    description: >
+      Per-provider curation-completeness rollup — which providers are done? in ONE call:
+      total / curated / uncurated / missing_description / missing_provider_perf /
+      missing_links / hidden / configured, ordered most-uncurated first. Read-only.
+    guidance:
+      use: "Get a provider-level scoreboard of what still needs curation before diving into rows."
+      next: "listModels(provider, view=summary, curated=false) to pull the exact rows that need work."
+      warn: "Read-only, not metered. exclude_openrouter=true drops the 456-model passthrough."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/providers/summary
+    params:
+      exclude_openrouter:
+        type: boolean
+        required: false
+        description: Exclude the openrouter passthrough (third-party models we do not operate).
+      include_hidden:
+        type: boolean
+        required: false
+        description: Count hidden rows too (default true).
     response:
       format: json
 
