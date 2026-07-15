@@ -204,9 +204,12 @@ All under `/api/v1/admin/gate` on `https://spideriq.ai`, auth = a PAT scoped
 | `listModels` | READ the admin catalog — resolve a model name → its numeric id + current copy + is_curated (the id source for the writes below). Accepts either catalog scope. | [references/author-editorial.md](references/author-editorial.md) |
 | `addModel` | ADD a NEW model card (INSERT, is_curated) → `gate_catalog_model_upsert`. Owner-locked: approved provider auto-inserts; brand-new provider is propose-only (human approves). Idempotent on (provider, model_id). | [references/add-model.md](references/add-model.md) |
 | `listProviderOnboarding` | READ the provider-onboarding taxonomy — which providers are approved (addModel auto-inserts) vs proposed (awaiting human approval). | [references/add-model.md](references/add-model.md) |
+| `providerSummary` | per-provider curation-completeness rollup (which providers are done?) — text/LLM catalog | [references/author-editorial.md](references/author-editorial.md) |
 | `setModelMeta` | author a model's description/tags/badges/sort/hidden + `settings_schema` (the Studio settings-panel dialect) — COALESCE-preserve | [references/author-editorial.md](references/author-editorial.md) · [references/author-settings-schema.md](references/author-settings-schema.md) |
 | `setAliasMeta` | upsert a task alias's display copy | [references/author-editorial.md](references/author-editorial.md) |
-| `setMediaMeta` | author a media model's editorial | [references/author-editorial.md](references/author-editorial.md) |
+| `listMediaModels` | READ the MEDIA catalog (gate_media_models — image/video/audio) — the ONLY way to enumerate media (kie/fal/google) rows; `view=summary` = the needs-curation queue. LLM `listModels` can't see media. | [references/author-editorial.md](references/author-editorial.md) |
+| `mediaProvidersSummary` | per-MEDIA-provider curation rollup (total/active/coming_soon/with_pricing/needs_curation) | [references/author-editorial.md](references/author-editorial.md) |
+| `setMediaMeta` | author a media model's editorial **AND set its price** (pricing_unit/rate_usd/currency/credits_per_call → the real pricing column; hand-set from the provider's published rate) | [references/author-editorial.md](references/author-editorial.md) |
 | `setLink` | add / remove a reference link (action=add\|remove) | [references/manage-links.md](references/manage-links.md) |
 | `setProviderMeta` | author a provider's editorial (description/free-tier/docs/signup) → `gate_catalog_provider_set_meta` | [references/author-provider.md](references/author-provider.md) |
 

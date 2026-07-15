@@ -17,7 +17,7 @@
 # platform X-Admin-Key still works for automation; super_admin sessions also pass.
 
 name: author-catalog
-version: "0.9.0"
+version: "0.10.0"
 description: >
   Author the SpiderGate model-catalog editorial — model/alias/media/provider
   description, tags, badges, sort order, visibility, and per-model reference links
@@ -53,6 +53,10 @@ triggers:
   - add a new model to the catalog
   - onboard a new provider
   - propose a provider
+  - list the media models
+  - curate an image or video model
+  - set a media model price
+  - price a kie or fal model
 
 guidance:
   use: >
@@ -79,7 +83,8 @@ guidance:
     - "setLink is idempotent per (model, url) — re-adding a url UPDATES that link; removal is by link_id, scoped to the model. Third-party links MUST carry is_authored_by_us=false + source + attribution (HARD-GATE)."
     - "alias and media_id can contain a slash (opvs/coding, provider/model) — the tools URL-encode it; pass the value plain."
     - "description / long_description are OUR OWN words — NEVER copy vendor marketing blurb, model-card prose, or Wikipedia text (copyright / CC-BY-SA). Compose from structured facts; if you only have prose, write less. A copied description is a licensing defect (HARD-GATE)."
-    - "This skill authors COPY, not FACTS: it does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf. Those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model."
+    - "This skill authors COPY, not FACTS **for LLM/text models**: setModelMeta does NOT set context_window / max_output / pricing / capabilities / benchmarks / provider-perf — those come from the enrichment path (OpenRouter/LLM-Stats/Wikidata → discovery sync). A description on a stub row (context=0, no benchmarks) is NOT a filled model. **MEDIA is different**: media has NO auto-enrichment source, so setMediaMeta DOES set the price (pricing_unit/pricing_rate_usd/pricing_currency/pricing_credits_per_call → the real pricing column) — HAND-SET from the provider's PUBLISHED rate, never fabricated (R4)."
+    - "MEDIA models (image/video/audio) live in a SEPARATE table (gate_media_models) — the LLM listModels / providerSummary / enrich CANNOT see them (searching the text catalog for kie/fal returns 0 rows). Use listMediaModels + mediaProvidersSummary to enumerate media, and setMediaMeta to author + price them."
     - "setModelMeta / setLink are addressed by the numeric gate_model_catalog.id — resolve name→id first with the listModels method (GET /catalog/models), which returns the int id + is_curated + current copy. The client-facing catalog READ returns the STRING id, not the int, so it can't drive these writes."
     - "setProviderMeta (gate_catalog_provider_set_meta / CLI providers set-meta) authors PROVIDER editorial (description / free_tier_description / docs_url / signup_url); logo_url is NOT editable here. To fill a provider's models' FACTS first, use the enrich-catalog skill."
     - "addModel is INSERT-only + OWNER-LOCKED: a model of an APPROVED provider inserts directly; a brand-NEW provider is PROPOSE-ONLY — addModel wires NO model and returns status='proposed', and a HUMAN (super_admin / X-Admin-Key, NOT the curator PAT) must approve the provider before its models can be added. Check listProviderOnboarding to see approved vs proposed. addModel is idempotent on (provider, model_id): an existing card is created=false — edit it with setModelMeta, not addModel. `provider` MUST be the TRUE logical name (minimax/zhipu/openai), never the litellm wire prefix 'openai'."
@@ -191,6 +196,99 @@ methods:
         type: boolean
         required: false
         description: Count hidden rows too (default true).
+    response:
+      format: json
+
+  listMediaModels:
+    description: >
+      Read the MEDIA catalog (gate_media_models — image/video/audio) to resolve a
+      media model + see its status, modality, tags, pricing, and authored editorial
+      before you write. CRITICAL: the LLM listModels reads gate_model_catalog ONLY —
+      media lives in a SEPARATE table, so searching the text catalog for a media
+      provider (kie_ai/fal_ai) returns 0 rows. Returns each row's id (provider/model),
+      provider, display_name, modality, modality_group, tags, status, tier, pricing,
+      and (full view) the editorial block + inputs. Filter by provider / modality /
+      modality_group / status / tag / has_pricing / has_description / search;
+      view=summary gives the compact needs_curation queue (reasons: not_authored /
+      missing_description / missing_pricing). Read-only, not metered. The id + state
+      source for setMediaMeta.
+    guidance:
+      use: "Look up media models + their status/price/copy before authoring (setMediaMeta takes the provider/model id). This is the ONLY way to enumerate media (kie/fal/google) rows — the LLM listModels can't see them."
+      next: "setMediaMeta (author this media row's copy AND set its price)"
+      warn: "Read-only. Media has NO auto-enrichment (benchmarks/provider_perf/prices are text-model-only) — a media price is HAND-SET via setMediaMeta from the provider's published rate. status flips coming_soon→active only after a live generation test, never from curation."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/media-models
+    params:
+      ids:
+        type: array
+        required: false
+        description: Fetch EXACTLY these media ids ('provider/model'). By-id read; bypasses the hidden filter.
+        items:
+          type: string
+      provider:
+        type: string
+        required: false
+        description: Filter to one media provider (kie_ai / fal_ai / google_ai / openai / minimax / x_ai).
+      modality:
+        type: string
+        required: false
+        description: Fine modality — text-to-image / image-to-image / text-to-video / image-to-video / video-to-video / lipsync / tts / stt / audio.
+      modality_group:
+        type: string
+        required: false
+        description: Coarse group tab — image | video | audio.
+      status:
+        type: string
+        required: false
+        description: Filter by dispatch status — active | coming_soon | disabled.
+      tag:
+        type: string
+        required: false
+        description: Filter to rows carrying this facet tag (e.g. text-to-video, image-input).
+      has_description:
+        type: boolean
+        required: false
+        description: true = only rows WITH an authored description; false = only rows missing one.
+      has_pricing:
+        type: boolean
+        required: false
+        description: true = only rows WITH a real price set; false = only rows missing a price (the pricing queue).
+      view:
+        type: string
+        required: false
+        description: "full (default) = the editor row (spec + pricing + editorial); summary = compact curation-state (needs_curation + reasons[]: not_authored / missing_description / missing_pricing)."
+      search:
+        type: string
+        required: false
+        description: Substring match on id / display_name.
+      include_hidden:
+        type: boolean
+        required: false
+        description: Include editorially-hidden rows (default true).
+      limit:
+        type: integer
+        required: false
+        description: Max rows (1–2000; default 1000).
+      offset:
+        type: integer
+        required: false
+        description: Pagination offset (default 0).
+    response:
+      format: json
+
+  mediaProvidersSummary:
+    description: >
+      Per-MEDIA-provider curation rollup — which media providers are done? in ONE call:
+      total / active / coming_soon / with_pricing / with_description / needs_curation /
+      hidden, most-uncurated first. The media analog of providerSummary (which is
+      text-only). Read-only, not metered.
+    guidance:
+      use: "Get a media-provider scoreboard (e.g. 'kie_ai: 27 active, 2 priced, 40 need a price') before pulling rows."
+      next: "listMediaModels(provider, view=summary, has_pricing=false) to pull the exact media rows that need a price."
+      warn: "Read-only, not metered. Media only — the text providerSummary won't show kie/fal."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/media-providers/summary
+    params: {}
     response:
       format: json
 
@@ -483,14 +581,17 @@ methods:
 
   setMediaMeta:
     description: >
-      Author a gate_media_models row's editorial (partial update). display_name is
-      a real column; the rest (description / long_description / tags / badges /
-      sort_order / hidden) merges into the row's metadata JSONB under an editorial
-      block. Only supplied fields are written. media_id is provider/model.
+      Author a gate_media_models row (image/video/audio) — partial update.
+      display_name is a real column; the pricing_* fields merge into the row's REAL
+      pricing JSONB column (the raw provider cost basis); the rest (description /
+      long_description / tags / badges / sort_order / hidden) merges into the row's
+      metadata JSONB under an editorial block. Only supplied fields are written.
+      media_id is provider/model. Resolve the id + current state first with
+      listMediaModels.
     guidance:
-      use: "Write client-facing copy for a media (image/video) model."
-      next: "setMediaMeta again (adjust another field), setLink (if the model_id has links)"
-      warn: "Partial + COALESCE-preserve. Non-display_name fields land in metadata.editorial, not top-level columns (media has no dedicated authored columns)."
+      use: "Write client-facing copy AND set the price for a media (image/video/audio) model. Set pricing_* from the provider's PUBLISHED rate."
+      next: "setMediaMeta again (adjust another field), listMediaModels (verify the write)"
+      warn: "Partial + COALESCE-preserve. pricing_* land in the REAL pricing column (per_image/per_second USD, or per_credit for kie); the price is HAND-SET from the provider's published rate — media has NO auto-enrichment, and never fabricate a price (R4). Editorial fields land in metadata.editorial. Setting a price does NOT change status — coming_soon→active happens only after a live generation test."
       telemetry_signal_default: "warm"
     http: PATCH /media-models/{media_id}/meta
     params:
@@ -538,6 +639,24 @@ methods:
         type: boolean
         required: false
         description: Hide this media model from the client catalog.
+      pricing_unit:
+        type: string
+        required: false
+        description: >
+          Pricing unit — per_image | per_second | per_1k_chars | per_minute |
+          per_1m_tokens | per_credit. Writes the REAL pricing column (not editorial).
+      pricing_rate_usd:
+        type: number
+        required: false
+        description: USD per unit (USD-billed models, e.g. 0.04 per_image). From the provider's PUBLISHED rate — never fabricated (R4).
+      pricing_currency:
+        type: string
+        required: false
+        description: usd | credits.
+      pricing_credits_per_call:
+        type: number
+        required: false
+        description: Credits one generation costs (unit=per_credit / kie.ai, e.g. 80). From the provider's published credit cost.
     response:
       format: json
 
