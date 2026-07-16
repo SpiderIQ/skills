@@ -42,6 +42,8 @@ description: >
   lead-search).
 category: content
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -855,7 +857,7 @@ methods:
       warn: "Multipart only — an agent on a JSON forwarder can't call this. Holding a URL, not a file? Use uploadMediaFromUrl."
     http: POST /dashboard/content/media/upload
     params:
-      file: { type: file, required: true, description: 'Multipart file (image/video/asset)' }
+      file: { type: string, required: true, description: 'Multipart file upload (image/video/asset). Multipart-only — not callable over a JSON forwarder; hold a URL instead? use uploadMediaFromUrl.' }
     response: { format: json }
 
   uploadMediaFromUrl:
