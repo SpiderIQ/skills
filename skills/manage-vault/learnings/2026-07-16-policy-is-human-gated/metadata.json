@@ -1,0 +1,15 @@
+{
+  "title": "A key's usage policy is human-gated (propose→approve) because a wrong restriction starves the 163-worker hot path — there is deliberately no one-step apply for an agent",
+  "summary": "VAULT.1 5.3 added the agent surface for SpiderGate key ToS-usage-policy management, and the load-bearing design decision is that a key's allowed_activities/allowed_consumers/usage_policy can NEVER be self-applied by an agent. setKeyPolicy FILES a pending proposal (gate_key_policy_proposals, mig 444); a human super_admin/X-Admin-Key holder applies it via decidePolicyProposal(approve). Why: allowed_activities is a filter on key selection in get_next_available_key — an over-broad restriction (e.g. locking a widely-used key to [live_agent]) can empty a provider's usable pool for scrape/worker_batch and starve the 163-worker hot path (design §13 S3, the would-deny cascade). So the agent's role is to MEASURE (listWouldDeny — the DARK shadow log counting how often a policy WOULD deny real traffic) and RECOMMEND (setKeyPolicy); a human decides. This mirrors the routing self-heal Tier-2 propose/decide split (gate_routing_proposals) and the same [[agent-proposes-human-approves-gate]] owner lock. updateKey deliberately omits the policy fields so there is exactly one audited door. The decrypted account password gets NO tool at all (super-admin reveal endpoint only, design §5.4 D2). Lever: propose + measure would-deny; a human approves.",
+  "created_at": "2026-07-16",
+  "updated_at": "2026-07-16",
+  "tags": ["vault", "usage-policy", "propose-decide", "human-gated", "spidergate", "would-deny"],
+  "references": [
+    "VAULT.1 5.3 — gate_key_policy_proposals (mig 444) + POST /admin/gate/key-policy/proposals (propose) + /{id}/approve|reject; approve applies via the same backfill logic as update_key (app/api/v1/admin_gate/key_policy_proposals.py)",
+    "app/services/gate/usage_policy.py — the fixed 6-activity domain (scrape/worker_batch/live_agent/interactive_cli/embedding/media), evaluate_policy, and the DARK shadow_log_path_a/b that feed listWouldDeny",
+    "app/core/admin_scopes.py — gate:vault:policy (read+propose least-privilege; approve stays master-key/super_admin, no PAT path)",
+    "memory agent-proposes-human-approves-gate — the owner lock this implements (approve dep = require_super_admin_or_admin_key, gate in the dependency not the handler, no MCP approve-without-human)",
+    "VAULT-V2-DESIGN.md §12 (admin console + agent skills), §13 S3 (fleet starvation on over-denial), §5.4 D2 (password reveal super-admin-only, no tool)",
+    "sibling: manage-routing skill — the same propose/decide split for alias→model chains (gate_routing_proposals, mig 333)"
+  ]
+}

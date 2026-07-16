@@ -1,0 +1,276 @@
+# Manage-Vault Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# These wrap /api/v1/admin/gate/{keys,key-policy/proposals,would-deny,billing-
+# capabilities} and are the admin mirror of the gate_key_* / gate_would_deny_list /
+# gate_billing_capabilities MCP tools (mcp-admin slice) and `spideriq gate keys …`
+# CLI. Auth is the PLATFORM admin key (X-Admin-Key), NOT a client PAT — super_admin
+# only, platform-wide. The relative base_url /api/v1/admin/gate is what routes to the
+# brand's admin key pool (OPVS _skill_requires_admin_key) — do NOT flatten it.
+#
+# HARD RULE: a key's ToS usage POLICY is never applied directly. setKeyPolicy FILES a
+# pending proposal; a human decidePolicyProposal(approve) applies it. updateKey handles
+# only NON-policy config. The decrypted account password has NO method (super-admin-only
+# reveal endpoint).
+
+name: manage-vault
+version: "0.1.0"
+description: >
+  Manage SpiderGate's API-KEY vault — update a key's non-policy config, refresh its
+  billing snapshot, reset its health, and run the ToS-usage-policy PROPOSE→DECIDE flow
+  (which activities/consumers a key may serve). Also review the DARK "would-deny"
+  shadow log (how often a policy WOULD block real traffic) and the provider
+  billing-capability map. Policy is human-gated: an agent proposes, a human approves.
+  super_admin-only, platform-wide.
+category: admin
+base_url: /api/v1/admin/gate
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate  # Option C direct — relative base /api/v1/admin/gate selects the admin key pool
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - manage gate keys
+  - restrict a key to workers
+  - set a key usage policy
+  - propose a key policy change
+  - approve a key policy proposal
+  - reject a key policy proposal
+  - which keys would be denied
+  - review the would-deny shadow log
+  - does this provider have a billing api
+  - reset a key's health
+  - sync a key's billing
+
+guidance:
+  use: >
+    Reach for this to manage the gateway's provider API KEYS — edit a key's config,
+    refresh its billing, reset its health, and change WHICH ACTIVITIES/CONSUMERS a key
+    may serve (ToS usage policy) via propose→approve. Also size over-denial risk from
+    the would-deny shadow log before restricting a key. super_admin + X-Admin-Key; the
+    change affects key selection for every tenant.
+  not:
+    - "manage-routing (this package) → change the alias→MODEL chains the gateway routes to — not the keys themselves"
+    - "use-the-gateway (@spideriq/gateway-skills) → SEND a completion through the gateway — not manage keys"
+    - "manage-locations / opvs-admin / auth → other admin surfaces in this package, unrelated to the key vault"
+  # No method takes a free-text search field — every selector is a typed key_id /
+  # proposal_id / provider / status / surface. intent_aliases is explicitly empty
+  # (declared, not implicit — the runtime never guesses; Q1).
+  intent_aliases: []
+  pitfalls:
+    - "POLICY IS HUMAN-GATED. setKeyPolicy NEVER changes the key — it files a pending proposal. Nothing takes effect until a human decidePolicyProposal(approve). An agent cannot self-apply a policy; that is the whole point (an over-broad policy can starve the 163-worker hot path)."
+    - "updateKey deliberately CANNOT set usage_policy/allowed_activities/allowed_consumers — those go through setKeyPolicy→approve. Don't look for policy fields on updateKey; there is one audited door."
+    - "Check listWouldDeny BEFORE proposing a restrictive policy. A would_deny_count > 0 for the activity you'd exclude means real traffic would be denied under enforcement — the shadow log is your blast-radius estimate."
+    - "allowed_activities values must be from the fixed 6-activity domain (scrape, worker_batch, live_agent, interactive_cli, embedding, media). A NULL/omitted array = 'any' (no restriction, fail-open)."
+    - "decidePolicyProposal approve APPLIES the proposed policy to the key (and backfills the array from a coarse usage_policy); reject changes NOTHING. Re-read the proposed values + reason before approving — a proposal can be stale."
+    - "The decrypted account password has NO method here (super-admin-only reveal endpoint, never an agent tool) — do not look for it."
+
+methods:
+  updateKey:
+    description: >
+      Update a key's NON-POLICY config — key_label, is_active, is_primary, priority,
+      share_with_pool, daily_limit, minute_limit, and the spend limit
+      (amount/period/action). Applies immediately. Cannot change the API key, the
+      provider, or the ToS usage policy (use setKeyPolicy for policy).
+    guidance:
+      use: "Edit a key's label / enable state / priority / pool membership / rate + spend limits."
+      next: "resetKeyHealth (if it tripped unhealthy), listBillingCapabilities (before syncKeyBilling)"
+      warn: "Does NOT set usage_policy/allowed_activities/allowed_consumers — those are propose→approve only (setKeyPolicy)."
+      telemetry_signal_default: "warm"
+    http: PATCH /keys/{key_id}
+    params:
+      key_id:
+        type: integer
+        required: true
+        description: The api_integrations key id (integer).
+      key_label: { type: string, required: false, description: Human label for the key. }
+      is_active: { type: boolean, required: false, description: Enable/disable the key. }
+      is_primary: { type: boolean, required: false, description: Mark as the provider's primary key. }
+      priority: { type: integer, required: false, description: Selection priority 0–100. }
+      share_with_pool: { type: boolean, required: false, description: Whether the shared litellm pool may use this key. }
+      daily_limit: { type: integer, required: false, description: Per-day request cap (0 = none). }
+      minute_limit: { type: integer, required: false, description: Per-minute request cap (0 = none). }
+      spend_limit_amount: { type: number, required: false, description: Spend cap amount. }
+      spend_limit_period: { type: string, required: false, description: "Spend cap period, e.g. day | month." }
+      spend_limit_action: { type: string, required: false, description: "Action at the cap, e.g. warn | block." }
+    response:
+      format: json
+
+  syncKeyBilling:
+    description: >
+      Refresh a key's cached billing snapshot (live balance + usage today/month) from
+      the provider billing adapter, when one is implemented for that provider (see
+      listBillingCapabilities). Returns the refreshed cached_balance / cached_usage_* /
+      billing_synced_at, or an error string if the provider has no billing API.
+    guidance:
+      use: "Pull a key's live balance/usage after a top-up, or to confirm a provider's spend."
+      next: "listBillingCapabilities (to know which providers support this)"
+      warn: "Providers WITHOUT a billing adapter return an error field, not a balance — check listBillingCapabilities first."
+      telemetry_signal_default: "warm"
+    http: POST /keys/{key_id}/sync-billing
+    params:
+      key_id: { type: integer, required: true, description: The api_integrations key id. }
+    response:
+      format: json
+
+  resetKeyHealth:
+    description: >
+      Reset a key's health — clear consecutive_failures and return it to the healthy
+      pool. Use after fixing a key that tripped to degraded/unhealthy (e.g. a rotated
+      credential).
+    guidance:
+      use: "Return a key to service after you fixed why it was failing."
+      next: "updateKey (re-enable if it was deactivated)"
+      warn: "Resets the failure counter only — if the underlying cause (revoked key) persists, it will trip again."
+      telemetry_signal_default: "warm"
+    http: POST /keys/{key_id}/reset-health
+    params:
+      key_id: { type: integer, required: true, description: The api_integrations key id. }
+    response:
+      format: json
+
+  setKeyPolicy:
+    description: >
+      PROPOSE a change to a key's ToS usage policy — this NEVER applies the change. It
+      files a pending proposal (allowed_activities / allowed_consumers / the coarse
+      usage_policy rollup) that a human approves via decidePolicyProposal. Provide at
+      least one of proposed_usage_policy / proposed_allowed_activities /
+      proposed_allowed_consumers. Idempotent per key — a re-file while one is pending
+      returns the existing proposal.
+    guidance:
+      use: "Recommend which activities/consumers a key may serve (e.g. restrict a key to worker traffic). Files a proposal for a human."
+      next: "listPolicyProposals (see it queued), decidePolicyProposal (a HUMAN approves/rejects)"
+      warn: "This changes NOTHING on the key — it only queues a proposal. Check listWouldDeny FIRST so you don't propose a policy that would deny live traffic. HARD-GATE: no self-apply."
+      telemetry_signal_default: "cold"
+    http: POST /key-policy/proposals
+    params:
+      integration_id:
+        type: integer
+        required: true
+        description: The api_integrations key id to propose a policy for.
+      proposed_usage_policy:
+        type: string
+        required: false
+        values: ["any", "agents_only", "workers_only"]
+        description: Coarse rollup. Backfills allowed_activities on approve when the array is omitted.
+      proposed_allowed_activities:
+        type: array
+        required: false
+        description: Subset of the 6-activity domain the key may serve. Omit = "any".
+        items:
+          type: string
+          values: ["scrape", "worker_batch", "live_agent", "interactive_cli", "embedding", "media"]
+      proposed_allowed_consumers:
+        type: array
+        required: false
+        description: Named consumer identities allowed to use the key. Omit = "any".
+        items:
+          type: string
+      reason:
+        type: string
+        required: true
+        description: Why the change is proposed (≤500 chars). Attribution is prepended server-side.
+    response:
+      format: json
+
+  listPolicyProposals:
+    description: >
+      List pending (or filtered) key-usage-policy proposals — each row carries the key
+      id, provider, current vs proposed policy, reason, who proposed it, and status
+      (pending | approved | rejected | applied). Newest first. Read-only.
+    guidance:
+      use: "See the policy proposals awaiting a human decision (and their current-vs-proposed diff)."
+      next: "decidePolicyProposal (approve/reject a pending one)"
+      warn: "An empty list is a healthy, normal state — no curator has filed a proposal."
+      telemetry_signal_default: "cold"
+    http: GET /key-policy/proposals
+    params:
+      status:
+        type: string
+        required: false
+        description: "Filter by status (pending | approved | rejected | applied). Empty or 'all' = every status."
+      limit:
+        type: integer
+        required: false
+        description: Max rows to return (default 100, max 500).
+    response:
+      format: json
+
+  decidePolicyProposal:
+    description: >
+      Approve or reject a pending key-usage-policy proposal by id. decision='approve'
+      APPLIES the proposed policy to the key (writes allowed_activities/consumers/
+      usage_policy, backfilling the array from a coarse usage_policy) and marks it
+      applied. decision='reject' changes NOTHING on the key. 409 if the proposal is not
+      pending. This one method routes to the split REST endpoints (/approve | /reject).
+    guidance:
+      use: "As a HUMAN operator, adjudicate a queued policy proposal — approve applies it, reject discards it."
+      next: "listWouldDeny (confirm the applied policy isn't denying real traffic), listPolicyProposals (see it stamped)"
+      warn: "approve is the ONLY apply path for a key policy — re-read the proposed values + reason first; a proposal can be stale. reject is a pure status flip."
+      telemetry_signal_default: "cold"
+    http: POST /key-policy/proposals/{proposal_id}/{decision}
+    params:
+      proposal_id:
+        type: integer
+        required: true
+        description: The gate_key_policy_proposals row id.
+      decision:
+        type: string
+        required: true
+        values: ["approve", "reject"]
+        description: "'approve' applies the proposed policy; 'reject' flips status only."
+    response:
+      format: json
+
+  listWouldDeny:
+    description: >
+      Review the DARK "would-deny" shadow log — aggregate rows counting how often a
+      key's ToS policy WOULD have denied real traffic if enforcement were armed. Each
+      row: key id, provider, surface (path_a per-request | path_b pool), the excluded
+      activity/consumer + reasons, and a would_deny_count. Use this to size over-denial
+      risk BEFORE proposing a restrictive policy. Read-only, paginated.
+    guidance:
+      use: "Measure blast radius — how much real traffic a key's (or a proposed) policy would deny — before restricting it."
+      next: "setKeyPolicy (propose a policy you've confirmed is safe)"
+      warn: "A would_deny_count > 0 for an activity means live traffic would be denied under enforcement. This is DARK (nothing is blocked yet) — it is your estimate, not an outage."
+      telemetry_signal_default: "cold"
+    http: GET /would-deny
+    params:
+      surface:
+        type: string
+        required: false
+        values: ["path_a", "path_b"]
+        description: "path_a (per-request selection) | path_b (pool snapshot)."
+      integration_id: { type: integer, required: false, description: Filter to one key id. }
+      provider_name: { type: string, required: false, description: Filter to one provider. }
+      min_count: { type: integer, required: false, description: Only rows with would_deny_count ≥ this (default 1). }
+      limit: { type: integer, required: false, description: Max rows (default 50, max 200). }
+      offset: { type: integer, required: false, description: Pagination offset. }
+    response:
+      format: json
+
+  listBillingCapabilities:
+    description: >
+      List each provider with a flag for whether a live billing adapter is implemented
+      (has_billing_api) — i.e. whether syncKeyBilling can fetch a real balance/usage for
+      keys of that provider, vs "no billing API". Returns provider label, category,
+      capabilities[], and currency. Read-only, paginated.
+    guidance:
+      use: "Find out which providers support live balance/usage (so syncKeyBilling will work)."
+      next: "syncKeyBilling (for a key whose provider has_billing_api=true)"
+      warn: "has_billing_api is the authoritative flag from the implemented adapters — NOT the registry's aspirational 'billing.supported'."
+      telemetry_signal_default: "cold"
+    http: GET /billing-capabilities
+    params:
+      has_billing_api: { type: boolean, required: false, description: Filter to providers that do (true) / do not (false) have a billing adapter. }
+      limit: { type: integer, required: false, description: Max rows (default 100, max 500). }
+      offset: { type: integer, required: false, description: Pagination offset. }
+    response:
+      format: json
