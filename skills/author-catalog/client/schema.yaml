@@ -29,6 +29,8 @@ description: >
   descriptions are composed from facts, never copied from vendor prose.
 category: admin
 base_url: /api/v1/admin/gate
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate  # Option C direct (cut-over from base_url_env)
 # Agent path: a PAT granted the `gate:catalog:write` scope (Authorization: Bearer).
 # Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:

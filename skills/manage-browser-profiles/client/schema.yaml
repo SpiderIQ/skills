@@ -10,6 +10,8 @@ description: >
   and monitor the browser pool.
 category: automation
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over from base_url_env)
 auth:
   type: pat
   header: Authorization

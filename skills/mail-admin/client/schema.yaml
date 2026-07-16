@@ -26,6 +26,8 @@ description: >
   platform X-Admin-Key / a super_admin session).
 category: admin
 base_url: /api/v1/mail-admin
+upstream:
+  base_url: https://spideriq.ai/api/v1/mail-admin  # Option C direct (cut-over from base_url_env)
 # Agent path: a PAT granted the `email:admin` scope (Authorization: Bearer).
 # Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:

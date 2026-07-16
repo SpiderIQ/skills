@@ -25,6 +25,8 @@ description: >
   onboarding is proposed for a human to approve, never auto-wired.
 category: admin
 base_url: /api/v1/admin/gate
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate  # Option C direct (cut-over from base_url_env)
 # Agent path: a PAT granted `gate:catalog:write` (Authorization: Bearer) — the same
 # scope the curator uses to author + propose model cards. Read needs either catalog
 # scope; the carded stamp is a catalog write. Platform automation may send X-Admin-Key.

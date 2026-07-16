@@ -19,6 +19,8 @@ description: >
   rollback-able. super_admin-only, platform-wide.
 category: admin
 base_url: /api/v1/admin/gate/routing
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate/routing  # Option C direct (cut-over from base_url_env)
 auth:
   type: api_key
   header: X-Admin-Key

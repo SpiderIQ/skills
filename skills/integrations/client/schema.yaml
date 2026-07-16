@@ -9,6 +9,8 @@ description: >
   SpiderMail, etc.) — create, update, delete keys, check health and spend.
 category: integration
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over from base_url_env)
 auth:
   type: pat
   header: Authorization

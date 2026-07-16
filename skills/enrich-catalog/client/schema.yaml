@@ -25,6 +25,8 @@ description: >
   or `gate:catalog:write` (or the platform X-Admin-Key / a super_admin session).
 category: admin
 base_url: /api/v1/admin/gate
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate  # Option C direct (cut-over from base_url_env)
 # Agent path: a PAT granted `gate:catalog:enrich` OR `gate:catalog:write` (Bearer).
 # Platform automation may instead send X-Admin-Key (SPIDERIQ_ADMIN_API_KEY).
 auth:

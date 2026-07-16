@@ -9,6 +9,8 @@ description: >
   cron scheduling, skills management, channel bindings, and gateway operations.
 category: admin
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over from base_url_env)  # NOTE: opvs-admin historically targets the OPVS platform (X-API-Key); OPVS routing already used the package bearer, so this preserves status quo — see PR/handoff.
 auth:
   type: api_key
   header: X-API-Key

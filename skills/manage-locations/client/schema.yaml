@@ -11,6 +11,8 @@ description: >
   used by campaigns and lead research.
 category: admin
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over from base_url_env)
 auth:
   type: api_key
   header: X-Admin-Key

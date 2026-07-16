@@ -27,6 +27,8 @@ description: >
   rolling back, and approving a chain are not reachable here.
 category: admin
 base_url: /api/v1/admin/gate/routing
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate/routing  # Option C direct (cut-over from base_url_env)
 # Agent path: a PAT granted the `gate:routing:read` (read) + `gate:routing:propose`
 # (file) scopes (Authorization: Bearer). `gate:routing:write` also satisfies both.
 # Platform automation may instead send X-Admin-Key. The routing WRITES
