@@ -27,7 +27,7 @@
 #   URL is e.g. https://spideriq.ai/api/v1/dashboard/content/posts.
 
 name: spiderpublish
-version: "0.4.1"
+version: "0.5.0"
 description: >
   Author, publish, and deploy on SpiderPublish — SpiderIQ's multi-tenant CMS +
   Liquid site runtime. Build pages, blog posts, docs, reusable components,
@@ -1389,6 +1389,42 @@ methods:
   publishChangelog:
     description: Publish a changelog entry (fires the changelog.published notification).
     http: POST /dashboard/content/changelog/{entry_id}/publish
+    params:
+      entry_id: { type: string, required: true }
+    response: { format: json }
+
+  updateChangelog:
+    description: >
+      Update a changelog entry (PATCH — only the fields you send change). Entries
+      are NOT frozen once created: use this to correct an already-published one.
+    guidance:
+      use: "edit a changelog entry — title, version, or body (fix a wrong/empty body)"
+      next: "publishChangelog -> deploySite"
+      warn: "version stays unique per brand (a collision returns 409). body accepts a Tiptap doc OR {\"markdown\": ...} / {\"html\": ...} — it's normalized to Tiptap server-side, so a markdown body no longer stores clean then renders title-only."
+    http: PATCH /dashboard/content/changelog/{entry_id}
+    params:
+      entry_id: { type: string, required: true }
+      title:    { type: string, required: false }
+      version:  { type: string, required: false, description: 'Unique per brand — a collision returns 409.' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON doc, or {"markdown": "..."} / {"html": "..."} (normalized to Tiptap).'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
+    response: { format: json }
+
+  deleteChangelog:
+    description: Delete a changelog entry (soft-archive — drops off /changelog + RSS/Atom feeds).
+    http: DELETE /dashboard/content/changelog/{entry_id}
     params:
       entry_id: { type: string, required: true }
     response: { format: json }
