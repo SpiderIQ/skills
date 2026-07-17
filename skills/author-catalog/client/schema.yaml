@@ -212,12 +212,17 @@ methods:
       and (full view) the editorial block + inputs. Filter by provider / modality /
       modality_group / status / tag / has_pricing / has_description / search;
       view=summary gives the compact needs_curation queue (reasons: not_authored /
-      missing_description / missing_pricing). Read-only, not metered. The id + state
+      missing_description / missing_pricing). EVERY row also carries a live usage
+      `stats` block (ALWAYS returned, both views, no flag) — requests, ok, err,
+      success_pct, error_pct, p95_ms, cost_usd, billed_usd, last_used_at — the
+      real traffic rollup keyed on the SERVED id (gate_request_logs.requested_model);
+      a model with no traffic returns the zero-state (requests=0, p95_ms/success_pct/
+      last_used_at = null), never dropped. Read-only, not metered. The id + state
       source for setMediaMeta.
     guidance:
-      use: "Look up media models + their status/price/copy before authoring (setMediaMeta takes the provider/model id). This is the ONLY way to enumerate media (kie/fal/google) rows — the LLM listModels can't see them."
+      use: "Look up media models + their status/price/copy AND live usage before authoring (setMediaMeta takes the provider/model id). This is the ONLY way to enumerate media (kie/fal/google) rows — the LLM listModels can't see them. Use the per-row `stats` block (requests / success_pct / p95_ms / spend) to PRIORITIZE which unpriced models to price first — a high-traffic coming_soon/unpriced model is more urgent than a never-used one."
       next: "setMediaMeta (author this media row's copy AND set its price)"
-      warn: "Read-only. Media has NO auto-enrichment (benchmarks/provider_perf/prices are text-model-only) — a media price is HAND-SET via setMediaMeta from the provider's published rate. status flips coming_soon→active only after a live generation test, never from curation."
+      warn: "Read-only. Each row's `stats` is ALWAYS present (no with_stats flag — it is unconditional); zero-traffic rows show requests=0 / null p95, they are NOT hidden — treat a null stat as 'never used', not 'error'. Media has NO auto-enrichment (benchmarks/provider_perf/prices are text-model-only) — a media price is HAND-SET via setMediaMeta from the provider's published rate. status flips coming_soon→active only after a live generation test, never from curation."
       telemetry_signal_default: "cold"
     http: GET /catalog/media-models
     params:
