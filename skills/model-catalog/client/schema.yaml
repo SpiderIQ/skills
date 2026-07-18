@@ -9,14 +9,18 @@
 # not metered, not billable (same class as listModels).
 
 name: model-catalog
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Read the enriched SpiderGate model catalog, the public model×task leaderboard,
-  and the per-model #7 evals aggregate — to PICK a concrete model for a task
-  under a budget. Facts + benchmarks + live per-provider pricing + eval scores,
-  every sourced field carrying provenance.
+  the model-capability CATEGORY taxonomy (Coding, Design/Frontend, Reasoning,
+  Math, Vision, Research, Tool-use, Chat, Translation) with per-category quality
+  scores, and the per-model #7 evals aggregate — to PICK a concrete model for a
+  task under a budget. Facts + benchmarks + live per-provider pricing + eval
+  scores + per-category percentile scores, every sourced field carrying provenance.
 category: ai-gateway
 base_url: /api/v1/spideriq/gate
+upstream:
+  base_url: https://spideriq.ai/api/gate/v1  # SpiderGate LLM base (Option C direct)
 auth:
   type: pat
   header: Authorization
@@ -35,6 +39,10 @@ triggers:
   - read model evals
   - pick a concrete model
   - enriched model catalog
+  - best model for coding / vision / reasoning
+  - model capability categories
+  - per-category quality score
+  - rank models by category score
 
 guidance:
   use: >
@@ -53,6 +61,8 @@ guidance:
   intent_aliases:
     - "\"models that can do vision / function-calling\" → listCatalog(fields=capabilities)"
     - "\"best coding model\" → leaderboard(task_type=coding)"
+    - "\"best model for coding / vision / reasoning\" (capability, not eval task) → leaderboard(category=coding, sort=score)"
+    - "\"which categories are there\" → listCategories()"
   pitfalls:
     - "Reads are NOT metered/billable (list-only) — the leaderboard is fully PUBLIC (no PAT needed); catalog/get/evals resolve your brand from the PAT."
     - "To answer a budget question, rank with leaderboard(task_type=…) THEN filter rows by the blended price — the endpoint ranks by eval score, it does not filter by price for you."
@@ -60,6 +70,10 @@ guidance:
     - "Eval fields can be null until an OPVS eval contribution lands for that model×task — treat a null score as 'no prior yet', not 'zero'."
     - "The catalog is large + stable — pull once with fields= to narrow, then cache; don't re-list every turn."
     - "Once you've picked a model, pin it by passing its model_id as `model` to use-the-gateway's chat (D7 direct-model) — you don't have to route through a task alias."
+    - "TWO ranking axes, don't confuse them: leaderboard(task_type=…) ranks by the #7 EVAL success rate (needs an eval contribution); leaderboard(category=…, sort=score) ranks by the benchmark-derived per-category PERCENTILE (needs published benchmarks). Use `category` for capability questions ('best coding/vision model'), `task_type` for eval-prior questions."
+    - "A category `score` IS a within-category PERCENTILE (0–100), NOT a raw benchmark mean — higher = better relative to peers scored in that category. Read `rank` ÷ the response `total` for 'rank/N'; each score's `components[]` is the WHY (the contributing benchmarks, self_reported flagged)."
+    - "Only ~19% of catalog models (≈219 of 1126) carry any category score — a model with an empty `category_scores[]` is unscored (no published benchmarks yet), NOT bad. Render 'no score' gracefully; don't rank it last."
+    - "`category_scores[]` is a child section on the catalog record — request it explicitly with fields=category_scores on listCatalog/getModel (like benchmarks/evals); it's omitted from the default projection."
 
 methods:
   listCatalog:
@@ -91,7 +105,7 @@ methods:
       fields:
         type: string
         required: false
-        description: 'CSV projection — recognised: capabilities, context, max_output, pricing, tier, descriptions, tags, aliases, per_provider, benchmarks, links, evals. e.g. "capabilities,pricing,per_provider,evals". Unknown tokens ignored.'
+        description: 'CSV projection — recognised: capabilities, context, max_output, pricing, tier, descriptions, tags, aliases, per_provider, benchmarks, links, evals, category_scores. e.g. "capabilities,pricing,category_scores". `category_scores` adds each model''s per-category percentile section ([{category_key,label,emoji,score,rank,n_signals,confidence,components,computed_at}], best-first; [] for the ~900 unscored models). Unknown tokens ignored.'
       configured_only:
         type: boolean
         required: false
@@ -137,25 +151,59 @@ methods:
 
   leaderboard:
     description: >
-      PUBLIC model×task-type leaderboard (no PAT required). Curated models ranked
-      by the auto-eval success rate for the requested task_type (the shared
-      prior), each row carrying the headline benchmark and the cheapest live
-      blended price across providers. Omit task_type for the global ranking.
+      PUBLIC model leaderboard (no PAT required) with TWO modes. Default (or with
+      task_type): models ranked by the auto-eval success rate for the requested
+      task_type (the #7 shared prior), each row carrying the headline benchmark
+      and the cheapest live blended price. PER-CATEGORY mode (pass category +
+      sort=score): models ranked by their benchmark-derived within-category
+      PERCENTILE for that capability category, each carrying score + rank + the
+      response `total` (rank/N) + the contributing `components`. `category` takes
+      precedence over `task_type`. Omit both for the global eval ranking.
     guidance:
-      use: "Rank models for a task; the basis for 'best model for <task_type> under $X'."
+      use: "Rank models for a task ('best model for <task_type> under $X') OR for a capability category (category=coding, sort=score)."
       next: "filter the returned rows by blended price for a budget, then getModel / pin via chat"
-      warn: "Ranks by eval score, NOT price — apply the budget filter yourself on the returned rows."
+      warn: "Two axes: task_type ranks by EVAL success rate, category ranks by benchmark PERCENTILE. Neither ranks by price — apply the budget filter yourself. Use listCategories() to see valid category keys."
       telemetry_signal_default: "cold"
     http: GET /catalog/leaderboard
     params:
       task_type:
         type: string
         required: false
-        description: Rank for this task type (e.g. "coding", "planning"); omit for the global ranking.
+        description: Rank by the eval prior for this task type (e.g. "coding", "planning"); omit for the global ranking. Ignored when `category` is set.
+      category:
+        type: string
+        required: false
+        description: Rank by within-category percentile for this capability category key (e.g. "coding", "vision"). Requires sort=score. Takes precedence over task_type. Get valid keys from listCategories.
+      sort:
+        type: string
+        required: false
+        description: Ranking basis (default "score"). Pass "score" together with `category` to get the per-category percentile leaderboard.
       limit:
         type: integer
         required: false
         description: Max models to return 1–500 (default 100).
+    response:
+      format: json
+
+  listCategories:
+    description: >
+      List the model-capability CATEGORY taxonomy (the 9 DB-backed categories:
+      Coding, Design/Frontend, Reasoning, Math, Vision, Research, Tool-use, Chat,
+      Translation) — each with its label, emoji, description, and a live
+      scored_model_count (the N behind "rank/N"). Read this to discover the valid
+      `category` keys for the per-category leaderboard and to know how many models
+      are scored in each. Inactive categories are hidden. Read-only, not metered.
+    guidance:
+      use: "Discover the capability categories + how many models are scored in each, before ranking with leaderboard(category=…, sort=score)."
+      next: "leaderboard(category=<key>, sort=score) to rank; listCatalog(fields=category_scores) to read a model's own per-category scores"
+      warn: "Client read HIDES inactive categories and omits the scoring recipe (that's the admin curate-categories surface). scored_model_count is the N for rank/N."
+      telemetry_signal_default: "cold"
+    http: GET /catalog/categories
+    params:
+      include_inactive:
+        type: boolean
+        required: false
+        description: Include categories with is_active=false (default false — the client read hides them).
     response:
       format: json
 

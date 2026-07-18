@@ -10,6 +10,8 @@ description: >
   status. Route requests to 100+ LLM providers via task aliases.
 category: ai-gateway
 base_url: /api/v1/spideriq/gate
+upstream:
+  base_url: https://spideriq.ai/api/gate/v1  # SpiderGate LLM base (Option C direct)
 auth:
   type: pat
   header: Authorization
