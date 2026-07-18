@@ -199,9 +199,18 @@ methods:
               type: object
               required: false
               description: Per-block source/filter/sort/limit override for kind=dynamic blocks.
-      seo_title:       { type: string,  required: false }
-      seo_description: { type: string,  required: false }
-      project:         { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
+      seo_title:         { type: string,  required: false, description: 'SEO <title> override (≤200)' }
+      seo_description:   { type: string,  required: false, description: 'Meta description (≤500)' }
+      og_title:          { type: string,  required: false, description: 'Open Graph title (≤200)' }
+      og_description:    { type: string,  required: false, description: 'Open Graph description (≤500)' }
+      og_image_url:      { type: string,  required: false, description: 'OG/Twitter share image URL (absolute)' }
+      twitter_card:      { type: string,  required: false, description: 'summary | summary_large_image' }
+      twitter_image_url: { type: string,  required: false, description: 'Twitter share image URL (falls back to og_image_url)' }
+      canonical_url:     { type: string,  required: false, description: 'Canonical URL (≤2048)' }
+      robots:            { type: string,  required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>' (e.g. 'index,follow'). Unset ⇒ indexable by default (no robots meta)." }
+      keywords:          { type: string,  required: false, description: 'Comma-separated meta keywords (≤500)' }
+      json_ld:           { type: object,  required: false, description: 'JSON-LD structured-data object emitted verbatim' }
+      project:           { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
     response: { format: json }
 
   getPage:
@@ -220,7 +229,7 @@ methods:
       warn: "blocks REPLACES the block list — send the full intended array, not a partial."
     http: PATCH /dashboard/content/pages/{page_id}
     params:
-      page_id:         { type: string, required: true }
+      page_id:         { type: string, required: true, description: 'Page UUID to update' }
       title:           { type: string, required: false }
       slug:            { type: string, required: false }
       blocks:
@@ -263,9 +272,18 @@ methods:
               type: object
               required: false
               description: Per-block source/filter/sort/limit override for kind=dynamic blocks.
-      template:        { type: string, required: false }
-      seo_title:       { type: string, required: false }
-      seo_description: { type: string, required: false }
+      template:          { type: string, required: false }
+      seo_title:         { type: string, required: false, description: 'SEO <title> override (≤200)' }
+      seo_description:   { type: string, required: false, description: 'Meta description (≤500)' }
+      og_title:          { type: string, required: false, description: 'Open Graph title (≤200)' }
+      og_description:    { type: string, required: false, description: 'Open Graph description (≤500)' }
+      og_image_url:      { type: string, required: false, description: 'OG/Twitter share image URL (absolute)' }
+      twitter_card:      { type: string, required: false, description: 'summary | summary_large_image' }
+      twitter_image_url: { type: string, required: false, description: 'Twitter share image URL (falls back to og_image_url)' }
+      canonical_url:     { type: string, required: false, description: 'Canonical URL (≤2048)' }
+      robots:            { type: string, required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>'. Unset ⇒ indexable by default." }
+      keywords:          { type: string, required: false, description: 'Comma-separated meta keywords (≤500)' }
+      json_ld:           { type: object, required: false, description: 'JSON-LD structured-data object emitted verbatim' }
     response: { format: json }
 
   deletePage:

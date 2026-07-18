@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.6.0"
+version: "0.7.0"
 category: content
 ---
 
