@@ -95,7 +95,7 @@ a secret — never echo it back, and confirm with `testIntegration` after create
 - **Settings/profile:** `getBrandSettings` · `updateBrandSettings` · `getBrandInformation` · `updateBrandInformation` · `uploadBrandLogo` · `deleteBrandLogo`
 - **Members:** `listBrandMembers` · `updateBrandMember` · `removeBrandMember`
 - **Invitations:** `listBrandInvitations` · `sendBrandInvitation` · `resendBrandInvitation` · `cancelBrandInvitation` · `getPendingInvitations`
-- **Integrations:** `listIntegrations` · `createIntegration` · `testIntegration` · `deleteIntegration`
+- **Integrations:** `listIntegrations` · `listSubscriptionTiers` · `createIntegration` (incl. `billing_mode`/`subscription_tier`) · `testIntegration` · `deleteIntegration`
 - **Billing:** *(none — VIEW + redirect; see references/billing.md)*
 
 Auth: `Authorization: Bearer <client_id:api_key:api_secret>` (PAT in `OPVS_PAT`).

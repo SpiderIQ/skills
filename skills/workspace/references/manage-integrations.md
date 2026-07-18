@@ -15,9 +15,15 @@ directly. Owner/admin only for writes. Migrated here from the former
 1. **Resolve brand_id + role** (`listBrands` → integer id + `membership_role`).
 2. **List what's there:** `GET /brands/42/integrations`.
 3. **Add a key (owner/admin):** `POST /brands/42/integrations` with
-   `{provider, api_key, label?, daily_limit?}`.
+   `{provider, api_key, label?, daily_limit?, billing_mode?, subscription_tier?}`.
 4. **Always test after adding:** `POST /brands/42/integrations/{id}/test`.
 5. **Remove when rotated/leaked:** `DELETE /brands/42/integrations/{id}`.
+
+To register a key as a **flat-fee subscription plan**, first list the curated
+packages (`GET /brands/42/gate/subscription-tiers?provider=minimax`) and pass the
+chosen `tier_key` as `subscription_tier` with `billing_mode=subscription`. A
+subscription (or `paid`) key is **private to the brand** — it is force-de-pooled
+and never joins the shared litellm pool.
 
 ## WRONG → RIGHT
 
@@ -51,4 +57,6 @@ removing the old one (no provider gap).
 - **403** on create/delete = caller is `client_user`. Check `membership_role` first.
 - `api_key` is a **secret** — never echo, never put it in a board comment or log.
 - `daily_limit` guards against runaway provider spend — set one on shared keys.
+- `subscription_tier` takes a **tier_key** (e.g. `minimax_max`) from
+  `listSubscriptionTiers`, NOT the human label; setting it seeds the metering window.
 - For spend/health analytics, hand off to `@spideriq/admin-skills` → `integrations`.

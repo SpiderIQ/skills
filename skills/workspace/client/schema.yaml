@@ -21,6 +21,8 @@ description: >
   references/billing.md).
 category: admin
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -43,6 +45,9 @@ triggers:
   - integration
   - api key
   - provider key
+  - subscription key
+  - billing mode
+  - subscription package
 
 guidance:                                      # ← skill-level envelope (Initiative A)
   use: >
@@ -60,6 +65,7 @@ guidance:                                      # ← skill-level envelope (Initi
     - "Subscriptions/invoices/payment-method are NOT PAT-mutable — there is no programmatic billing write. Surface the dashboard portal link instead (references/billing.md)."
     - "An invitation can be SENT by PAT but only ACCEPTED in a logged-in session — never promise an agent can auto-accept on the invitee's behalf."
     - "Integration api_key values are secrets — never echo them back; verify with testIntegration after createIntegration."
+    - "Marking an integration key billing_mode='subscription' force-de-pools it (a subscription key is private to the brand, never shared); subscription_tier takes a tier_key from listSubscriptionTiers (e.g. minimax_max), not the human label."
 
 methods:
   # ── Brands (the workspaces you belong to) ────────────────────────────────
@@ -324,11 +330,11 @@ methods:
     response: { format: json }
 
   createIntegration:
-    description: Add a provider API key (OpenRouter, Mistral, etc.) to the brand, optionally with a daily limit. Owner/admin only.
+    description: Add a provider API key (OpenRouter, Mistral, etc.) to the brand, optionally with a daily limit and a billing treatment (billing_mode / subscription_tier). Owner/admin only.
     guidance:
-      use: "Connect a new LLM-provider API key for the brand."
-      next: "testIntegration"
-      warn: "api_key is a SECRET — never echo it back; always testIntegration after creating."
+      use: "Connect a new LLM-provider API key for the brand. Pass billing_mode=subscription + subscription_tier to register it as a flat-fee subscription plan."
+      next: "testIntegration, listSubscriptionTiers (to pick a valid tier_key first)"
+      warn: "api_key is a SECRET — never echo it back; always testIntegration after creating. A subscription/paid key is private (force-de-pooled); subscription_tier is a tier_key from listSubscriptionTiers, not a label."
       telemetry_signal_default: cold
     http: POST /brands/{brand_id}/integrations
     params:
@@ -337,6 +343,36 @@ methods:
       api_key: { type: string, required: true, description: API key value (secret — do not echo) }
       label: { type: string, required: false, description: Human-readable label }
       daily_limit: { type: integer, required: false, description: Daily usage cap }
+      billing_mode:
+        type: string
+        required: false
+        values: ["auto", "subscription", "paid"]
+        description: >
+          Owner billing override (default auto). auto = defer to the provider's own
+          cost_type; subscription = treat the key as a flat-fee coding plan (e.g.
+          MiniMax / Z.ai / Qwen), which force-de-pools it (private, never shared);
+          paid = force per-token / metered billing.
+      subscription_tier:
+        type: string
+        required: false
+        description: >
+          Package/plan key (e.g. minimax_max) naming the subscription tier — a soft
+          ref to the curated provider_subscription_tiers catalog (discover valid
+          values via listSubscriptionTiers). Seeds the key's metering window. Only
+          meaningful with billing_mode=subscription.
+    response: { format: json }
+
+  listSubscriptionTiers:
+    description: List the curated subscription-package catalog (provider_subscription_tiers) to pick a subscription_tier from before marking a brand key billing_mode=subscription.
+    guidance:
+      use: "Discover valid subscription_tier values (with metering windows + prices) before setting one via createIntegration."
+      next: "createIntegration (set billing_mode=subscription + the chosen tier_key)"
+      warn: "Pass tier_key — NOT label — as subscription_tier. An empty list means no packages are curated for that provider yet."
+      telemetry_signal_default: warm
+    http: GET /brands/{brand_id}/gate/subscription-tiers
+    params:
+      brand_id: { type: integer, required: true, description: Integer brand id }
+      provider: { type: string, required: false, description: "Filter to one provider's packages (e.g. minimax)" }
     response: { format: json }
 
   testIntegration:
