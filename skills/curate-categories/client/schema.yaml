@@ -1,0 +1,203 @@
+# Curate-Categories Skill — API Surface + envelope (guidance:) block.
+# Source of truth for Tier-3 client generation + the marketplace envelope.
+# Spec: opvs-ai/vendors 04-publishing/4-layer-and-envelope.md (intent_aliases Q1,
+# per-method use/next/warn/telemetry_signal_default Q4).
+#
+# These wrap /api/v1/admin/gate/categories* (the CT.5 admin API) and are the admin
+# mirror of the gate_category_* MCP tools (mcp-admin slice) and the
+# `spideriq gate categories …` CLI. Auth is the PLATFORM admin key (X-Admin-Key),
+# NOT a client PAT — super_admin only, platform-wide (no brand scoping, no PAT
+# branch — that IS the owner-lock). The DB-backed taxonomy is editable at RUNTIME
+# with no code deploy; every mutating call recomputes gate_model_category_scores.
+
+name: curate-categories
+version: "0.1.0"
+description: >
+  Curate SpiderGate's model-capability CATEGORY TAXONOMY — the DB-backed
+  categories (Coding, Design/Frontend, Reasoning, Math, Vision, Research,
+  Tool-use, Chat, Translation) and the benchmark→category SIGNALS that define
+  how each per-category quality score is computed. Add a category, rename /
+  re-sort / (de)activate it, add or retune a benchmark→category signal + its
+  weight, or drop a signal — all at runtime, no deploy. Every edit recomputes the
+  per-category percentile scores. super_admin-only, platform-wide.
+category: admin
+base_url: /api/v1/admin/gate
+upstream:
+  base_url: https://spideriq.ai/api/v1/admin/gate  # Option C direct (cut-over from base_url_env)
+auth:
+  type: api_key
+  header: X-Admin-Key
+  env_var: SPIDERIQ_ADMIN_API_KEY
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: false
+triggers:
+  - curate the gate category taxonomy
+  - add a model category
+  - retune a category score
+  - add a benchmark to a category
+  - remap a category signal
+  - deactivate a category
+  - which benchmarks define the coding score
+  - edit the category scoring recipe
+
+guidance:
+  use: >
+    Reach for this to change the model-capability CATEGORY taxonomy or the
+    benchmark→category SIGNALS that drive the per-category scores clients see on
+    the models page. List the current definition, add/rename/(de)activate a
+    category, and add/retune/remove the signals that compute a category's score.
+    super_admin + X-Admin-Key; every edit recomputes scores platform-wide.
+  not:
+    - "author-catalog → author a MODEL's editorial (description/tags/badges/links) — not the category taxonomy or scoring recipe (this skill is X-Admin-Key, author-catalog is a gate:catalog:write PAT)"
+    - "manage-routing → change WHICH MODEL an alias routes to — unrelated to capability categories"
+    - "use-the-gateway (@spideriq/gateway-skills) → the client-facing READ of categories/leaderboard/scores — not the admin write"
+  # Every selector is a typed key / signal_type / signal_value — no free-text
+  # search field anywhere, so intent_aliases is explicitly empty (Q1).
+  intent_aliases: []
+  pitfalls:
+    - "A category's DISPLAYED score is a within-category PERCENTILE + rank, NOT raw_mean×100 (§13-C: raw benchmark means aren't calibrated across benchmarks). Retuning signals/weights changes the percentile ordering — read listCategories first to see the current recipe."
+    - "The DISPLAYED score can't be recomputed incrementally — percent_rank() needs the whole per-category partition — so every mutating call re-runs the FULL scorer (~1.1k rows, sub-second). Pass recompute=false only when batching many edits, then recompute on the LAST one."
+    - "Deactivating a category (is_active=false) does NOT delete it — the row stays and its scores are swept on the next recompute; re-activate to bring it back. To retire scoring but keep the chip, set is_scored=false."
+    - "setCategorySignal requires the category to EXIST (404 otherwise) — upsertCategory first. signal_type must be one of benchmark | eval_task_type | tag | alias | capability, and signal_value must match the benchmark string EXACTLY (e.g. 'SWE-Bench Verified') or it contributes nothing."
+    - "If the nightly scorer holds the advisory lock, a write's recompute reports skipped_locked — the edit is saved but scores land on the next scheduled sweep. Re-issue with recompute=true later, or wait for 05:00 UTC."
+
+methods:
+  listCategories:
+    description: >
+      List EVERY category (including inactive ones) with its full signal recipe
+      (the benchmark→category signals + weights that define it) and a live
+      scored_model_count. The starting point for any retune — read this so an
+      edit is made against the current definition, not a guess. Read-only.
+    guidance:
+      use: "See the whole taxonomy + each category's scoring recipe before editing."
+      next: "upsertCategory (add/edit a category), setCategorySignal (retune the recipe)"
+      warn: "Shows inactive categories too (is_active=false) — unlike the client-facing /catalog/categories read, which hides them."
+      telemetry_signal_default: "cold"
+    http: GET /categories
+    response:
+      format: json
+
+  upsertCategory:
+    description: >
+      Add or update a category (idempotent on `key`). Use it to ADD a category,
+      rename/redescribe/re-emoji it, re-sort it, or activate/deactivate it. `key`
+      + `label` are required; every other field is preserved when omitted (a
+      re-sort keeps the emoji). Recomputes gate_model_category_scores unless
+      recompute=false. OWNER-LOCKED.
+    guidance:
+      use: "Create a new capability category, or rename / re-sort / (de)activate an existing one."
+      next: "setCategorySignal (define what benchmarks score it), listCategories (confirm)"
+      warn: "is_active=false RETIRES a category (scores swept next recompute) but does NOT delete it. key must be a lowercase slug ([a-z0-9_]+). A brand-new category has NO scores until you add signals."
+      telemetry_signal_default: "warm"
+    http: POST /categories
+    params:
+      key:
+        type: string
+        required: true
+        description: Category key — a lowercase slug ([a-z0-9_]+), e.g. "coding". The stable natural key.
+      label:
+        type: string
+        required: true
+        description: Display label, e.g. "Coding" (1–128 chars).
+      description:
+        type: string
+        required: false
+        description: Optional description (≤2000 chars).
+      emoji:
+        type: string
+        required: false
+        description: Optional chip emoji (≤16 chars).
+      parent_key:
+        type: string
+        required: false
+        description: Optional parent category key (must already exist; reserved for v2 hierarchy).
+      sort_order:
+        type: integer
+        required: false
+        description: Manual sort weight (0–1000000; lower sorts first).
+      is_scored:
+        type: boolean
+        required: false
+        description: Whether the scorer materialises scores for this category (default true on create).
+      is_active:
+        type: boolean
+        required: false
+        description: Whether the category is live (default true on create). false retires it (scores swept next recompute).
+      recompute:
+        type: boolean
+        required: false
+        description: Re-run the scorer after the write (default true). Pass false when batching edits.
+    response:
+      format: json
+
+  setCategorySignal:
+    description: >
+      Add or retune ONE benchmark→category signal (upsert on
+      category_key + signal_type + signal_value). This is how a category's
+      definition is edited without a migration, e.g. add a "benchmark" signal
+      "SWE-Bench Verified" (weight 1.0) to "coding", or retune an existing
+      signal's weight. The category must already EXIST (404 otherwise).
+      Recomputes scores unless recompute=false. OWNER-LOCKED.
+    guidance:
+      use: "Add or retune a benchmark→category signal (the editable scoring recipe)."
+      next: "listCategories (confirm the recipe + new scored_model_count), setCategorySignal (add more)"
+      warn: "signal_value must match the benchmark string EXACTLY or it contributes nothing. The category must exist first (upsertCategory). weight defaults 1.0."
+      telemetry_signal_default: "warm"
+    http: POST /categories/{key}/signals
+    params:
+      key:
+        type: string
+        required: true
+        description: The category key to attach the signal to, e.g. "coding".
+      signal_type:
+        type: string
+        required: true
+        description: "Signal kind — one of: benchmark | eval_task_type | tag | alias | capability."
+      signal_value:
+        type: string
+        required: true
+        description: The literal signal value (a benchmark name / task_type / tag / alias / capability; 1–256 chars).
+      weight:
+        type: number
+        required: false
+        description: Per-signal weight (0–100; default 1.0). The §9-3 tuning axis.
+      recompute:
+        type: boolean
+        required: false
+        description: Re-run the scorer after the write (default true).
+    response:
+      format: json
+
+  removeCategorySignal:
+    description: >
+      Drop ONE signal from a category, identified by signal_type + signal_value.
+      Idempotent — removing a signal that is not there returns removed=false (not
+      an error). Recomputes scores when something changed, unless recompute=false.
+      OWNER-LOCKED.
+    guidance:
+      use: "Remove a benchmark→category signal from a category's scoring recipe."
+      next: "listCategories (confirm the recipe)"
+      warn: "Idempotent: a no-op delete returns removed=false and skips the recompute. signal_value must match exactly."
+      telemetry_signal_default: "warm"
+    http: DELETE /categories/{key}/signals
+    params:
+      key:
+        type: string
+        required: true
+        description: The category key the signal belongs to, e.g. "coding".
+      signal_type:
+        type: string
+        required: true
+        description: "Signal kind — one of: benchmark | eval_task_type | tag | alias | capability."
+      signal_value:
+        type: string
+        required: true
+        description: The literal signal value to remove (exact match).
+      recompute:
+        type: boolean
+        required: false
+        description: Re-run the scorer after a successful delete (default true).
+    response:
+      format: json
