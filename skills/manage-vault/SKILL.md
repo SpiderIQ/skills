@@ -44,7 +44,7 @@ billing, resets its health, reviews the **would-deny shadow log**, and runs the
 **policy propose→decide** flow.
 
 ```
-updateKey (key_id, …)        ─▶ non-policy config (label/active/priority/pool/limits) — applies now
+updateKey (key_id, …)        ─▶ non-policy config (label/active/priority/pool/limits/billing_mode+subscription_tier) — applies now
 syncKeyBilling (key_id)      ─▶ refresh cached balance/usage from the provider adapter
 resetKeyHealth (key_id)      ─▶ clear consecutive_failures → back to the healthy pool
 setKeyPolicy (integration_id, …)         ─▶ PROPOSE a usage-policy change  (files a pending row — NEVER applies)
@@ -159,7 +159,7 @@ super_admin-only. The MCP tools ship in the **mcp-admin** slice
 
 | Method | Does | Reference |
 |---|---|---|
-| `updateKey` | non-policy config (label/active/priority/pool/limits) | [references/manage-keys.md](references/manage-keys.md) |
+| `updateKey` | non-policy config (label/active/priority/pool/limits + billing_mode/subscription_tier) | [references/manage-keys.md](references/manage-keys.md) |
 | `syncKeyBilling` | refresh a key's cached balance/usage | [references/manage-keys.md](references/manage-keys.md) |
 | `resetKeyHealth` | clear failures → healthy pool | [references/manage-keys.md](references/manage-keys.md) |
 | `setKeyPolicy` | **PROPOSE** a usage-policy change (never applies) | [references/policy-propose-decide.md](references/policy-propose-decide.md) |

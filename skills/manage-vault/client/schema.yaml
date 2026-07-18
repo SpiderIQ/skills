@@ -76,13 +76,14 @@ methods:
   updateKey:
     description: >
       Update a key's NON-POLICY config — key_label, is_active, is_primary, priority,
-      share_with_pool, daily_limit, minute_limit, and the spend limit
-      (amount/period/action). Applies immediately. Cannot change the API key, the
+      share_with_pool, daily_limit, minute_limit, the spend limit
+      (amount/period/action), and the billing treatment (billing_mode /
+      subscription_tier). Applies immediately. Cannot change the API key, the
       provider, or the ToS usage policy (use setKeyPolicy for policy).
     guidance:
-      use: "Edit a key's label / enable state / priority / pool membership / rate + spend limits."
+      use: "Edit a key's label / enable state / priority / pool membership / rate + spend limits, or set its billing treatment (subscription package)."
       next: "resetKeyHealth (if it tripped unhealthy), listBillingCapabilities (before syncKeyBilling)"
-      warn: "Does NOT set usage_policy/allowed_activities/allowed_consumers — those are propose→approve only (setKeyPolicy)."
+      warn: "Does NOT set usage_policy/allowed_activities/allowed_consumers — those are propose→approve only (setKeyPolicy). billing_mode='subscription' force-de-pools the key; subscription_tier re-seeds its metering window."
       telemetry_signal_default: "warm"
     http: PATCH /keys/{key_id}
     params:
@@ -100,6 +101,23 @@ methods:
       spend_limit_amount: { type: number, required: false, description: Spend cap amount. }
       spend_limit_period: { type: string, required: false, description: "Spend cap period, e.g. day | month." }
       spend_limit_action: { type: string, required: false, description: "Action at the cap, e.g. warn | block." }
+      billing_mode:
+        type: string
+        required: false
+        values: ["auto", "subscription", "paid"]
+        description: >
+          Owner billing override: auto | subscription | paid. auto defers to the
+          provider's own cost_type; subscription treats the key as a flat-fee coding
+          plan and force-de-pools it (private, never shared); paid forces per-token
+          billing. Omit = no-change.
+      subscription_tier:
+        type: string
+        required: false
+        description: >
+          Package/plan key (e.g. minimax_max) — soft ref to the curated
+          provider_subscription_tiers catalog. Setting it re-seeds the key's
+          metering window (the subscription meter's denominator). Only meaningful
+          with billing_mode=subscription. Omit = no-change.
     response:
       format: json
 

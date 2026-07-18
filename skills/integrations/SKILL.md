@@ -51,6 +51,7 @@ listProviders -> createIntegration -> getIntegration (verify) -> active use
 - Use `spend_limit_amount` + `spend_limit_period` + `spend_limit_action` for budget guardrails
 - Set one key as `is_primary` per provider -- this is used by default for API calls
 - Use `priority` to control round-robin selection across multiple keys
+- Set `billing_mode` to control a key's billing treatment: `auto` (default, defer to the provider's cost_type), `subscription` (flat-fee coding plan -- force-de-pooled, private to the brand), or `paid` (force per-token billing). When marking a key `subscription`, first call `listSubscriptionTiers` and pass the chosen `tier_key` as `subscription_tier` to seed its metering window.
 
 ### Permissions
 
@@ -85,10 +86,11 @@ Before deleting an integration, warn the user about active dependencies:
 |--------|-------------|
 | `getOverview` | Get aggregated overview of all configured providers for the brand |
 | `listProviders` | List available provider templates with required credential fields |
+| `listSubscriptionTiers` | List the curated subscription-package catalog (pick a `tier_key` before setting `subscription_tier`) |
 | `listIntegrations` | List all integration keys, optionally filtered by provider |
 | `getIntegration` | Get details for a single integration key |
-| `createIntegration` | Create a new API integration key |
-| `updateIntegration` | Update an existing integration key (label, credentials, limits, status) |
+| `createIntegration` | Create a new API integration key (incl. `billing_mode` / `subscription_tier`) |
+| `updateIntegration` | Update an existing integration key (label, credentials, limits, status, billing treatment) |
 | `deleteIntegration` | Delete an integration key permanently |
 | `resetUsage` | Reset daily and minute usage counters for a key |
 | `getSpend` | Get spend details for a single integration key |

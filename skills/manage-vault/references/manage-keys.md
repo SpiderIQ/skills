@@ -8,8 +8,15 @@ snapshot. (Its usage POLICY is a separate, human-gated flow —
 
 - **Edit config** — `updateKey(key_id=<id>, …)` sets any of: `key_label`,
   `is_active`, `is_primary`, `priority` (0–100), `share_with_pool`, `daily_limit`,
-  `minute_limit`, `spend_limit_amount` / `spend_limit_period` / `spend_limit_action`.
-  Applies immediately. At least one field besides `key_id` is required.
+  `minute_limit`, `spend_limit_amount` / `spend_limit_period` / `spend_limit_action`,
+  and the billing treatment `billing_mode` (`auto` | `subscription` | `paid`) /
+  `subscription_tier`. Applies immediately. At least one field besides `key_id` is required.
+- **Billing treatment.** `billing_mode='subscription'` treats a metered-looking
+  provider's key as a flat-fee coding plan and **force-de-pools it** (a subscription
+  key is private, never shared to the pool). `subscription_tier` names the package
+  (e.g. `minimax_max`) and re-seeds the key's metering window (the meter's
+  denominator). `paid` forces per-token billing; `auto` (default) defers to the
+  provider's own `cost_type`.
 - **Reset health** — `resetKeyHealth(key_id=<id>)` clears `consecutive_failures` and
   returns the key to the healthy pool. Use *after* you've fixed why it was failing
   (e.g. rotated a revoked credential).
