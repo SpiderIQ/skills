@@ -704,10 +704,77 @@ content_update_navigation({
 | `target` | `"_self" | "_blank"` | Optional; default `"_self"`. Use `"_blank"` for external links. |
 | `icon` | string | Optional. Some themes render an icon prefix (`"github"`, `"docs"`). |
 | `children` | array of items | Optional. Nested dropdown — typically rendered as a hover-menu in the header, an expandable group in footer / docs-sidebar. |
+| `source` | object | Optional **binding** — makes the item render from the page tree instead of from hand-authored `children`. See "Three item modes" below. |
 
 **PUT semantics:** `content_update_navigation` REPLACES the menu wholesale. Pass the full `items[]` array — anything you omit is gone. If you only want to add one item: get the current, append, update.
 
 No dry_run/confirm gate by default — `content_update_navigation` mutates immediately.
+
+### Three item modes
+
+Every item is one of three things. They mix freely inside one menu.
+
+| Mode | Write it as | What renders |
+|---|---|---|
+| **hand-authored** | no `source` | exactly what you wrote. The original behaviour — unchanged. |
+| **site-bound** | `source: {kind:"site", depth:2}` | the whole page tree |
+| **folder-bound** | `source: {kind:"folder", folder_id:"<uuid>", depth:2}` | one folder's published descendants |
+
+```
+content_update_navigation({
+  location: "header",
+  items: [
+    { label: "Pricing", url: "/pricing" },                                  // hand-authored
+    { label: "Guides",  source: { kind: "folder",                           // folder-bound
+                                  folder_id: "3f2b…", depth: 2 } }
+  ]
+})
+```
+
+**Why bind instead of hand-listing a folder's pages:** a bound item is expanded
+**server-side on every public read**, so publishing, renaming, reordering or
+archiving a page updates the live menu with **no menu edit**. And only
+**published, non-folder** descendants are ever emitted — a draft cannot leak
+into a public menu, which is the failure mode hand-curated menus have.
+
+`depth` is `1`–`3` (default `2`) and counts levels *below* the bound item.
+Deeper is rejected with a 422.
+
+> ⚠️ **`content_get_navigation` returns bindings UN-EXPANDED — that is correct.**
+> It reads the dashboard route, so a bound item comes back with `source` set and
+> `children` empty. The expansion only happens on the public read the renderer
+> uses. Round-trip the **binding**; never "helpfully" replace it with a snapshot
+> of its expanded children — that freezes the menu and it stops tracking the tree.
+
+### Folders and their index page
+
+A **folder** is a page row with `is_folder: true` — an organizational node in
+the page tree with no live URL of its own. It is never rendered, sitemapped, or
+listed in `llms.txt`.
+
+```
+1. content_create_page({ title: "Guides", is_folder: true })      → folder id
+2. content_update_page({ page_id: <a page>, parent_id: <folder id> })   ← fill it
+3. content_update_navigation({ location: "header", items: [
+     { label: "Guides", source: { kind: "folder", folder_id: <folder id> } }
+   ]})
+```
+
+Discover folder ids with `content_list_pages` — rows carry `is_folder` and
+`parent_id`.
+
+**Which page does the folder itself link to?** In order:
+
+1. `index_page_id`, **if** it is still a published, non-folder *direct child*;
+2. otherwise the folder's first published child by `sort_order`;
+3. otherwise nothing — the item's `url` is `null` and themes render it as a
+   label-only group header, never a dead link.
+
+Set the override with `content_update_page({ page_id: <folder id>,
+index_page_id: <child page id> })`. Folders only — setting it on a normal page,
+or pointing a folder at itself, is rejected with a 400. It **self-heals**:
+unpublish, archive, or move the target out of the folder and resolution falls
+back to (2) silently, with no stale link.
 
 ### Common patterns
 

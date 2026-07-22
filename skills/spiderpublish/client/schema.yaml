@@ -130,10 +130,13 @@ methods:
 
   # ──────────────────────────────── PAGES ─────────────────────────────────────
   listPages:
-    description: List this brand's pages (drafts + published). Paginate with limit/offset.
+    description: >
+      List this brand's pages (drafts + published). Paginate with limit/offset.
+      Each row carries `parent_id` and `is_folder`, so this is also how you read
+      the page TREE and find a folder's id.
     guidance:
-      use: "see existing pages (including drafts) before creating or editing"
-      next: "getPage to read one; createPage to add; updatePage to edit"
+      use: "see existing pages (including drafts) before creating or editing; discover folder ids (is_folder=true) for a nav binding"
+      next: "getPage to read one; createPage to add; updatePage to edit; updateNavigation to bind a menu item to a folder"
       telemetry_signal_default: "warm"
     http: GET /dashboard/content/pages
     params:
@@ -210,6 +213,7 @@ methods:
       robots:            { type: string,  required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>' (e.g. 'index,follow'). Unset ⇒ indexable by default (no robots meta)." }
       keywords:          { type: string,  required: false, description: 'Comma-separated meta keywords (≤500)' }
       json_ld:           { type: object,  required: false, description: 'JSON-LD structured-data object emitted verbatim' }
+      is_folder:         { type: boolean, required: false, description: 'TRUE creates a FOLDER, not a page — an organizational node with no live URL, never rendered or sitemapped. Fill it via updatePage parent_id, then point a menu at it with updateNavigation source.kind=folder.' }
       project:           { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
     response: { format: json }
 
@@ -284,6 +288,8 @@ methods:
       robots:            { type: string, required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>'. Unset ⇒ indexable by default." }
       keywords:          { type: string, required: false, description: 'Comma-separated meta keywords (≤500)' }
       json_ld:           { type: object, required: false, description: 'JSON-LD structured-data object emitted verbatim' }
+      parent_id:         { type: uuid,   required: false, description: 'Move this page under another page or folder (the page tree). Send null to move it back to the top level. Cycles rejected server-side.' }
+      index_page_id:     { type: uuid,   required: false, description: "FOLDERS ONLY — which page the folder links to. Unset ⇒ its first published child by sort_order. Send null to clear. 400 on a non-folder page or a self-reference. Self-heals: unpublish/archive/move the target out and it falls back silently." }
     response: { format: json }
 
   deletePage:
@@ -776,7 +782,19 @@ methods:
 
   # ────────────────────────────── NAVIGATION ──────────────────────────────────
   getNavigation:
-    description: Get a navigation menu (location = header | footer | docs_sidebar).
+    description: >
+      Get a navigation menu as AUTHORED (location = header | footer | docs_sidebar).
+      Folder/site-bound items come back as their binding — `source` set, `children`
+      empty — because this is the dashboard route. The published site reads the
+      public route, which expands every binding server-side on each request.
+    guidance:
+      use: "read the current header/footer/sidebar menu before editing it"
+      next: "updateNavigation with the edited items list"
+      warn: >
+        Empty `children` on an item that has a `source` is EXPECTED, not an empty
+        menu — the expansion happens on the public read. Round-trip the binding;
+        never replace it with a snapshot of its expanded children (that freezes the
+        menu and it stops tracking the page tree).
     http: GET /dashboard/content/navigation/{location}
     params:
       location: { type: string, required: true, description: 'header | footer | docs_sidebar' }
@@ -784,14 +802,23 @@ methods:
     response: { format: json }
 
   updateNavigation:
-    description: Replace a navigation menu's items (nested JSON list).
+    description: >
+      Replace a navigation menu's items (nested JSON list). Each item is one of
+      three modes — hand-authored (no `source`), site-bound
+      (`source.kind='site'`), or folder-bound (`source.kind='folder'` +
+      `folder_id`). A bound item renders from the page tree and stays in sync
+      with no further menu edits.
     guidance:
-      use: "edit the header/footer/sidebar menu"
+      use: "edit the header/footer/sidebar menu, or bind a menu item to a folder so it self-updates"
       next: "deploySite to push the new nav"
-      warn: "REPLACES the menu — send the full intended items list."
+      warn: >
+        REPLACES the menu — send the full intended items list. Prefer a folder
+        binding over hand-listing a folder's pages: only published, non-folder
+        descendants are ever emitted, so drafts can never leak, and publishing or
+        reordering a page updates the live menu without touching the menu.
     http: PUT /dashboard/content/navigation/{location}
     params:
-      location: { type: string, required: true }
+      location: { type: string, required: true, description: 'header | footer | docs_sidebar' }
       items:
         type: array
         required: true
@@ -824,6 +851,25 @@ methods:
               type: string
               required: false
               description: Optional badge label, e.g. "New" or "Beta".
+            source:
+              type: object
+              required: false
+              description: >
+                Optional binding that renders this item from the page tree instead
+                of from hand-authored children. Omit for a hand-authored item.
+              properties:
+                kind:
+                  type: string
+                  required: true
+                  description: "'site' = the whole page tree. 'folder' = one folder's published descendants."
+                folder_id:
+                  type: uuid
+                  required: false
+                  description: Folder page id. REQUIRED when kind='folder' (422 without it).
+                depth:
+                  type: integer
+                  required: false
+                  description: Levels expanded below this item, 1-3. Default 2.
     response: { format: json }
 
   # ─────────────────────────────── SETTINGS ───────────────────────────────────

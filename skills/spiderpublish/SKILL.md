@@ -107,6 +107,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
 | Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
 | Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
+| Group pages under a folder + have a menu track it automatically | `createPage`(`is_folder`)→`updatePage`(`parent_id`)→`updateNavigation`(`source: {kind:"folder", folder_id}`) | `references/content.md` |
 | Change site settings / SEO / colors | `getSettings` · `updateSettings` | `references/content.md` |
 | Connect a custom domain | `addDomain`→`verifyDomain`→`setPrimaryDomain` (or `addSubdomain`) | `references/content.md` |
 | Make/edit a reusable component | `createComponent` · `updateComponent` · `publishComponent` · `rollbackComponent` | `references/components.md` |

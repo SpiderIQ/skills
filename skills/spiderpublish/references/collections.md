@@ -47,8 +47,19 @@ not one-off pages, but a repeatable typed list.
 1. **Define the collection** (non-destructive, enforces `max_collections`):
    ```
    createCollection slug=case-studies label='Case Studies' \
-     schema_json={fields:{title:{type:string}, client:{type:string}, summary:{type:richtext}, logo:{type:image}}}
+     schema_json={fields:[
+       {id:title,   type:text,  label:Title},
+       {id:client,  type:text,  label:Client},
+       {id:summary, type:text,  label:Summary},
+       {id:logo,    type:media, label:Logo}
+     ]}
    ```
+   **`fields` is a LIST of field objects, not a dict** — each needs an `id` (a `dict`
+   keyed by field name 422s with `fields  Input should be a valid list`; a list whose
+   items omit `id` 422s with `fields.0.id  Field required`). Valid `type` values are
+   exactly: `text` · `number` · `bool` · `select` · `date` · `richtext` · `media` ·
+   `relationship` · `blocks` — there is **no** `string` or `image` (use `text` / `media`).
+   Optional per-field keys: `label`, `options` (for `select`).
 2. **Bulk-fill the records** (1–100 in ONE transaction — any bad record rejects the whole
    batch; enforces `max_records` for the batch size):
    ```
@@ -102,3 +113,15 @@ not one-off pages, but a repeatable typed list.
   full batch size.
 - **Not public until you say so.** A collection is private (≡ unknown) until `is_public=true`;
   the `/items` door + dynamic binding only see published rows of a public collection.
+- **`richtext` normalizes to Tiptap — do NOT store raw HTML in it.** A `richtext` field is
+  converted to a canonical Tiptap document at write; a raw HTML string is stored as **escaped
+  text**, so the live render shows the literal `<div>…` markup. For a rich body author it as
+  Markdown/Tiptap, or use a flat `text` field for plain strings.
+- **`blocks` holds PAGE-BLOCKS, not arbitrary objects.** Each item in a `blocks` field must be a
+  page block whose `type` is one of the 14 page block-types (`hero`, `features_grid`, `stats_bar`,
+  `rich_text`, `cta_section`, `pricing_table`, `testimonials`, `faq`, `code_example`, `logo_cloud`,
+  `comparison_table`, `image`, `video_embed`, `spacer`, `component`) — an off-list item 422s.
+- **Reading a collection's `/items` resolves the tenant by DOMAIN.** `GET /content/data-sources/
+  <slug>/items` is the public content door — it resolves the tenant from the `X-Content-Domain`
+  header (the owning site's domain), **not** `X-Project-Id`. A request without it resolves the
+  default tenant and 404s "Data source not found" even though the collection exists.
