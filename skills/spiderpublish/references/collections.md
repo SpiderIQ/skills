@@ -97,6 +97,32 @@ not one-off pages, but a repeatable typed list.
 
 ---
 
+## Reading records without paying for every field
+
+A record comes back with **every field its schema declares**. That is fine for a 6-field
+collection and expensive for a wide one — a 54-field collection costs roughly 73,000
+characters for a single 60-row page, most of it fields you didn't ask about.
+
+Narrow it:
+
+```
+listCollectionRecords collection=skills limit=50 fields=name,tagline,install_cmd
+```
+
+- `fields` is a comma-separated list of **field ids** (the `id` key in `schema_json.fields`),
+  and it narrows the `data` object **only**. The record envelope — `slug`, `status`,
+  `published_at`, `seo_title`, `seo_description`, `og_image_url`, timestamps — always comes
+  back, so you can still page, sort and identify rows.
+- **Unknown ids are ignored, not rejected.** Narrowing a projection should never be harder to
+  get right than not narrowing it, so a typo costs you a missing field, not a 422. This is
+  deliberately the opposite of the WRITE path — see the first gotcha below.
+- Combine it with `limit`: `fields` cuts how wide each row is, `limit` cuts how many rows.
+  A discovery pass usually wants `fields=<the field you're matching on>` and a small `limit`.
+- `?format=yaml` saves on top of this, not instead of it — it changes the encoding, not which
+  fields are present.
+
+---
+
 ## Gotchas
 
 - **Unknown fields are rejected, not ignored.** `data` is validated against `schema_json` —

@@ -213,6 +213,7 @@ methods:
       robots:            { type: string,  required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>' (e.g. 'index,follow'). Unset ⇒ indexable by default (no robots meta)." }
       keywords:          { type: string,  required: false, description: 'Comma-separated meta keywords (≤500)' }
       json_ld:           { type: object,  required: false, description: 'JSON-LD structured-data object emitted verbatim' }
+      custom_fields:     { type: object,  required: false, description: 'Free-form key/value bag stored on the row and exposed to the template as page.custom_fields' }
       is_folder:         { type: boolean, required: false, description: 'TRUE creates a FOLDER, not a page — an organizational node with no live URL, never rendered or sitemapped. Fill it via updatePage parent_id, then point a menu at it with updateNavigation source.kind=folder.' }
       project:           { type: string,  required: false, description: 'proj_… website id (omit for the workspace default project)' }
     response: { format: json }
@@ -288,6 +289,8 @@ methods:
       robots:            { type: string, required: false, description: "Indexing lever — '<index|noindex>,<follow|nofollow>'. Unset ⇒ indexable by default." }
       keywords:          { type: string, required: false, description: 'Comma-separated meta keywords (≤500)' }
       json_ld:           { type: object, required: false, description: 'JSON-LD structured-data object emitted verbatim' }
+      custom_fields:     { type: object, required: false, description: 'Free-form key/value bag stored on the row and exposed to the template as page.custom_fields' }
+      collection_type:   { type: string, required: false, description: 'For dynamic_list / dynamic_item pages — which collection this page binds to.' }
       parent_id:         { type: uuid,   required: false, description: 'Move this page under another page or folder (the page tree). Send null to move it back to the top level. Cycles rejected server-side.' }
       index_page_id:     { type: uuid,   required: false, description: "FOLDERS ONLY — which page the folder links to. Unset ⇒ its first published child by sort_order. Send null to clear. 400 on a non-folder page or a self-reference. Self-heals: unpublish/archive/move the target out and it falls back silently." }
     response: { format: json }
@@ -416,6 +419,8 @@ methods:
       related_post_ids:  { type: array,   required: false, items: string, description: 'Related post UUIDs (order preserved)' }
       seo_title:         { type: string,  required: false }
       seo_description:   { type: string,  required: false }
+      og_image_url:      { type: string,  required: false, description: 'OG/Twitter share image for the post. Same host allowlist as cover_image_url — upload via uploadMedia first.' }
+      custom_fields:     { type: object,  required: false, description: 'Free-form key/value bag stored on the post and exposed to the template as post.custom_fields' }
       vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). Resolve via vayapinCards first." }
       project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
     response: { format: json }
@@ -467,6 +472,8 @@ methods:
       related_post_ids:  { type: array,   required: false, items: string }
       seo_title:         { type: string,  required: false }
       seo_description:   { type: string,  required: false }
+      og_image_url:      { type: string,  required: false, description: 'OG/Twitter share image for the post. Same host allowlist as cover_image_url — upload via uploadMedia first.' }
+      custom_fields:     { type: object,  required: false, description: 'Free-form key/value bag stored on the post and exposed to the template as post.custom_fields' }
       vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). PATCH REPLACES the whole pin set: send the full list, [] clears. Resolve codes via vayapinCards first." }
       project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
     response: { format: json }
@@ -1422,10 +1429,25 @@ methods:
 
   # ─────────────────────────────── CHANGELOG ──────────────────────────────────
   listChangelog:
-    description: List product changelog / release-note entries.
+    description: >
+      List product changelog / release-note entries. Entry BODIES are omitted unless you ask
+      for them — a brand with a couple of dozen entries returns >100k characters with bodies,
+      enough to blow a tool-output ceiling. The light index (id, version, title, status, dates)
+      answers the usual question ("does an entry for version X exist yet?") on its own.
+    guidance:
+      use: "discover changelog entries + their ids before publishing or correcting one"
+      next: "publishChangelog to make one live; updateChangelog to correct one"
+      warn: >
+        Pass include_body=true only when you need the prose, and pair it with limit —
+        bodies are full Tiptap documents.
+      telemetry_signal_default: "warm"
     http: GET /dashboard/content/changelog
     params:
-      format: { type: string, required: false }
+      status:       { type: string,  required: false, description: 'Filter by status: draft | published | archived' }
+      limit:        { type: integer, required: false, description: 'Max entries (1-200, default 50)' }
+      offset:       { type: integer, required: false, description: 'Pagination offset (default 0)' }
+      include_body: { type: boolean, required: false, description: "Include each entry's full Tiptap body. Expensive — pair with limit." }
+      format:       { type: string,  required: false, description: 'json | yaml | md' }
     response: { format: json }
 
   createChangelog:
@@ -1748,10 +1770,16 @@ methods:
     response: { format: json }
 
   listCollectionRecords:
-    description: List a page of a collection's records (drafts AND published — the author surface).
+    description: >
+      List a page of a collection's records (drafts AND published — the author surface).
+      Each record carries EVERY field of its schema, so a wide collection costs tens of
+      thousands of characters per page — narrow it with `fields` when you only need a few.
     guidance:
       use: "read the rows in a collection, including drafts, before editing or publishing"
       next: "getCollectionRecord for one row; updateCollectionRecord to edit or publish"
+      warn: >
+        `fields` narrows each record's `data` object only — the envelope (slug, status,
+        dates, seo) always comes back. Unknown field ids are ignored, not rejected.
       telemetry_signal_default: "warm"
     http: GET /dashboard/content/collections/{slug}/records
     params:
@@ -1759,6 +1787,7 @@ methods:
       limit:  { type: integer, required: false, description: 'Page size (1-500, default 50)' }
       offset: { type: integer, required: false, description: 'Pagination offset' }
       sort:   { type: string,  required: false, description: 'Sort expression' }
+      fields: { type: string,  required: false, description: "Comma-separated field ids to keep in each record's data (e.g. 'name,install_cmd'). Omit for all fields." }
       format: { type: string,  required: false, description: 'json | yaml | md' }
     response: { format: json }
 
