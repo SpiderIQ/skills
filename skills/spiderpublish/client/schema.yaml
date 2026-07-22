@@ -1515,6 +1515,334 @@ methods:
       entry_id: { type: string, required: true }
     response: { format: json }
 
+  # ────────────────────────────── PRESS / NEWSROOM ─────────────────────────────
+  # A full newsroom: releases + the contact roster, boilerplates and media kits a
+  # real one needs. NOTE: there is deliberately NO embargo method — the embargo
+  # endpoint does not exist yet and nothing mints an embargo token.
+  listPressReleases:
+    description: >
+      List press releases newest-first, DRAFTS INCLUDED (this is the author door,
+      not the public feed). Keyset-paginated.
+    guidance:
+      use: "see what is in the newsroom, in any status, before authoring or publishing"
+      next: "getPressRelease -> updatePressRelease -> publishPressRelease"
+      warn: "`cursor` is an opaque token from the previous response's next_cursor — it is NOT a page number. An empty PUBLIC newsroom while this returns rows means nothing is published yet, not that data is missing."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/content/press
+    params:
+      status:       { type: string, required: false, values: ["draft", "scheduled", "embargoed", "published", "archived"] }
+      release_type: { type: string, required: false, values: ["press_release", "statement", "media_alert", "newsbyte"] }
+      search:       { type: string, required: false, description: 'Full-text search (websearch syntax).' }
+      cursor:       { type: string, required: false, description: 'Opaque keyset cursor from a prior next_cursor. NOT a page number.' }
+      limit:        { type: integer, required: false, description: '1-100, default 20.' }
+    response: { format: json }
+
+  getPressRelease:
+    description: Get one press release in full, including its resolved contacts.
+    http: GET /dashboard/content/press/{release_id}
+    params:
+      release_id: { type: string, required: true, description: 'Press release id.' }
+    response: { format: json }
+
+  createPressRelease:
+    description: >
+      Create a press release. It lands as a DRAFT — nothing is public until
+      publishPressRelease or schedulePressRelease.
+    guidance:
+      use: "author a new announcement, launch, funding note, statement or media alert"
+      next: "publishPressRelease, or schedulePressRelease to stage it"
+      warn: "create the contacts / boilerplate / media kit FIRST so you can pass their ids here. body accepts a Tiptap doc OR {\"markdown\": ...} / {\"html\": ...}, normalized server-side."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/content/press
+    params:
+      slug:  { type: string, required: true, description: 'URL-safe: lowercase, digits, hyphens.' }
+      title: { type: string, required: true, description: 'Headline.' }
+      subheadline: { type: string, required: false, description: 'Deck / sub-headline.' }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON doc, or {"markdown": "..."} / {"html": "..."} (normalized to Tiptap).'
+        properties:
+          type:
+            type: string
+            required: false
+            description: Root node type — always "doc".
+          content:
+            type: array
+            required: false
+            items: object
+            description: Ordered list of Tiptap block nodes.
+      release_type:   { type: string, required: false, values: ["press_release", "statement", "media_alert", "newsbyte"] }
+      dateline_city:  { type: string, required: false, description: 'e.g. "BERLIN".' }
+      dateline_date:  { type: string, required: false, description: 'YYYY-MM-DD.' }
+      boilerplate_id: { type: string, required: false, description: 'Boilerplate to append as the "About" tail.' }
+      media_kit_id:   { type: string, required: false, description: 'Media kit to attach.' }
+      contact_ids:
+        type: array
+        required: false
+        items: string
+        description: Press-contact ids to list on the release.
+      hero_image_url:   { type: string, required: false }
+      hero_image_alt:   { type: string, required: false }
+      legal_disclaimer: { type: string, required: false }
+      is_featured:      { type: boolean, required: false, description: 'Pin to the top of the newsroom index.' }
+      seo_title:        { type: string, required: false }
+      seo_description:  { type: string, required: false }
+      og_image_url:     { type: string, required: false }
+    response: { format: json }
+
+  updatePressRelease:
+    description: Update a press release (PATCH — only the fields you send change).
+    guidance:
+      use: "correct or extend a release, in any status"
+      next: "publishPressRelease"
+      warn: "editing an already-PUBLISHED release is live immediately, and changing its slug breaks every existing link to it."
+    http: PATCH /dashboard/content/press/{release_id}
+    params:
+      release_id:  { type: string, required: true, description: 'Press release id.' }
+      slug:        { type: string, required: false }
+      title:       { type: string, required: false }
+      subheadline: { type: string, required: false }
+      body:
+        type: object
+        required: false
+        description: 'Tiptap JSON doc, or {"markdown": "..."} / {"html": "..."}.'
+        properties:
+          type:    { type: string, required: false }
+          content: { type: array, required: false, items: object }
+      release_type:   { type: string, required: false, values: ["press_release", "statement", "media_alert", "newsbyte"] }
+      dateline_city:  { type: string, required: false }
+      dateline_date:  { type: string, required: false }
+      boilerplate_id: { type: string, required: false }
+      media_kit_id:   { type: string, required: false }
+      contact_ids:    { type: array, required: false, items: string }
+      is_featured:    { type: boolean, required: false }
+    response: { format: json }
+
+  deletePressRelease:
+    description: Delete a press release — DESTRUCTIVE.
+    guidance:
+      use: "remove a release permanently"
+      warn: "prefer unpublishPressRelease to take a release off the newsroom while keeping it — delete is not reversible from this surface."
+    http: DELETE /dashboard/content/press/{release_id}
+    params:
+      release_id: { type: string, required: true, description: 'Press release id.' }
+    response: { format: json }
+
+  publishPressRelease:
+    description: >
+      Publish a release immediately — it goes live on the newsroom and into the
+      feeds, and notifies subscribed journalists.
+    guidance:
+      use: "take a finished draft live now"
+      next: "no deploySite needed — published releases render live from the API"
+      warn: "this notifies subscribed journalists. Reversible via unpublishPressRelease, but the notification cannot be recalled."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/content/press/{release_id}/publish
+    params:
+      release_id: { type: string, required: true, description: 'Press release id.' }
+    response: { format: json }
+
+  unpublishPressRelease:
+    description: Take a published release back off the newsroom (returns it to draft, content kept).
+    http: POST /dashboard/content/press/{release_id}/unpublish
+    params:
+      release_id: { type: string, required: true, description: 'Press release id.' }
+    response: { format: json }
+
+  schedulePressRelease:
+    description: Mark a release to go live at a future time (status becomes `scheduled`).
+    guidance:
+      use: "stage an announcement for a known future moment"
+      next: "unschedulePressRelease to cancel, or publishPressRelease to go early"
+      warn: "the time MUST be in the future (a past time returns 400 — use publishPressRelease for an immediate go-live), and a naive datetime is read as UTC. The sweeper that auto-publishes at the scheduled moment is not live yet, so today this records intent rather than publishing unattended."
+    http: POST /dashboard/content/press/{release_id}/schedule
+    params:
+      release_id:   { type: string, required: true, description: 'Press release id.' }
+      published_at: { type: string, required: true, description: 'Future ISO-8601 timestamp, e.g. "2026-08-01T09:00:00Z".' }
+    response: { format: json }
+
+  unschedulePressRelease:
+    description: Cancel a scheduled publish — back to draft, future date cleared.
+    http: POST /dashboard/content/press/{release_id}/unschedule
+    params:
+      release_id: { type: string, required: true, description: 'Press release id.' }
+    response: { format: json }
+
+  reassignPressReleaseProject:
+    description: >
+      Move a release to another project in the same workspace. Its contacts, kit
+      and boilerplate are CARRIED across (remapped to the target project's
+      equivalents where they exist), not stranded.
+    http: POST /dashboard/content/press/{release_id}/reassign-project
+    params:
+      release_id:        { type: string, required: true, description: 'Press release id.' }
+      target_project_id: { type: string, required: true, description: 'Destination project id (proj_…) in the same workspace.' }
+    response: { format: json }
+
+  listPressContacts:
+    description: List the press-contact roster journalists see on a release.
+    http: GET /dashboard/content/press/contacts
+    params: {}
+    response: { format: json }
+
+  getPressContact:
+    description: Get one press contact.
+    http: GET /dashboard/content/press/contacts/{contact_id}
+    params:
+      contact_id: { type: string, required: true, description: 'Press contact id.' }
+    response: { format: json }
+
+  createPressContact:
+    description: Create a press contact, then attach it to releases via contact_ids.
+    guidance:
+      use: "add the person journalists should contact about a story"
+      next: "createPressRelease with contact_ids=[<this id>]"
+    http: POST /dashboard/content/press/contacts
+    params:
+      name:     { type: string, required: true, description: 'Display name.' }
+      title:    { type: string, required: false, description: 'Job title, e.g. "Head of Communications".' }
+      email:    { type: string, required: false }
+      phone:    { type: string, required: false }
+      region:   { type: string, required: false, description: 'e.g. "EMEA".' }
+      beat:     { type: string, required: false, description: 'Topic handled, e.g. "Product & Engineering".' }
+      timezone: { type: string, required: false, description: 'IANA tz, e.g. "Europe/Berlin".' }
+      avatar_url: { type: string, required: false }
+      sort:     { type: integer, required: false }
+    response: { format: json }
+
+  updatePressContact:
+    description: Update a press contact (PATCH — only the fields you send change).
+    http: PATCH /dashboard/content/press/contacts/{contact_id}
+    params:
+      contact_id: { type: string, required: true, description: 'Press contact id.' }
+      name:     { type: string, required: false }
+      title:    { type: string, required: false }
+      email:    { type: string, required: false }
+      phone:    { type: string, required: false }
+      region:   { type: string, required: false }
+      beat:     { type: string, required: false }
+      timezone: { type: string, required: false }
+      avatar_url: { type: string, required: false }
+      sort:     { type: integer, required: false }
+    response: { format: json }
+
+  deletePressContact:
+    description: Delete a press contact. Releases that listed it simply stop showing it.
+    http: DELETE /dashboard/content/press/contacts/{contact_id}
+    params:
+      contact_id: { type: string, required: true, description: 'Press contact id.' }
+    response: { format: json }
+
+  listPressBoilerplates:
+    description: List boilerplates — the reusable "About <company>" block appended to a release.
+    http: GET /dashboard/content/press/boilerplates
+    params:
+      language: { type: string, required: false, description: 'Filter to one ISO language code, e.g. "de".' }
+    response: { format: json }
+
+  getPressBoilerplate:
+    description: Get one boilerplate.
+    http: GET /dashboard/content/press/boilerplates/{boilerplate_id}
+    params:
+      boilerplate_id: { type: string, required: true, description: 'Boilerplate id.' }
+    response: { format: json }
+
+  createPressBoilerplate:
+    description: Create a boilerplate. Hold one per language and mark one is_default.
+    http: POST /dashboard/content/press/boilerplates
+    params:
+      label:      { type: string, required: true, description: 'Internal label, e.g. "About Acme — short".' }
+      body:       { type: string, required: true, description: 'The boilerplate prose.' }
+      language:   { type: string, required: false, description: 'ISO code, default "en".' }
+      is_default: { type: boolean, required: false }
+    response: { format: json }
+
+  updatePressBoilerplate:
+    description: Update a boilerplate (PATCH — only the fields you send change).
+    http: PATCH /dashboard/content/press/boilerplates/{boilerplate_id}
+    params:
+      boilerplate_id: { type: string, required: true, description: 'Boilerplate id.' }
+      label:      { type: string, required: false }
+      body:       { type: string, required: false }
+      language:   { type: string, required: false }
+      is_default: { type: boolean, required: false }
+    response: { format: json }
+
+  deletePressBoilerplate:
+    description: Delete a boilerplate. Releases referencing it fall back to the default.
+    http: DELETE /dashboard/content/press/boilerplates/{boilerplate_id}
+    params:
+      boilerplate_id: { type: string, required: true, description: 'Boilerplate id.' }
+    response: { format: json }
+
+  listPressKits:
+    description: >
+      List media kits with their assets. Kits are STORY-scoped, not one-per-company
+      — a company can hold many (launch kit, brand kit, exec headshots).
+    http: GET /dashboard/content/press/kits
+    params: {}
+    response: { format: json }
+
+  getPressKit:
+    description: Get one media kit with its assets (each carries its URL, mime type and file size).
+    http: GET /dashboard/content/press/kits/{kit_id}
+    params:
+      kit_id: { type: string, required: true, description: 'Media kit id.' }
+    response: { format: json }
+
+  createPressKit:
+    description: Create a media kit. It starts empty — add files with attachPressKitAsset.
+    guidance:
+      use: "bundle the logos, screenshots and headshots journalists download with a story"
+      next: "attachPressKitAsset per file, then createPressRelease with media_kit_id"
+    http: POST /dashboard/content/press/kits
+    params:
+      slug:        { type: string, required: true, description: 'URL-safe kit slug.' }
+      name:        { type: string, required: true, description: 'Display name.' }
+      description: { type: string, required: false }
+      is_default:  { type: boolean, required: false }
+    response: { format: json }
+
+  updatePressKit:
+    description: Update a media kit (PATCH — only the fields you send change).
+    http: PATCH /dashboard/content/press/kits/{kit_id}
+    params:
+      kit_id:      { type: string, required: true, description: 'Media kit id.' }
+      slug:        { type: string, required: false }
+      name:        { type: string, required: false }
+      description: { type: string, required: false }
+      is_default:  { type: boolean, required: false }
+    response: { format: json }
+
+  deletePressKit:
+    description: Delete a media kit. The underlying media files are NOT deleted — only the kit and its asset links.
+    http: DELETE /dashboard/content/press/kits/{kit_id}
+    params:
+      kit_id: { type: string, required: true, description: 'Media kit id.' }
+    response: { format: json }
+
+  attachPressKitAsset:
+    description: Attach an ALREADY-UPLOADED media file to a kit.
+    guidance:
+      use: "put a logo pack, screenshot or headshot into a media kit"
+      warn: "this does NOT upload — call uploadMedia (or the media tools) first and pass the resulting media id. File size is read from the media record automatically."
+    http: POST /dashboard/content/press/kits/{kit_id}/assets
+    params:
+      kit_id:   { type: string, required: true, description: 'Media kit id.' }
+      media_id: { type: string, required: true, description: 'Id of an EXISTING media row.' }
+      caption:  { type: string, required: false }
+      sort:     { type: integer, required: false }
+    response: { format: json }
+
+  detachPressKitAsset:
+    description: Remove one asset from a kit. The underlying media file is untouched.
+    http: DELETE /dashboard/content/press/kits/{kit_id}/assets/{media_id}
+    params:
+      kit_id:   { type: string, required: true, description: 'Media kit id.' }
+      media_id: { type: string, required: true, description: 'Id of an EXISTING media row (upload first — this does not upload).' }
+    response: { format: json }
+
   # ─────────────────────── PUBLIC DISCOVERY + AGENT HELP ───────────────────────
   getHelp:
     description: >

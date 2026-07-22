@@ -105,6 +105,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
 | Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
+| Run a newsroom — publish a press release, with press contacts, a boilerplate and a downloadable media kit | `createPressContact`→`createPressBoilerplate`→`createPressKit`→`createPressRelease`→`publishPressRelease` (or `schedulePressRelease`) | `references/press-newsroom.md` |
 | Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
 | Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
 | Group pages under a folder + have a menu track it automatically | `createPage`(`is_folder`)→`updatePage`(`parent_id`)→`updateNavigation`(`source: {kind:"folder", folder_id}`) | `references/content.md` |
@@ -180,6 +181,10 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
   records, publish + expose (is_public), and render them as a dynamic component.
 - `references/content.md` — pages, posts, docs, authors/tags/categories, nav,
   settings, domains. **Read before any content write.**
+- `references/press-newsroom.md` — run a newsroom: press releases plus the
+  contact roster, boilerplates and media kits around them. **Read before any
+  press write** — scheduling records intent but does not yet auto-publish, and
+  publishing notifies journalists irreversibly.
 - `references/components.md` — reusable components: create, the css-field rule,
   versions, rollback, update-and-propagate.
 - `references/templates-deploy.md` — themes, starter sites, Liquid template
