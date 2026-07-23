@@ -53,6 +53,7 @@ guidance:
     - "\"make an image of X\" → generate(model=<a text-to-image id>, params={prompt: X})"
     - "\"say this out loud / voiceover\" → generate(model=openai/tts-1, params={text: …, voice: …})"
     - "\"what video models are there\" → list(modality=text-to-video)"
+    - "\"use my saved prompt X\" → generate(model=…, prompt=\"prompt:<id>\") — server-expands the saved {system/prompt-text, model, settings}; your params override. See references/saved-prompts.md."
   pitfalls:
     - "Undeclared params are SILENTLY DROPPED before the provider call — read the model's `inputs` first (list), pass only declared keys. Run scripts/validate-media-params.mjs to prove it."
     - "`model` is `<provider>/<model>` (e.g. fal/flux-dev, kie/veo-3-fast, openai/tts-1) — the slash is part of the id, pass it whole. Get valid ids from `list`."

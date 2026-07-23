@@ -54,6 +54,7 @@ your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
 - **Account for spend** — read usage, per-call cost, and traces. → [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
 - **Stream** — token-by-token SSE, and where job events live. → [references/stream-and-events.md](references/stream-and-events.md).
 - **Embed text** — vectorise one string or a batch through the gateway (`agent/embed-small|large`), no raw OpenAI key needed. → [references/embeddings.md](references/embeddings.md).
+- **Reuse a saved prompt** — reference `prompt:<id>` / `prompt.<name>` in a completion's `prompt` field; the server expands the stored system-prompt/model/settings, your body overrides. → [references/saved-prompts.md](references/saved-prompts.md).
 
 <HARD-GATE name="no-pii-on-free-tier">
 Free-tier providers (Groq, Mistral-free, OpenRouter `:free`) may use request data
@@ -90,6 +91,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 | read how much was spent — usage, per-call cost, traces, p95 latency | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | stream tokens as they generate — or watch *job* events (not completion tokens) | [references/stream-and-events.md](references/stream-and-events.md) |
 | embed text / build a vector index — single or batch, no raw OpenAI key | [references/embeddings.md](references/embeddings.md) |
+| reuse a saved system-prompt/model/settings bundle by reference | [references/saved-prompts.md](references/saved-prompts.md) |
 | see how this compares to OpenRouter / LiteLLM / Portkey | [references/competitor-landscape.md](references/competitor-landscape.md) |
 | know which CLI/MCP surfaces are MISSING (and the HTTP workaround) | [references/gaps.md](references/gaps.md) |
 

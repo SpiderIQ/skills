@@ -50,6 +50,10 @@ your ──Bearer PAT──▶
   `format`. Returns a stored audio URL. → [references/audio.md](references/audio.md).
 - **Whose key pays** — generation uses the brand's OWN provider key (BYOK).
   `billed_usd: 0` on the response is EXPECTED, not free. → [references/byok-keys.md](references/byok-keys.md).
+- **Reuse a prompt** — save a `{system_prompt, model, settings, reference media}`
+  bundle once and reference it as `prompt:<id>` (stable) or `prompt.<name>` (within
+  a project); the server expands it and your explicit params win.
+  → [references/saved-prompts.md](references/saved-prompts.md).
 
 ## Decision tree
 
@@ -59,6 +63,8 @@ your ──Bearer PAT──▶
 | Generate an image | `gate_media_generate` | `fal/flux-dev`, `openai/gpt-image-1` |
 | Generate a video | `gate_media_generate` | `kie/veo-3-fast` |
 | Generate speech (TTS) | `gate_media_generate` | `openai/tts-1` |
+| Reuse a saved prompt | `gate_media_generate` (`prompt:<id>`) | any + a saved prompt |
+| Save / find / manage a prompt | `gate_prompt_create` · `_list` · `_search` · `_get` · `_delete` | — |
 
 ## The one rule that trips agents up
 
