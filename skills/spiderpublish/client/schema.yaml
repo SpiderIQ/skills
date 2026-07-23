@@ -1359,6 +1359,10 @@ methods:
 
   applySiteTemplate:
     description: Clone a curated starter site (pages + nav + theme settings) into this brand as drafts. Two-phase gated.
+    guidance:
+      use: "adopt a curated starter site in one call — e.g. slug 'newsroom' composes a full single-page newsroom (releases list + media kit + 'As seen in' marquee + contacts/boilerplate), adopting the tenant's palette"
+      next: "edit the cloned DRAFT copy/colours, then publishPage -> deployPreview -> deployProduction -> content_visual_check. Design guide: references/press-page-design.md"
+      warn: "Two-phase: dry_run:true first -> confirm_token -> pass it back. The clone is a DRAFT — not live until you deploy."
     http: POST /dashboard/templates/apply-site-template/{slug}
     params:
       slug:          { type: string,  required: true, description: 'Starter-site slug (from listSiteTemplates)' }
@@ -1517,8 +1521,32 @@ methods:
 
   # ────────────────────────────── PRESS / NEWSROOM ─────────────────────────────
   # A full newsroom: releases + the contact roster, boilerplates and media kits a
-  # real one needs. NOTE: there is deliberately NO embargo method — the embargo
-  # endpoint does not exist yet and nothing mints an embargo token.
+  # real one needs. Scheduling AND embargo are both live (a background sweep flips
+  # `scheduled`/`embargoed` → `published` when due). Embargo mints per-journalist
+  # preview tokens — see embargoPressRelease below.
+  #
+  # PRESS PAGE COMPONENTS (declared here so a newsroom recipe's props aren't stripped;
+  # pass them via insertSection.props / createPage blocks[].props). Full design guide:
+  # references/press-page-design.md.
+  #   sys-press-releases (kind=dynamic, block_type=list, source `press`):
+  #     props: heading, subheading, empty_message, layout(list|featured|grid, default list —
+  #       featured/grid incoming, flat list today)
+  #     source knobs: default_sort(-published_at — NEWEST-first needs the leading `-`),
+  #       default_limit(6), default_filter({}); block data_binding overrides via sort/limit/filter
+  #     item fields: slug,title,subheadline,release_type,dateline_city,dateline_date,
+  #       published_at,hero_image_url,hero_image_alt,is_featured
+  #   sys-press-kit (required: assets):
+  #     props: heading, description, empty_text, zip_download_url, zip_size_human,
+  #       layout(list|grid, default list — grid incoming); assets[] items:
+  #       download_url(counted, preferred), r2_url, original_name, filename, caption,
+  #       mime_type, file_size_human, alt_text
+  #     ⚠ drive colour from theme tokens (var(--heading)/var(--border)); never hardcode a scheme
+  #   sys-press-marquee (kind=interactive, js_runtime=none):
+  #     props: headline(def "As seen in"), subline, aria_label(def "As seen in"),
+  #       logos[](src,alt,href?,title?; maxItems 24; DEFAULT [] — empty until tenant uploads),
+  #       speed_seconds(10–240, def 40), direction(ltr|rtl), monochrome(bool, def true),
+  #       accent(subtle|primary|secondary), density(compact|comfy)
+  # Apply the one-click starter: listSiteTemplates → applySiteTemplate(slug="newsroom").
   listPressReleases:
     description: >
       List press releases newest-first, DRAFTS INCLUDED (this is the author door,
@@ -1655,7 +1683,7 @@ methods:
     guidance:
       use: "stage an announcement for a known future moment"
       next: "unschedulePressRelease to cancel, or publishPressRelease to go early"
-      warn: "the time MUST be in the future (a past time returns 400 — use publishPressRelease for an immediate go-live), and a naive datetime is read as UTC. The sweeper that auto-publishes at the scheduled moment is not live yet, so today this records intent rather than publishing unattended."
+      warn: "the time MUST be in the future (a past time returns 400 — use publishPressRelease for an immediate go-live), and a naive datetime is read as UTC. A background sweep auto-publishes the release at the scheduled moment, so this IS an unattended timed launch."
     http: POST /dashboard/content/press/{release_id}/schedule
     params:
       release_id:   { type: string, required: true, description: 'Press release id.' }
@@ -1668,6 +1696,21 @@ methods:
     params:
       release_id: { type: string, required: true, description: 'Press release id.' }
     response: { format: json }
+
+  embargoPressRelease:
+    description: >
+      Put a release under embargo and mint ONE preview token per press contact.
+      Status becomes `embargoed`; the release stays off the public door until a
+      background sweep lifts it to `published` at `embargo_until`.
+    guidance:
+      use: "run a journalist-preview flow — hand each contact a private preview link before the public go-live"
+      next: "email the returned embargo_tokens now; the sweep auto-publishes at embargo_until"
+      warn: "`embargo_tokens` are returned EXACTLY ONCE (no later read re-surfaces them). `embargo_until` MUST be a future instant; a naive datetime is read as UTC. The bare `embargo_token` never serialises on any other response."
+    http: POST /dashboard/content/press/{release_id}/embargo
+    params:
+      release_id:    { type: string, required: true, description: 'Press release id.' }
+      embargo_until: { type: string, required: true, description: 'Future ISO-8601 timestamp when the embargo lifts, e.g. "2026-08-01T09:00:00Z".' }
+    response: { format: json }   # PressReleaseEmbargoResult — carries embargo_tokens[] (per-recipient, once)
 
   reassignPressReleaseProject:
     description: >

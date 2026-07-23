@@ -7,7 +7,10 @@ agent — which is the differentiator here. No other newsroom product exposes a
 write-capable API; the incumbents are read-only or have no public API at all.
 
 Reach for a **post** instead for ongoing editorial content, and the **changelog**
-for version-stamped release notes.
+for version-stamped release notes. To **design the newsroom page itself** — which
+components to compose, the four archetypes, the `press` data source — see
+`references/press-page-design.md`. This reference is the *content* half (the
+releases); that one is the *page* half.
 
 ---
 
@@ -15,7 +18,7 @@ for version-stamped release notes.
 
 | Thing | What it is |
 |---|---|
-| **Release** | The announcement. Slug + headline + body, optional dateline, hero image, legal tail. Statuses: `draft` → `scheduled` → `published` → `archived`. |
+| **Release** | The announcement. Slug + headline + body, optional dateline, hero image, legal tail. Statuses: `draft` → `scheduled` / `embargoed` → `published` → `archived`. A background sweep flips `scheduled` and `embargoed` releases to `published` when their time arrives. |
 | **Contact** | A press contact (name, title, email, phone, region, beat, timezone). Attach several to a release via `contact_ids`. |
 | **Boilerplate** | The reusable "About <company>" paragraph. One per language; mark one `is_default`. |
 | **Media kit** | A downloadable asset bundle. **Story-scoped, not one-per-company** — hold a launch kit, a brand kit, exec headshots. |
@@ -62,6 +65,9 @@ call instead of three round-trips.
 
 No `deploySite` is required — published releases render live from the API.
 
+→ To surface these releases on a page (the newsroom itself), see
+`references/press-page-design.md`. Schedule/embargo timing: Gotchas below.
+
 ---
 
 ## Gotchas
@@ -78,20 +84,29 @@ Feeding it an integer will not work, and there is no `offset`.
 `attachPressKitAsset` takes an **existing** media id. Upload first, then attach.
 File size is denormalized from the media record automatically — you never send it.
 
-**`schedulePressRelease` needs a future time.**
-A past timestamp returns 400 and tells you to use `publishPressRelease`. A naive
-datetime is read as UTC.
+**`schedulePressRelease` auto-publishes at the set time.**
+The status flips to `scheduled`, and a background sweep flips it to `published`
+the moment it's due — you can safely promise a client an unattended timed launch.
+The time MUST be in the future; a past timestamp returns 400 and tells you to use
+`publishPressRelease` for an immediate go-live. A naive datetime is read as UTC.
 
-**Scheduling records intent — it does not yet publish unattended.**
-The status flips to `scheduled`, but the sweeper that flips it to `published` at
-that moment ships in a later slice. Until it lands, call `publishPressRelease`
-when you actually want a release live. Do not promise a client an unattended
-timed launch today.
+**WRONG** — a naive local time for a 9am launch, or a past time:
+```
+schedulePressRelease(release_id, "2026-08-01 09:00")   # read as 09:00 UTC, not local
+schedulePressRelease(release_id, "2020-01-01T00:00:00Z")  # 400 — use publishPressRelease
+```
+**RIGHT** — an explicit future UTC instant:
+```
+schedulePressRelease(release_id, "2026-08-01T09:00:00Z")   # fires unattended at 09:00 UTC
+```
 
-**There is no embargo method, on purpose.**
-The `embargoed` status and `embargo_until` exist on the model, but there is no
-embargo endpoint and nothing mints an embargo token yet. Do not build a
-journalist-preview flow on it.
+**Embargo mints per-journalist preview tokens.**
+`embargoPressRelease(release_id, embargo_until=…)` sets `status='embargoed'` and
+returns one preview token **per press contact**, under `embargo_tokens` — surfaced
+**exactly once**, so email them out immediately (no later read returns them again).
+The release stays off the public door until the same sweep lifts it at
+`embargo_until`. `embargo_until` must be a future instant. This is how you run a
+real journalist-preview flow.
 
 **Publishing notifies journalists.**
 `publishPressRelease` fires the subscriber notification. `unpublishPressRelease`
@@ -143,3 +158,10 @@ spideriq content press boilerplates create --label "About Acme" --body "…" --d
 spideriq content press kits create --slug series-a-kit --name "Series A kit"
 spideriq content press kits attach <kit_id> <media_id> --caption "Logo pack"
 ```
+
+Scheduling has a CLI verb (`press schedule`); **embargo does not** — drive
+`embargoPressRelease` via the API/skill method (there is no `press embargo` CLI
+verb by design). The token-minting response is only returned on the API call.
+
+→ Design the page these releases appear on: `references/press-page-design.md`.
+→ Themes / deploy mechanics: `references/templates-deploy.md`.

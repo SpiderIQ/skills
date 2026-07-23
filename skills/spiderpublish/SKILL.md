@@ -105,7 +105,8 @@ Confirm the deploy step happened before reporting a change as live.
 | Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
 | Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
-| Run a newsroom — publish a press release, with press contacts, a boilerplate and a downloadable media kit | `createPressContact`→`createPressBoilerplate`→`createPressKit`→`createPressRelease`→`publishPressRelease` (or `schedulePressRelease`) | `references/press-newsroom.md` |
+| Run a newsroom — publish a press release, with press contacts, a boilerplate and a downloadable media kit | `createPressContact`→`createPressBoilerplate`→`createPressKit`→`createPressRelease`→`publishPressRelease` (or `schedulePressRelease` / `embargoPressRelease`) | `references/press-newsroom.md` |
+| **Design the newsroom PAGE** — compose the press components, pick 1 of 4 archetypes, bind the `press` source | `listSiteTemplates`→`applySiteTemplate`(`newsroom`) · or `createPage`→`insertSection`(`sys-press-releases`·`sys-press-kit`·`sys-press-marquee`) | `references/press-page-design.md` |
 | Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
 | Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
 | Group pages under a folder + have a menu track it automatically | `createPage`(`is_folder`)→`updatePage`(`parent_id`)→`updateNavigation`(`source: {kind:"folder", folder_id}`) | `references/content.md` |
@@ -183,8 +184,11 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
   settings, domains. **Read before any content write.**
 - `references/press-newsroom.md` — run a newsroom: press releases plus the
   contact roster, boilerplates and media kits around them. **Read before any
-  press write** — scheduling records intent but does not yet auto-publish, and
-  publishing notifies journalists irreversibly.
+  press write** — scheduling auto-publishes at the set time and embargo mints
+  per-journalist preview tokens; publishing notifies journalists irreversibly.
+- `references/press-page-design.md` — **design the newsroom PAGE**: compose the
+  three press components, the four archetypes, the `press` data source
+  (`-published_at`), theme-token discipline. **Read before building a newsroom.**
 - `references/components.md` — reusable components: create, the css-field rule,
   versions, rollback, update-and-propagate.
 - `references/templates-deploy.md` — themes, starter sites, Liquid template
