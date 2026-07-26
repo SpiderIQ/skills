@@ -44,13 +44,23 @@ insertSection(component_slug="sys-press-releases",
               props={ items: [ {title: "…"}, {title: "…"} ],   # ❌ not how a dynamic list works
                       sort: "published_at" })                   # ❌ wrong key AND oldest-first
 ```
-**RIGHT** — bind the source, newest-first, capped:
+**RIGHT** — bind the source EXPLICITLY, newest-first, capped. `data_binding` is a **first-class
+parameter on the insert call**, not a decorative comment — a `sys-press-releases` block with no
+`data_binding` attaches to no source and renders an **empty list** (see the landmine below):
 ```
 insertSection(component_slug="sys-press-releases",
               props={ heading: "Latest news",
-                      subheading: "Announcements, statements and coverage." })
-# the block's data_binding carries { source_id: "press", sort: "-published_at", limit: 6 }
+                      subheading: "Announcements, statements and coverage." },
+              data_binding={ source_id: "press", sort: "-published_at", limit: 6 })
+#             ^^^^^^^^^^^^ REQUIRED — this is what binds the block to the live `press` source.
 ```
+
+> **The empty-newsroom landmine.** Inserting `sys-press-releases` does **not** auto-bind to the
+> `press` source. The component *declares* `press` as its source with a `-published_at` default sort,
+> but a **from-scratch page block only fetches releases when you pass `data_binding.source_id="press"`
+> on the insert.** Omit it and the block ships **blank** — the single worst way to ship a newsroom.
+> (The one-click `applySiteTemplate` path already has this binding baked into the cloned page, which
+> is why the empty-list trap only bites the from-scratch build.)
 
 → Component prop tables: below. Data-source landmine also in `press-newsroom.md` → Gotchas.
 
@@ -92,8 +102,10 @@ This is the canonical build. Every other archetype is this sequence plus archety
 
 3. insertSection(page_id, component_slug="sys-press-releases",
                  props={ heading: "Newsroom",
-                         subheading: "Official announcements and press contacts." })
-   # binds the `press` source (newest-first, limit 6) automatically
+                         subheading: "Official announcements and press contacts." },
+                 data_binding={ source_id: "press", sort: "-published_at", limit: 6 })
+   # ⚠️ data_binding is REQUIRED — it does NOT auto-bind. Drop it and the release list ships EMPTY.
+   #    source_id="press" attaches the block to the live source; sort="-published_at" is newest-first.
 
 4. insertSection(page_id, component_slug="sys-press-kit",
                  props={ heading: "Media kit",
@@ -108,18 +120,27 @@ This is the canonical build. Every other archetype is this sequence plus archety
 8. content_visual_check(<live newsroom url>)  # a client-rendered list fools curl — visual-check it
 ```
 
-**One-click path (preferred when the starter exists).** The platform ships a `newsroom` single-page
-starter that composes all of the above:
+**One-click path (preferred when the starter exists).** The platform ships **five** newsroom
+starters — pick the one that matches your chosen archetype:
+
+| Archetype | Template slug | Notes |
+|---|---|---|
+| Minimal / Solo | `newsroom-minimal` | Releases(list) · kit · contact · boilerplate. The zero-gap default. |
+| Startup / Launch (dark) | `newsroom-startup-dark` | Hero · marquee(high) · releases(list) · kit · contact. |
+| Startup / Launch (light) | `newsroom-startup-light` | Same source page as dark; light palette. |
+| Corporate / Enterprise | `newsroom-corporate` | Media-resources page that links up to the built-in `/press` route for the filterable register. |
+| Agency / Creative | `newsroom-agency` | Editorial hero · releases(grid) · kit(grid) · marquee · contacts. |
 
 ```
-listSiteTemplates()                                   # find slug "newsroom" (is_single_page=true)
-applySiteTemplate(slug="newsroom", dry_run=true)      # → confirm_token (two-phase, destructive-gated)
-applySiteTemplate(slug="newsroom", confirm_token=…)   # clones the composed page as a DRAFT
+listSiteTemplates()                                        # find the newsroom-* slug you want (is_single_page=true)
+applySiteTemplate(slug="newsroom-minimal", dry_run=true)   # → confirm_token (two-phase, destructive-gated)
+applySiteTemplate(slug="newsroom-minimal", confirm_token=…)# clones the composed page as a DRAFT
 # then edit copy/colours on the draft → publishPage → deploy → visual-check
 ```
 
 The clone lands as a **draft** and adopts the tenant's palette; the releases list is already bound to
-the live `press` source. Adapt copy, don't rebuild.
+the live `press` source (the `data_binding` is baked into the starter — this is why the empty-list
+trap above only bites the from-scratch build). Adapt copy, don't rebuild.
 
 → Two-phase deploy mechanics: `references/templates-deploy.md`. Release authoring: `press-newsroom.md`.
 

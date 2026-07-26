@@ -102,7 +102,7 @@ schedulePressRelease(release_id, "2026-08-01T09:00:00Z")   # fires unattended at
 
 **Embargo mints per-journalist preview tokens.**
 `embargoPressRelease(release_id, embargo_until=…)` sets `status='embargoed'` and
-returns one preview token **per press contact**, under `embargo_tokens` — surfaced
+returns one preview token **per recipient**, under `embargo_tokens` — surfaced
 **exactly once**, so email them out immediately (no later read returns them again).
 The release stays off the public door until the same sweep lifts it at
 `embargo_until`. `embargo_until` must be a future instant. This is how you run a
