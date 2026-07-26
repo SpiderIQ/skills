@@ -1,0 +1,167 @@
+# submit-press-release — API surface + envelope (guidance:) block.
+# See opvs-ai/vendors 04-publishing/4-layer-and-envelope.md
+#
+# base_url is the RELATIVE base OPVS composes the upstream call from
+# (provider_config.upstream.base_url + method http path). The `check` drift gate
+# resolves each method path against `/api/v1` and diffs it vs the live OpenAPI —
+# all three paths below exist in https://spideriq.ai/api/v1/openapi.json.
+# Params mirror app/schemas/spider_pr.py (SpiderPRJobSubmit) as shipped in 1.1.
+name: submit-press-release
+version: "0.1.0"
+description: >
+  Distribute a client's press release over the newswire. Submit a release
+  (title + body, plus optional summary/category/tags/contact), then poll for
+  the live published URL and the provider's wire report.
+category: communication
+base_url: /api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - submit press release
+  - distribute press release
+  - send out a press release
+  - newswire distribution
+  - publish an announcement
+  - press release wire
+
+guidance:
+  use: "Wire-distribute a press release the client has already written — one submit, then poll for the live published URL."
+  not:
+    - "spiderpublish (publish-skills) → host a newsroom/press page on the client's OWN site (content, not wire distribution)"
+    - "mail (mail-skills) → send email outreach; a press release is a newswire deliverable, not an email"
+  # No method takes a textual SEARCH query, so intent_aliases maps the natural-language
+  # nouns an agent uses for the release CONTENT to the canonical payload fields.
+  intent_aliases:
+    headline: title
+    press_release: body
+    announcement: body
+    subheadline: summary
+    keywords: tags
+  pitfalls:
+    - "Submit is ASYNC — it returns a job_id, NOT a published URL. The published_url only appears in getJobResults after the wire goes live (minutes, not seconds)."
+    - "Wrap the release under `payload`: {\"payload\": {\"title\": ..., \"body\": ...}}. A flat body (title/body at top level) 422s."
+
+methods:
+  # -- Submit -----------------------------------------------------------------
+  submitPressRelease:
+    description: >
+      Submit a press release for newswire distribution. The release is queued,
+      rendered to wire-ready HTML, and submitted to the distribution provider;
+      returns a job_id to poll. Requires title + body; summary, category, tags,
+      and a press contact are optional.
+    guidance:
+      use: "Call once the client has approved the release copy (title + body)."
+      next: "getJobStatus, getJobResults"
+      warn: "Async — returns a job_id, never the published URL. Do NOT re-submit while a job is in flight (each submit is a paid distribution)."
+      telemetry_signal_default: cold      # a create action (Q4)
+    http: POST /jobs/spiderPR/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: The press release content + distribution options.
+        properties:
+          title:
+            type: string
+            required: true
+            description: Headline of the press release (1-300 chars).
+          body:
+            type: string
+            required: true
+            description: Full body of the release, plain text or HTML (1-50000 chars).
+          summary:
+            type: string
+            required: false
+            description: Short summary / subheadline of the release (max 2000 chars).
+          category:
+            type: string
+            required: false
+            description: Release category/topic, e.g. "Technology", "Finance" (1-100 chars).
+          tags:
+            type: array
+            required: false
+            description: Keyword tags for the release (max 25).
+            items:
+              type: string
+          contact:
+            type: object
+            required: false
+            description: Media/press contact for the release. All sub-fields optional.
+            properties:
+              name:
+                type: string
+                required: false
+                description: Contact name for press enquiries.
+              email:
+                type: string
+                required: false
+                description: Contact email for press enquiries.
+              phone:
+                type: string
+                required: false
+                description: Contact phone for press enquiries.
+          provider:
+            type: enum
+            required: false
+            description: Wire-distribution provider (currently only "prnow").
+            values: ["prnow"]
+          scheduled_release_at:
+            type: datetime
+            required: false
+            description: Requested wire release time (ISO 8601). Omit for ASAP.
+          test:
+            type: boolean
+            required: false
+            description: Route the job to the test queue (local workers only).
+      priority:
+        type: integer
+        required: false
+        description: Job priority, 0 (lowest) to 10 (highest). Default 5.
+    response:
+      format: json
+
+  # -- Status -----------------------------------------------------------------
+  getJobStatus:
+    description: >
+      Check the current status of a submitted press-release job
+      (queued | processing | completed | failed).
+    guidance:
+      use: "Poll after submit (>= 3-5 s between calls) until status is completed or failed."
+      next: "getJobResults"
+      warn: "Poll no faster than every few seconds; wire distribution takes minutes."
+      telemetry_signal_default: hot       # a status read (Q4)
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job_id returned from submitPressRelease.
+    response:
+      format: yaml
+
+  # -- Results ----------------------------------------------------------------
+  getJobResults:
+    description: >
+      Retrieve the results of a completed press-release job — the distribution
+      status, the live published_url, the provider's wire_report_url, and the
+      publish time. Returns a typed error string if the wire rejected the release.
+    guidance:
+      use: "Call once getJobStatus reports completed to get the published_url + wire report."
+      next: ""
+      warn: "Before the wire goes live, status is queued/submitted and published_url is null — that's expected, keep polling."
+      telemetry_signal_default: warm
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: The job_id to fetch results for.
+    response:
+      format: yaml

@@ -1,0 +1,13 @@
+{
+  "title": "A SpiderPR submit is an async paid distribution: 201 = queued, not published; the URL comes later and a re-submit is a SECOND charge",
+  "summary": "POST /jobs/spiderPR/submit enqueues a wire-distribution job and returns a job_id with status 'queued' — it does NOT return a published_url. The release is rendered and submitted to the provider by a poll worker seconds-to-minutes later, then reaches 'published'. Reporting 'here's your link' off the 201 surfaces a URL that does not exist yet; poll getJobStatus until completed/failed, then read published_url + wire_report_url from getJobResults. There is no idempotency key, so a retried submit sends AND bills a second distribution — submit once, and if a prior submit 'looks stuck', poll its job_id rather than re-POSTing. A failed job is not retryable in place: its reason is in getJobResults.error; fix the copy and submit a NEW release.",
+  "created_at": "2026-07-26",
+  "updated_at": "2026-07-26",
+  "tags": ["spiderpr", "press-release", "async", "job-queue", "idempotency", "billing"],
+  "references": [
+    "app/api/v1/jobs/spiderpr.py (POST /spiderPR/submit -> 201 queued; dispatch_job worker_type='prNow')",
+    "app/schemas/spider_pr.py (SpiderPRJobSubmit wraps the release under `payload`; SpiderPRData carries status/published_url/wire_report_url/error)",
+    "SpiderPR World-B 1.1 (PR #2875, migration 467) — spiderPR job type + PostgreSQL job_queue dispatch",
+    "Analog: spidermail learnings/2026-06-10-queued-is-not-sent (async job, 201=queued, no idempotency key)"
+  ]
+}
