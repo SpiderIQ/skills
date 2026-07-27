@@ -28,41 +28,59 @@ renders for you — you do not build it.
 | **Boilerplate** | `press-boilerplate` (snippet) | The evergreen "About X" + a small fact sheet | Rendered inside the release |
 
 **The `press` data source** feeds `sys-press-releases`. It is a `kind='dynamic'` binding — the list
-stays current on its own; you never paste release rows into props. Its knobs are **`default_sort`**
-and **`default_limit`** (on the component's `sources[0]`), overridable per block via the block's
-`data_binding` (`sort` / `limit` / `filter`). The item fields a template can read: `slug`, `title`,
-`subheadline`, `release_type`, `dateline_city`, `dateline_date`, `published_at`, `hero_image_url`,
-`hero_image_alt`, `is_featured`.
+stays current on its own; you never paste release rows into props. **It binds itself.** The component
+declares `press` on its own `sources[0]` with `default_sort: -published_at` and `default_limit: 6`, and
+the renderer falls back to those whenever the block doesn't override them. So **inserting the component
+with nothing but `props` renders the live list, newest-first** — there is no binding step. The item
+fields a template can read: `slug`, `title`, `subheadline`, `release_type`, `dateline_city`,
+`dateline_date`, `published_at`, `hero_image_url`, `hero_image_alt`, `is_featured`.
 
-> The single most common newsroom bug is **oldest-first order.** The sort key must be
-> `-published_at` (with the leading minus). Drop the `-` and the renderer's default surfaces the
-> *oldest* release at the top — the exact opposite of a newsroom.
-
-**WRONG** — pasting rows or using the wrong knob name:
+**WRONG** — pasting rows, or trying to sort via a prop:
 ```
 insertSection(component_slug="sys-press-releases",
               props={ items: [ {title: "…"}, {title: "…"} ],   # ❌ not how a dynamic list works
-                      sort: "published_at" })                   # ❌ wrong key AND oldest-first
+                      sort: "published_at" })                   # ❌ `sort` is not a prop; silently ignored
 ```
-**RIGHT** — bind the source EXPLICITLY, newest-first, capped. `data_binding` is a **first-class
-parameter on the insert call**, not a decorative comment — a `sys-press-releases` block with no
-`data_binding` attaches to no source and renders an **empty list** (see the landmine below):
+**RIGHT** — just insert it. The `press` source, newest-first order and 6-item cap all come from the
+component:
 ```
 insertSection(component_slug="sys-press-releases",
               props={ heading: "Latest news",
-                      subheading: "Announcements, statements and coverage." },
-              data_binding={ source_id: "press", sort: "-published_at", limit: 6 })
-#             ^^^^^^^^^^^^ REQUIRED — this is what binds the block to the live `press` source.
+                      subheading: "Announcements, statements and coverage." })
+# renders the live press list, newest-first, capped at 6 — no data_binding needed
 ```
 
-> **The empty-newsroom landmine.** Inserting `sys-press-releases` does **not** auto-bind to the
-> `press` source. The component *declares* `press` as its source with a `-published_at` default sort,
-> but a **from-scratch page block only fetches releases when you pass `data_binding.source_id="press"`
-> on the insert.** Omit it and the block ships **blank** — the single worst way to ship a newsroom.
-> (The one-click `applySiteTemplate` path already has this binding baked into the cloned page, which
-> is why the empty-list trap only bites the from-scratch build.)
+### Overriding the source (sort / limit / filter) — use `createPage`/`updatePage`, NOT `insertSection`
 
-→ Component prop tables: below. Data-source landmine also in `press-newsroom.md` → Gotchas.
+You only need an explicit `data_binding` to **change** the defaults (a different sort, a bigger cap, a
+`release_type` filter). It is a **block-level** field, and the agent-facing path to it is the page's
+`blocks[]` array — **not** the insert call:
+
+```
+createPage(title="Newsroom", slug="newsroom", template="blank",
+           blocks=[{ id: "<uuid-you-generate>", type: "component",
+                     component_slug: "sys-press-releases",
+                     props: { heading: "Latest news" },
+                     data_binding: { source_id: "press", sort: "-published_at", limit: 12 } }])
+```
+
+> **`data_binding` is NOT a parameter on `insertSection`.** It exists on the raw HTTP
+> `POST /pages/{id}/insert-section` body, but it is **not declared** on this skill's `insertSection`,
+> on the `page_insert_section` MCP tool, or on the `@spideriq/core` client — and every one of those
+> surfaces **drops params it doesn't know** (see *Component prop reference* below). Pass it to
+> `insertSection` and it is silently stripped. Set it via `createPage`/`updatePage`
+> `blocks[].data_binding` instead.
+>
+> **Corollary:** because the component self-binds, an insert that "loses" the binding still renders
+> correctly. A blank release list is therefore almost never a binding problem — look at the tenant's
+> `snippets/block-renderer.liquid` override first (a stale copy drops `items:` and blanks **every**
+> dynamic block, press or not).
+
+> **Sort key: `-published_at`, with the leading minus.** Only relevant when you override the sort — the
+> component default already has it. Drop the `-` and you surface the *oldest* release at the top, the
+> exact opposite of a newsroom.
+
+→ Component prop tables: below. Release authoring: `press-newsroom.md`.
 
 ---
 
@@ -77,8 +95,8 @@ the honesty rules in the next section.
 |---|---|---|---|---|---|---|
 | **Minimal / Solo** | One reporter · "is this real, who do I email, grab a logo" | No hero — title + one-line lede | Flat list ✅ | `sys-press-releases`, `press-contact-block`, `press-boilerplate` | One column ≤64rem, dateline + title + excerpt, an email, a boilerplate | Near-monochrome, one link colour |
 | **Startup / Launch** | Tech press, investors, candidates · the new thing + proof | One launch, full-bleed (render/gradient) + CTA | Flat list + type badges ✅ | `sys-press-releases`, `sys-press-marquee`, kit optional | Changelog rhythm, coverage marquee HIGH as social proof, often no boilerplate | Can be dark, bold accent |
-| **Corporate / Enterprise** | Trade press, analysts, investors · the official version + a quote + a logo | Featured latest release as a large hero card | Featured-hero+list (see honesty) | `sys-press-releases`, `sys-press-marquee`, `sys-press-kit`, contact + boilerplate | Type-led restraint, fixed date column, regional contact routing, kit + logo wall prominent | Light, restrained, one accent |
-| **Agency / Creative** | Design press, prospective clients, juries · the visuals + the brand system | Editorial cover — oversized image, asymmetric type | Image-first grid (see honesty) | `sys-press-releases` (image-forward), `sys-press-kit` (front-and-centre), `sys-press-marquee` | The media kit *is* the point; work/press blur; expressive type | Expressive, bespoke palette |
+| **Corporate / Enterprise** | Trade press, analysts, investors · the official version + a quote + a logo | Featured latest release as a large hero card | **`/press` route** register (filter + year jump) + a media-resources companion page ✅ | `sys-press-marquee`, `sys-press-kit`, regional contacts + boilerplate (the register is the route, not a block) | Type-led restraint, fixed date column, regional contact routing, kit + logo wall prominent | Light, restrained, one accent |
+| **Agency / Creative** | Design press, prospective clients, juries · the visuals + the brand system | Editorial cover — oversized image, asymmetric type | `layout: grid` ✅ (block-level) | `sys-press-releases` (image-forward), `sys-press-kit` (front-and-centre), `sys-press-marquee` | The media kit *is* the point; work/press blur; expressive type | Expressive, bespoke palette |
 
 **Build the Minimal archetype first.** It maps to the shipped components with **zero gaps** and is
 the right default — a flat reverse-chron list is genuinely correct for a solo newsroom, not a
@@ -102,10 +120,10 @@ This is the canonical build. Every other archetype is this sequence plus archety
 
 3. insertSection(page_id, component_slug="sys-press-releases",
                  props={ heading: "Newsroom",
-                         subheading: "Official announcements and press contacts." },
-                 data_binding={ source_id: "press", sort: "-published_at", limit: 6 })
-   # ⚠️ data_binding is REQUIRED — it does NOT auto-bind. Drop it and the release list ships EMPTY.
-   #    source_id="press" attaches the block to the live source; sort="-published_at" is newest-first.
+                         subheading: "Official announcements and press contacts." })
+   # binds itself: the component's sources[0] carries press + -published_at + limit 6.
+   # Only reach for an explicit data_binding to CHANGE those — and set it via
+   # createPage/updatePage blocks[], never insertSection (which strips it). See above.
 
 4. insertSection(page_id, component_slug="sys-press-kit",
                  props={ heading: "Media kit",
@@ -138,9 +156,9 @@ applySiteTemplate(slug="newsroom-minimal", confirm_token=…)# clones the compos
 # then edit copy/colours on the draft → publishPage → deploy → visual-check
 ```
 
-The clone lands as a **draft** and adopts the tenant's palette; the releases list is already bound to
-the live `press` source (the `data_binding` is baked into the starter — this is why the empty-list
-trap above only bites the from-scratch build). Adapt copy, don't rebuild.
+The clone lands as a **draft** and adopts the tenant's palette; the releases list renders the live
+`press` source, and the starter's blocks already carry the right `layout` ids for that archetype (the
+one thing an `insertSection` build cannot set — see the layout table below). Adapt copy, don't rebuild.
 
 → Two-phase deploy mechanics: `references/templates-deploy.md`. Release authoring: `press-newsroom.md`.
 
@@ -154,24 +172,69 @@ design research:
 | Pattern | Tier | What that means for you |
 |---|---|---|
 | Flat reverse-chron list | ✅ Ships today | `sys-press-releases` renders exactly this on a composed page |
-| Ungated media kit (per-asset + zip + sizes) | ✅ Ships today | `sys-press-kit` — but drive colour from tokens (see below) |
+| Ungated media kit (per-asset + zip + sizes) | ✅ Ships today | `sys-press-kit` — token-driven palette, legible on light and dark tenants |
 | "As seen in" marquee | ✅ Ships today | `sys-press-marquee` — **ships empty**; shows nothing until the tenant uploads logos |
-| Featured-hero + list · card grid | 🟡 New / route-only | `layout: featured` / `layout: grid` on `sys-press-releases` are **incoming** (not on a composed page yet). A filterable, year-grouped index is a **`/press` route** feature, not a composed-single-page one |
-| Media-kit thumbnail grid | 🟡 Incoming | `sys-press-kit` `layout: grid` is being added; today the kit is a text list of assets |
+| Featured-hero + list · card grid | ✅ Ships today | `layout: featured` / `layout: grid` on `sys-press-releases` render on a composed page, and `is_featured` elevates that release to the hero. ⚠️ set as **`blocks[].layout`** — `insertSection` cannot |
+| Media-kit thumbnail grid | ✅ Ships today | `sys-press-kit` `layout: grid` — a thumbnail card per asset. ⚠️ this one is **`props.layout`** (see the asymmetry table) |
 | Type filter / year jump / RSS | Route-only | These live on the `/press` route template, not on a composed newsroom block |
 
 **The composed-page vs `/press`-route distinction (internalise this).** A composed single-page
-newsroom (what `applySiteTemplate` builds, what these components target) renders a **flat list** — no
-filters, no year grouping, no featured slot. All the rich index behaviour (type-filter links,
-year-jump nav, a lead-hero for the newest release) lives only on the **`/press` route** template,
-which a composed page does not use. So: **Minimal and Startup ship today on the flat list**;
-**Corporate's featured-hero and Agency's grid** either wait on the incoming `layout` props or route
-the archetype to a full `/press` page instead of a composed one. Do not mock a featured/grid/filter
-*composed* index as if it renders today.
+newsroom (what `applySiteTemplate` builds, what these components target) now renders **all three
+release layouts** — flat list, featured-hero, and card grid. What a composed page still cannot do is
+the **navigational** index behaviour: type-filter links, year-jump nav, and RSS. Those live only on the
+**`/press` route** template. So the split is now about *filtering*, not *layout*:
+
+- **Minimal · Startup · Agency** — composed page, done. Flat list or `grid`, no route needed. ✅
+- **Corporate** — still routes to **`/press`** for the register, and that is deliberate: it is the
+  archetype whose readers filter by type and jump by year, which only the route can do. The shipped
+  `newsroom-corporate` starter therefore clones a *media-resources companion page* (kit · marquee ·
+  regional contacts · boilerplate) that links up to `/press`, and carries **no** release index at all.
+  Don't "improve" it by composing a `featured` index onto it — you'd trade filtering for a hero.
+- Use `featured` when you want a lead story **without** needing filters (a Startup launch page, say).
+
+Do not mock a filterable *composed* index as if it renders today — but do use featured/grid freely.
 
 **The marquee ships empty.** `sys-press-marquee` defaults to `logos: []`. A freshly-applied template
 shows *no logos* until the tenant wires their own (there is no preset gallery). Tell the client: the
 "As seen in" strip is blank until you upload publication logos to the media library and list them.
+
+### ⚠️ `layout` lives in a DIFFERENT place on each component — and both wrong answers fail silently
+
+The two press components both document a `layout`, but the renderer reads them from opposite places.
+Neither mistake raises an error, logs a warning, or emits an HTML comment — you just get the default
+variant and no clue why. Verified live on both components:
+
+| Component | Set it as | Reachable via | Wrong answer (silent no-op) |
+|---|---|---|---|
+| `sys-press-releases` (`list`·`featured`·`grid`) | **block-level `layout`** | `createPage`/`updatePage` `blocks[].layout` **only** — not `insertSection` | `props.layout` → renders the plain list, no hero, no grid |
+| `sys-press-kit` (`list`·`grid`) | **`props.layout`** | anywhere props go — `insertSection(props={layout:"grid"})` works | block-level `layout` → renders the list variant |
+
+Why they differ: the release list ships a **separate `html_template` per layout variant**, so the
+renderer swaps the whole template by `block.layout`. The kit has **one** template that branches
+internally (`{% if layout == 'grid' %}`), and that `layout` resolves from props. The kit *also*
+declares `layouts` metadata, so a block-level `layout: grid` on the kit **matches** — which is exactly
+why it emits no "layout not found" comment and still gives you the list.
+
+**Consequence for the build path:** a pure-`insertSection` build can produce Minimal and Startup, and
+can grid the *kit* — but it **cannot** set the release list's `featured`/`grid`. For Agency's grid index
+(or a featured lead story anywhere), either compose the page with `createPage(blocks=[…])` carrying
+`blocks[].layout`, or start from the matching `newsroom-*` starter (its blocks already carry them).
+
+```
+# Agency: grid index + grid kit, composed in one call
+createPage(title="Newsroom", slug="newsroom", template="blank", blocks=[
+  { id: "<uuid>", type: "component", component_slug: "sys-press-releases",
+    layout: "grid",                                    # ← BLOCK level
+    props: { heading: "Press" } },
+  { id: "<uuid>", type: "component", component_slug: "sys-press-kit",
+    props: { heading: "Media kit", layout: "grid",     # ← PROPS
+             assets: [ … ] } },
+])
+```
+
+> Every block in `blocks[]` needs **both** `id` (a UUID you generate) and `type` — the API rejects the
+> page with `422 body.blocks.0.id: Field required` otherwise. `insertSection` mints the id for you;
+> `createPage`/`updatePage` do not.
 
 → Full gap list + per-archetype verdicts: design research §10 + §11.
 
@@ -201,7 +264,8 @@ template `press-release.liquid` is the model: it uses `.prose` (never `.prose-in
 `var(--heading)` / `var(--border)` / `var(--primary)`. A component that hardcodes a colour scheme
 breaks on any tenant whose theme doesn't match — and fails WCAG AA contrast.
 
-**WRONG** — hardcoded scheme (what `sys-press-kit` shipped with, now being corrected):
+**WRONG** — hardcoded scheme (what `sys-press-kit` originally shipped with; since fixed — don't
+reintroduce it in a component you author):
 ```css
 .kit h2      { color: #fff; }                     /* ❌ invisible on a light tenant */
 .kit .asset  { border: 1px solid rgba(255,255,255,0.08); }  /* ❌ borders vanish; AA fail */
@@ -226,21 +290,21 @@ token discipline — is `press-release.liquid`. Study it as the gold standard fo
 ## Decision tree — which index does this newsroom need?
 
 ```
-Is a filterable / year-grouped / featured-hero index required?
+Does it need type FILTERING, year grouping, or RSS?
 │
-├─ NO  → compose a single page with sys-press-releases (flat list).
-│        This is Minimal and Startup. Ships today. ✅  ← start here
+├─ YES → route the archetype to the /press ROUTE template.
+│        Filters + year jump + feeds only exist there. ✅ (Corporate's clean path)
 │
-└─ YES → does it need to be a COMPOSED single page (applySiteTemplate)?
+└─ NO  → compose a single page. Which release layout?
          │
-         ├─ NO, a dedicated /press page is fine
-         │     → route the archetype to the /press ROUTE template.
-         │       Gets year grouping + type filters + lead-hero for free. 🟡 (Corporate's clean path)
+         ├─ flat list  → insertSection(sys-press-releases, props={…}). ✅ Minimal, Startup
+         │               Simplest path; the component self-binds.
          │
-         └─ YES, must be composed
-               → featured/grid on a composed page needs the INCOMING
-                 sys-press-releases layout props (featured|grid). Until they land,
-                 fall back to the flat list or the /press route. Do NOT promise it today. 🟡/🔴
+         └─ featured hero or card grid  → ✅ Agency (grid), or a Startup launch
+                       page wanting a lead story (featured). Ships today, BUT
+                       `layout` must be set at BLOCK level, which insertSection
+                       cannot do. Use createPage(blocks=[{… layout:"grid" …}])
+                       or apply the matching newsroom-* starter.
 ```
 
 ---
@@ -257,10 +321,13 @@ These tables are the authoritative prop set for each component.
 | `heading` | string | "Latest news" | Section heading |
 | `subheading` | string | — | Optional intro line under the heading |
 | `empty_message` | string | "No press releases yet — check back soon." | Shown when nothing is published |
-| `layout` | enum | `list` | `list` today; **`featured` / `grid` incoming** (C.index) — flat list until then |
-| *(source)* `default_sort` | string | `-published_at` | **Newest-first needs the leading `-`** |
-| *(source)* `default_limit` | integer | `6` | Cap the composed list; a block `data_binding.limit` overrides |
+| *(source)* `default_sort` | string | `-published_at` | Applied automatically — **newest-first already**. Only restate it (with the leading `-`) when you override |
+| *(source)* `default_limit` | integer | `6` | Applied automatically; a block `data_binding.limit` overrides |
 | *(source)* `default_filter` | object | `{}` | Reserved; block `data_binding.filter` overrides |
+
+**⚠️ `layout` is NOT in this component's `props_schema`** — its only props are `heading`, `subheading`
+and `empty_message`. `list` · `featured` · `grid` are selected by the **block-level** `layout` field
+(`blocks[].layout`), never `props.layout`. See the asymmetry table above.
 
 ### `sys-press-kit` — the media kit (`required: [assets]`)
 
@@ -271,7 +338,7 @@ These tables are the authoritative prop set for each component.
 | `empty_text` | string | "Media assets are coming soon." | Shown when the kit has no assets |
 | `zip_download_url` | string | — | "Download all" bundle; omit the button if absent |
 | `zip_size_human` | string | — | Pre-formatted, e.g. "24.6 MB" (Liquid has no `filesize`) |
-| `layout` | enum | `list` | `list` today; **`grid` incoming** (C.kit) for a thumbnail kit |
+| `layout` | enum | `list` | `list` \| `grid` — **both ship today**. A real **prop** here (unlike the release list): pass it inside `props`, incl. via `insertSection` |
 | `assets[]` | array | — | Required. Per-asset fields below |
 
 **`assets[]` item fields:** `download_url` (counted — preferred), `r2_url` (fallback), `original_name`,
@@ -291,8 +358,8 @@ These tables are the authoritative prop set for each component.
 | `accent` | enum | `subtle` | `subtle` \| `primary` \| `secondary` |
 | `density` | enum | `comfy` | `compact` \| `comfy` |
 
-→ These props are declared in `client/schema.yaml`. The kit palette bug is being corrected (C.kit);
-teach the token-driven pattern above, not the old hardcoding.
+→ These props are declared in `client/schema.yaml`. The kit's palette is already token-driven (C.kit
+shipped) — teach the token pattern above; there is no hardcoded-colour bug left to work around.
 
 ---
 
@@ -300,9 +367,17 @@ teach the token-driven pattern above, not the old hardcoding.
 
 ```
 previewPage(page_id)
-  → releases render NEWEST first (if oldest-first, the sort lost its leading `-`)
+  → releases render NEWEST first (if oldest-first, an override sort lost its leading `-`)
+  → the layout you asked for actually rendered — a hero for `featured`, tiles for `grid`.
+    Still a plain list? You set `props.layout` on the release list; it must be `blocks[].layout`.
+    Kit still a text list? You set block-level `layout`; the kit wants `props.layout`.
   → the kit heading + borders are VISIBLE on this tenant's palette (not white-on-light)
   → the marquee is empty IF no logos were wired — that is expected, not a bug
+
+# Release list BLANK? Don't chase the data_binding — the component self-binds.
+#   Check the tenant's snippets/block-renderer.liquid override: a stale copy drops `items:`
+#   and blanks EVERY dynamic block. Confirm by putting any other dynamic list on the same
+#   page — if that's empty too, it's the renderer override, not press.
 
 content_visual_check(<live newsroom url>)
   → a client-rendered list fools curl; only a visual check confirms it rendered

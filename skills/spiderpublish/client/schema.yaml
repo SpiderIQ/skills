@@ -171,12 +171,12 @@ methods:
           properties:
             id:
               type: string
-              required: false
-              description: Unique block id (UUID).
+              required: true
+              description: "Unique block id (UUID) — YOU generate it. Omitting it 422s (`body.blocks.N.id` Field required); only insertSection mints one for you."
             type:
               type: string
-              required: false
-              description: Block type.
+              required: true
+              description: Block type. Use 'component' when setting component_slug.
               values: [hero, features_grid, stats_bar, rich_text, cta_section, pricing_table, testimonials, faq, code_example, logo_cloud, comparison_table, image, video_embed, spacer, component]
             data:
               type: object
@@ -246,12 +246,12 @@ methods:
           properties:
             id:
               type: string
-              required: false
-              description: Unique block id (UUID).
+              required: true
+              description: "Unique block id (UUID) — YOU generate it. Omitting it 422s (`body.blocks.N.id` Field required); only insertSection mints one for you."
             type:
               type: string
-              required: false
-              description: Block type.
+              required: true
+              description: Block type. Use 'component' when setting component_slug.
               values: [hero, features_grid, stats_bar, rich_text, cta_section, pricing_table, testimonials, faq, code_example, logo_cloud, comparison_table, image, video_embed, spacer, component]
             data:
               type: object
