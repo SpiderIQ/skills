@@ -57,7 +57,7 @@ You only need an explicit `data_binding` to **change** the defaults (a different
 `blocks[]` array — **not** the insert call:
 
 ```
-createPage(title="Newsroom", slug="newsroom", template="blank",
+createPage(title="Newsroom", slug="newsroom", template="default",
            blocks=[{ id: "<uuid-you-generate>", type: "component",
                      component_slug: "sys-press-releases",
                      props: { heading: "Latest news" },
@@ -115,8 +115,9 @@ This is the canonical build. Every other archetype is this sequence plus archety
 1. listSiteTemplates()                       # is the one-click "newsroom" starter available?
    → if yes, jump to the one-click path below and skip to step 6
 
-2. createPage(title="Newsroom", slug="newsroom", template="blank")
-   → page_id                                 # "blank" bypasses the theme chrome; the page IS the newsroom
+2. createPage(title="Newsroom", slug="newsroom", template="default")
+   → page_id                                 # "default" = the theme-aware template. NOT "blank" —
+                                             #   see the ⚠️ box below; "blank" has NO background colour.
 
 3. insertSection(page_id, component_slug="sys-press-releases",
                  props={ heading: "Newsroom",
@@ -137,6 +138,31 @@ This is the canonical build. Every other archetype is this sequence plus archety
 7. publishPage(page_id) → deployPreview → deployProduction
 8. content_visual_check(<live newsroom url>)  # a client-rendered list fools curl — visual-check it
 ```
+
+### ⚠️ Use `template="default"`, NOT `"blank"` — `blank` has no background colour
+
+This is the one step in the sequence that silently produces an unreadable page, so it gets its own
+warning. `blank` is not "the theme minus the header and footer" — it drops **the whole layout**,
+and the layout is where the page's colours live:
+
+| Template | Renders | `<body>` |
+|---|---|---|
+| `default` → `templates/page.liquid` | wraps `layout/theme.liquid` | carries the theme's background **and** text colour |
+| `blank` → `templates/blank.liquid` | no layout at all | a bare `<body>` with **no classes** — no background, no text colour |
+
+So on a **dark-theme tenant** a `blank` newsroom renders the browser's default white background while
+the press components correctly resolve `var(--heading)` to the tenant's *light* heading colour — your
+headings and every release title come out **white-on-white**. Invisible, with no error and no HTML
+comment. It is the same defect the token rule further down warns about, arriving by a different door:
+the components are fine; the page they sit on has no background to be legible against.
+
+**All five shipped `newsroom-*` starters use `default`** — if you build by hand, match them. Reach for
+`blank` only when you deliberately want a chrome-less full-bleed page **and** you are supplying the
+background yourself; for a newsroom you never are.
+
+> Want the theme's colours but **not** its header/footer? That is a different control — the layout
+> preset (`content_apply_layout_preset({ preset: "blank" })`, see `templates-deploy.md`), which drops
+> the chrome while the page keeps its background. Don't reach for the `blank` *page template* to get it.
 
 **One-click path (preferred when the starter exists).** The platform ships **five** newsroom
 starters — pick the one that matches your chosen archetype:
@@ -222,7 +248,7 @@ can grid the *kit* — but it **cannot** set the release list's `featured`/`grid
 
 ```
 # Agency: grid index + grid kit, composed in one call
-createPage(title="Newsroom", slug="newsroom", template="blank", blocks=[
+createPage(title="Newsroom", slug="newsroom", template="default", blocks=[
   { id: "<uuid>", type: "component", component_slug: "sys-press-releases",
     layout: "grid",                                    # ← BLOCK level
     props: { heading: "Press" } },
@@ -372,6 +398,9 @@ previewPage(page_id)
     Still a plain list? You set `props.layout` on the release list; it must be `blocks[].layout`.
     Kit still a text list? You set block-level `layout`; the kit wants `props.layout`.
   → the kit heading + borders are VISIBLE on this tenant's palette (not white-on-light)
+  → the PAGE has a background at all, and the headings + release titles read against it.
+    All-but-invisible text on white? You built the page with template="blank" — it renders
+    no theme layout, so there is no background. Re-run updatePage(template="default").
   → the marquee is empty IF no logos were wired — that is expected, not a bug
 
 # Release list BLANK? Don't chase the data_binding — the component self-binds.
@@ -381,6 +410,9 @@ previewPage(page_id)
 
 content_visual_check(<live newsroom url>)
   → a client-rendered list fools curl; only a visual check confirms it rendered
+  → check a DARK-theme tenant if you support one. A missing page background LOOKS FINE on a
+    light tenant — dark heading tokens on the browser's default white read normally — and only
+    goes white-on-white where the heading token is light. Verifying on light alone passes it.
 ```
 
 → Then confirm each release links to its `/press/{slug}` detail page (rendered by

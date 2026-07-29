@@ -149,18 +149,20 @@ methods:
     description: >
       Create a marketing page (block-based). Saves as a DRAFT. `template` picks
       the Liquid template (default | blank | landing | about | contact |
-      dynamic_list | dynamic_item). For dynamic_list/dynamic_item you MUST set
+      dynamic_list | dynamic_item). Use `default` for an ordinary content page —
+      it is the only value that wraps the theme layout, which is where the page's
+      background and text colour live. For dynamic_list/dynamic_item you MUST set
       collection_type (posts | docs | directory_listings).
     guidance:
       use: "add a new page to the site (starts as a draft)"
       next: "publishPage -> deploySite to make it live; insertSection to add components"
-      warn: "Draft only — not visible until publishPage AND deploy. dynamic_list/dynamic_item REQUIRE collection_type; any other template must NOT set it."
+      warn: "Draft only — not visible until publishPage AND deploy. dynamic_list/dynamic_item REQUIRE collection_type; any other template must NOT set it. `blank` drops the WHOLE layout, not just the header/footer — it emits a bare <body> with no background or text colour, so on a dark-theme tenant your headings render white-on-white with no error. Use `default` unless you are deliberately building a full-bleed page AND supplying the background yourself; to keep the theme colours but drop the chrome use content_apply_layout_preset({preset:'blank'}) instead."
       telemetry_signal_default: "hot"
     http: POST /dashboard/content/pages
     params:
       title:           { type: string,  required: true,  description: 'Page title' }
       slug:            { type: string,  required: false, description: 'URL slug — kebab-case, no leading slash, no nested path' }
-      template:        { type: string,  required: false, description: 'default | blank | landing | about | contact | dynamic_list | dynamic_item' }
+      template:        { type: string,  required: false, description: 'default | blank | landing | about | contact | dynamic_list | dynamic_item. Default to `default` — `blank` renders NO theme layout, so the page has no background/text colour (white-on-white on a dark tenant).' }
       collection_type: { type: string,  required: false, description: 'REQUIRED for dynamic_list/dynamic_item: posts | docs | directory_listings; else omit' }
       blocks:
         type: array
@@ -231,7 +233,7 @@ methods:
     guidance:
       use: "edit an existing page's content, SEO, or template"
       next: "publishPage -> deploySite to push changes live"
-      warn: "blocks REPLACES the block list — send the full intended array, not a partial."
+      warn: "blocks REPLACES the block list — send the full intended array, not a partial. Switching `template` to `blank` drops the whole theme layout including the page background — see createPage's warning before you do it."
     http: PATCH /dashboard/content/pages/{page_id}
     params:
       page_id:         { type: string, required: true, description: 'Page UUID to update' }
