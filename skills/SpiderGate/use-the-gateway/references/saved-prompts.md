@@ -23,16 +23,28 @@ supply suppresses the stored `system_prompt`; stored `settings` fill only the
 sampling keys you left unset. Resolving bumps the prompt's `last_used_at`.
 
 - `prompt:<public_id>` — resolves globally within your brand; use from agents/CLI.
-- `prompt.<name>` — resolves by name **within a project**; requires `project_id`.
-  Without one the reference is ignored.
+- `prompt.<handle>` — resolves by **slug OR exact name** within a project, so a prompt
+  named `Support Bot` answers to both `prompt.support_bot` and `prompt.Support Bot`.
+  Requires `project_id`; without one it **fails with 400
+  `prompt_reference_needs_project`** — the reference is *not* ignored and the
+  completion does not proceed.
+
+**Reference errors are loud and coded:** `prompt_reference_needs_project` (400) ·
+`prompt_not_found` (404 — unknown handle or id) · `prompt_reference_ambiguous`
+(409 — two names slugifying onto one handle; the message names both ids). A failed
+reference never degrades into a plain completion.
+
+> Unlike the media path, the stored `model` **does** apply here, because `model` is
+> optional on chat completions.
 
 ## Manage them
 
 `gate_prompt_create` (→ returns a `prompt_…` public id) · `gate_prompt_list`
 (a project's prompts) · `gate_prompt_search` (by name/description, brand-wide) ·
 `gate_prompt_get` · `gate_prompt_delete`. On the CLI: `spideriq gate prompt
-create|list|search|get|delete`. Saved prompts are brand-scoped and unique by name
-**per project**.
+create|list|search|get|delete`. As declared HTTP methods with their projects, see the
+**`studio-prompts`** skill. Saved prompts are brand-scoped and unique by name
+**per project** — though two different names in one project can still collide on slug.
 
 The same reference forms work for media generation — see the `generate-media`
 skill's `references/saved-prompts.md`.

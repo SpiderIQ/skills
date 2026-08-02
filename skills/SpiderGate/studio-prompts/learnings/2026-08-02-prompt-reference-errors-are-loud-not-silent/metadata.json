@@ -1,0 +1,15 @@
+{
+  "title": "Prompt-reference failures are loud and coded — and a stored `model` is inert on the media path",
+  "summary": "Two things agents get wrong about saved prompts, both because the first shipped documentation described pre-fix behaviour. (1) A reference that cannot resolve does NOT silently degrade into a normal call. Every failure raises with a code: prompt_reference_needs_project (400) when `prompt.<handle>` arrives without a project_id, prompt_not_found (404) for an unknown handle or id, and prompt_reference_ambiguous (409) when two names slugify onto one handle — in which case the resolver names both candidates' ids rather than picking one. An agent that treats a failed reference as 'it'll just generate without it' will see a 4xx and no output. (2) `prompt.<handle>` resolves by slug OR exact name, not by exact name alone: one query does `name = $3 OR slug(name) = $4`, which is why both the dashboard-printed slug and the raw name address the same prompt, and why colliding slugs are still individually addressable by their exact names. (3) The stored `model` in a bundle is unreachable on the MEDIA path: generate-media declares `model` as required with min_length=1, so the 'fill in only if the caller set none' branch can never fire — omitting it is a 422 and an empty string is a 422. The stored model does apply on the chat path, where model is optional. The stored settings, system_prompt and reference_media_ids apply on both.",
+  "created_at": "2026-08-02",
+  "updated_at": "2026-08-02",
+  "tags": ["studio", "saved-prompts", "error-contract", "slug-resolution", "media", "gotcha"],
+  "references": [
+    "app/services/gate/prompt_service.py:73 — _SLUG_SQL = btrim(regexp_replace(lower(btrim({col})), '[^a-z0-9]+', '_', 'g'), '_'); :428 — the resolve query, `AND (name = $3 OR <slug> = $4)`, one query so >1 row IS the collision signal rather than a silent LIMIT 1",
+    "app/services/gate/prompt_service.py:411/437 prompt_not_found (404) · :419-423 prompt_reference_needs_project (400) · :451 prompt_reference_ambiguous (409) — all raise PromptReferenceError; none returns quietly",
+    "app/api/v1/gate/media.py:73-75 — model: str = Field(..., min_length=1) vs app/services/gate/prompt_service.py:512 — `if prompt.get('model') and not merged.get('model')`; the guard can never see an empty model on this path",
+    "app/api/v1/dashboard_gate_prompts.py:51 — APIRouter(prefix='/gate/studio'), mounted at /api/v1 by app/main.py:2784, so the live base is /api/v1/gate/studio/* (measured 401 registered on 2026-08-02; the LLM-base form measured 404)",
+    "AgentBoard SF-TL2 e64f0db5-db04-4443-9eb6-ca3844fbe9b8 — 9-probe live verification 2026-07-29: P1/P1b slug resolves post-fix (same object measured NO-resolve pre-fix), P2 collision → 409 naming both, P4 unknown → prompt_not_found not a no-op, P5 no project → 400, P8/P9 exact-name-wins addresses each twin; finding #1 records the inert stored model",
+    "AgentBoard SF-TL 99c5f2c4-4cb0-494f-9337-11d122c5d872 — the pre-fix measurement: resolvable and unresolvable handles returned an identical 404 with no code, which is the silence SF-20c closed"
+  ]
+}

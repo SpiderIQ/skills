@@ -1,0 +1,257 @@
+# SpiderGate Studio — saved prompts + projects. API surface + envelope.
+#
+# ⚠ UPSTREAM: this skill rides the SpiderIQ REST base (https://spideriq.ai/api/v1),
+# NOT the SpiderGate LLM base the other four gateway skills use. The Studio routes are
+# mounted at /api/v1/gate/studio/* (app/main.py:2783-2784). A relative path declared
+# under the LLM base resolves to https://spideriq.ai/api/gate/v1/gate/studio/prompts,
+# measured 404 on 2026-08-02 — which is exactly the phantom-backend shape that publishes
+# HEALTHY and 404s at runtime. `events-stream` overrides for the same reason.
+name: studio-prompts
+version: "0.1.0"
+description: >
+  Save a prompt bundle once — system prompt, model, settings and reference media
+  under a name inside a SpiderGate Studio project — then reference it by name or
+  stable id from any completion or media generation, and the server expands it
+  in place with your request values winning.
+category: ai-gateway
+base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # SpiderIQ REST base (Option C direct) — NOT the LLM base
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - saved prompt
+  - save this prompt
+  - reuse a prompt
+  - prompt template
+  - studio project
+  - my prompts
+
+guidance:
+  use: >
+    Manage the reusable prompt bundles that live inside a SpiderGate Studio project,
+    and get the project_id you need to address them by name. The bundles are the same
+    ones the Studio composer's gallery shows — one object, two front doors.
+  not:
+    - "use-the-gateway → SEND a chat completion expanding a saved prompt (this skill only manages the bundles)"
+    - "generate-media → SEND a media generation expanding a saved prompt, and list media models"
+    - "model-catalog → compare or rank models before storing one in a bundle"
+  intent_aliases: [search, query, find]
+  pitfalls:
+    - "A saved prompt's stored `model` cannot take effect on the MEDIA path — generate-media requires `model` (min_length=1), so it is never absent for the merge to fill. It DOES apply on the chat path."
+    - "`prompt.<handle>` needs a `project_id`. Without one you get 400 prompt_reference_needs_project — it is NOT silently ignored."
+    - "A super_admin or brand-less account gets 409 — every Studio prompt is brand-scoped."
+
+methods:
+  listProjects:
+    description: >
+      List this brand's Studio projects. Start here — a prompt lives inside a project,
+      and `prompt.<handle>` cannot resolve without the project's id.
+    guidance:
+      use: "Find the project_id you need before creating or name-referencing a prompt."
+      next: "createPrompt (save one) · listPrompts (see what a project already has)"
+      warn: "Projects are brand-scoped; a brand-less or super_admin principal gets 409, not an empty list."
+      telemetry_signal_default: "cold"
+    http: GET /gate/studio/projects
+    params:
+      limit:
+        type: integer
+        required: false
+        description: "1–200. Default 50."
+      offset:
+        type: integer
+        required: false
+        description: "Zero-based page offset."
+    response:
+      format: json
+
+  createProject:
+    description: Create a Studio project to hold prompts, sessions and generated assets.
+    guidance:
+      use: "When the brand has no suitable project yet and you need somewhere to save a prompt."
+      next: "createPrompt"
+      warn: "Deleting a project orphans its generated media in object storage — there is no cleanup path today."
+      telemetry_signal_default: "warm"
+    http: POST /gate/studio/projects
+    params:
+      name:
+        type: string
+        required: true
+        description: "Display name for the project."
+    response:
+      format: json
+
+  createPrompt:
+    description: >
+      Save a prompt bundle inside a project. Returns the row including its stable
+      `public_id` (`prompt_…`), which is the project-independent way to reference it.
+    guidance:
+      use: "Store a system prompt plus its model, settings and reference media under a name you can reuse."
+      next: "searchPrompts (confirm it landed) · then reference it as prompt:<public_id>"
+      warn: "409 if the name already exists in this project. Keep the public_id — it is the reference form that works without a project_id."
+      telemetry_signal_default: "warm"
+    http: POST /gate/studio/projects/{project_id}/prompts
+    params:
+      project_id:
+        type: string
+        required: true
+        description: "UUID of the owning Studio project."
+      name:
+        type: string
+        required: true
+        description: "1–255 chars. Unique within the project. Also the basis of the `prompt.<handle>` reference — see references/prompt-references.md for how it is slugified."
+      description:
+        type: string
+        required: false
+        description: "Up to 4000 chars, for humans browsing the gallery."
+      system_prompt:
+        type: string
+        required: false
+        description: "The prompt text itself. Becomes the generation/completion text when the caller passes a bare reference."
+      model:
+        type: string
+        required: false
+        description: "Stored model. Applies on the CHAT path only — see the pitfall about the media path."
+      settings:
+        type: object
+        required: false
+        description: "Sampling/tunable defaults, e.g. {guidance_scale, seed, aspect_ratio}. Fill only the keys the caller omits."
+      reference_media_ids:
+        type: array
+        required: false
+        description: "Up to 50 reference media entries carried with the bundle."
+    response:
+      format: json
+
+  listPrompts:
+    description: List one project's saved prompts, newest-touched first.
+    guidance:
+      use: "Enumerate what a specific project already holds."
+      next: "getPrompt · updatePrompt · deletePrompt"
+      warn: "Scoped to ONE project. To search the whole brand, use searchPrompts."
+      telemetry_signal_default: "cold"
+    http: GET /gate/studio/projects/{project_id}/prompts
+    params:
+      project_id:
+        type: string
+        required: true
+        description: "UUID of the project."
+      limit:
+        type: integer
+        required: false
+        description: "1–200. Default 50."
+      offset:
+        type: integer
+        required: false
+        description: "Zero-based page offset."
+    response:
+      format: json
+
+  searchPrompts:
+    description: >
+      Search this brand's saved prompts by name/description (case-insensitive
+      substring), optionally narrowed to one project. Omit `query` to list all.
+    guidance:
+      use: "Find a prompt across every project when you know roughly what it is called."
+      next: "getPrompt (full bundle) · then reference it as prompt:<public_id>"
+      warn: "The parameter is `query`, NOT `q`. An unknown param is silently ignored and you get list-all back, which reads as a false match — always negative-control with a nonsense query."
+      telemetry_signal_default: "cold"
+    http: GET /gate/studio/prompts
+    params:
+      query:
+        type: string
+        required: false
+        description: "Substring matched against name and description. Max 200 chars. Omit to list all."
+      project_id:
+        type: string
+        required: false
+        description: "Narrow to a single project."
+      limit:
+        type: integer
+        required: false
+        description: "1–200. Default 50."
+      offset:
+        type: integer
+        required: false
+        description: "Zero-based page offset."
+    response:
+      format: json
+
+  getPrompt:
+    description: Fetch one saved prompt by its UUID or its `prompt_…` public id.
+    guidance:
+      use: "Read a bundle's full contents before referencing or editing it."
+      next: "updatePrompt · deletePrompt"
+      warn: "404 if the prompt is not this brand's — the same response as a genuinely missing id, by design."
+      telemetry_signal_default: "cold"
+    http: GET /gate/studio/prompts/{prompt_id}
+    params:
+      prompt_id:
+        type: string
+        required: true
+        description: "Either the UUID or the stable `prompt_…` public id."
+    response:
+      format: json
+
+  updatePrompt:
+    description: Partially update a saved prompt. Only the fields you send change.
+    guidance:
+      use: "Retune a stored system prompt, model or settings without recreating it."
+      next: "getPrompt (confirm the merge)"
+      warn: "Renaming changes the `prompt.<handle>` an agent resolves it by — anything referencing the old handle stops matching."
+      telemetry_signal_default: "warm"
+    http: PATCH /gate/studio/prompts/{prompt_id}
+    params:
+      prompt_id:
+        type: string
+        required: true
+        description: "UUID or `prompt_…` public id."
+      name:
+        type: string
+        required: false
+        description: "1–255 chars. Still unique within the project."
+      description:
+        type: string
+        required: false
+        description: "Up to 4000 chars."
+      system_prompt:
+        type: string
+        required: false
+        description: "Replacement prompt text."
+      model:
+        type: string
+        required: false
+        description: "Replacement stored model."
+      settings:
+        type: object
+        required: false
+        description: "Replacement settings object."
+      reference_media_ids:
+        type: array
+        required: false
+        description: "Replacement reference media list, up to 50."
+    response:
+      format: json
+
+  deletePrompt:
+    description: Delete a saved prompt. Returns 204 with no body.
+    guidance:
+      use: "Remove a bundle that is obsolete or was created for a test."
+      next: "searchPrompts (confirm it is gone)"
+      warn: "Irreversible, and any agent still referencing its handle will start getting 404 prompt_not_found."
+      telemetry_signal_default: "warm"
+    http: DELETE /gate/studio/prompts/{prompt_id}
+    params:
+      prompt_id:
+        type: string
+        required: true
+        description: "UUID or `prompt_…` public id."
+    response:
+      format: json

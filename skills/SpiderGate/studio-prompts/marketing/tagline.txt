@@ -1,0 +1,1 @@
+Save a prompt once. Call it by name from any agent.

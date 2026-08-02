@@ -14,7 +14,11 @@ completion body):
 | Form | Resolves by | Needs a project? |
 |------|-------------|------------------|
 | `prompt:<public_id>` | the stable `prompt_…` id (globally unique per brand) | **No** — use this from an agent/CLI |
-| `prompt.<name>` | `(project_id, name)` within a Studio project | **Yes** — pass `project_id` |
+| `prompt.<handle>` | **slug OR exact name**, within a Studio project | **Yes** — pass `project_id` |
+
+The handle matches the stored `name` exactly *or* its slug
+(`lower(name)` with every non-alphanumeric run collapsed to `_`), so a prompt named
+`Hero Shot` answers to both `prompt.hero_shot` and `prompt.Hero Shot`.
 
 ```jsonc
 // Expand a saved prompt, keep its stored model + params, override the seed:
@@ -32,11 +36,28 @@ gate_media_generate({
 })
 ```
 
-**Override precedence:** live request values always win. A stored `model` fills in
-only if you did not set one; stored `settings` fill in only the params you did not
-pass; the stored `system_prompt` becomes the generation text only when your
+**Override precedence:** live request values always win. Stored `settings` fill in
+only the params you did not pass; stored `reference_media_ids` fill in only if you
+passed none; the stored `system_prompt` becomes the generation text only when your
 `prompt` is a bare reference (if you typed real prompt text, yours is kept).
 Resolving a prompt bumps its `last_used_at`.
+
+> ⚠️ **A stored `model` is inert on THIS path.** `model` is required here
+> (`min_length=1`) — omitting it 422s and an empty string 422s — so the "fill in only
+> if you did not set one" branch can never fire for media. Whatever you pass is what
+> runs. The stored model *does* apply on the chat-completions path, where `model` is
+> optional. Pin the model explicitly when it matters.
+
+## Reference errors are LOUD — never silently skipped
+
+| Code | HTTP | When |
+|------|------|------|
+| `prompt_reference_needs_project` | 400 | `prompt.<handle>` sent without `project_id` |
+| `prompt_not_found` | 404 | no such prompt in this brand |
+| `prompt_reference_ambiguous` | 409 | two names slugify onto one handle — the message names both ids |
+
+A failed reference does **not** degrade into a normal generation. Nothing is produced
+and nothing is billed. Read the code and act on it.
 
 ## Managing saved prompts (5 tools)
 
@@ -65,9 +86,14 @@ gate_prompt_create({
 - A plain string in `prompt` that starts with `prompt:` or `prompt.` is treated as
   a **reference, not literal text**. To generate with literal text that happens to
   start that way, put it in `params.prompt` instead.
-- `prompt.<name>` without a `project_id` cannot resolve → the reference is ignored
-  (the generation proceeds with your other fields). Use `prompt:<id>` when you have
-  no project context.
+- `prompt.<handle>` without a `project_id` **fails with 400
+  `prompt_reference_needs_project`** — it is not ignored, and nothing is generated.
+  Use `prompt:<id>` when you have no project context.
 - Names are unique **per project**, not globally — the same name can exist in two
-  projects. The `public_id` is the stable, project-independent handle.
+  projects. The `public_id` is the stable, project-independent handle. Two *different*
+  names in one project can still collapse to the same slug → 409; the id form never
+  collides.
+- To manage the bundles themselves (create / search / update / delete) plus the
+  projects that hold them, see the **`studio-prompts`** skill — it declares those
+  routes as callable methods.
 - Saved prompts are **brand-scoped**: you only see and resolve your own brand's.
