@@ -1,64 +1,30 @@
-# SpiderIQ Skills
+# SpiderIQ Skills — public mirror
 
-Agent skills for every [SpiderIQ](https://spideriq.ai) product. Install once,
-your agent learns how to author, publish, and deploy on SpiderPublish, **run
-email on SpiderMail**, and route LLM calls through SpiderGate.
+> 4-layer agent skills for the SpiderIQ platform, grouped by **service**.
+> The signed, installable packages live on the [OPVS Marketplace](https://market.opvs.ai) —
+> this repo is the readable mirror for agents without an OPVS connection.
 
-## Install
+**Admin skills are deliberately not here.** They reach agents only through the marketplace,
+brand-gated. This repo carries the customer-facing surface only.
 
-```bash
-npx skills add SpiderIQ/skills
-```
+| Service | Skills |
+|---|---|
+| **IDAP** | `internet-data-access` |
+| **SpiderBrowser** | `manage-browser-profiles` |
+| **SpiderCompanyData** | `company-intel` · `lookup-company-data` |
+| **SpiderFlows** | `lead-enrichment` · `lead-search` · `run-enrichment-pipeline` · `spiderflows` |
+| **SpiderGate** | `events-stream` · `generate-media` · `model-catalog` · `spidergate-manager` · `use-the-gateway` |
+| **SpiderMail** | `spidermail` |
+| **SpiderMaps** | `scrape-google-maps` |
+| **SpiderMedia** | `spideriq-media-catalog` |
+| **SpiderPR** | `submit-press-release` |
+| **SpiderPeople** | `find-people-extract-linkedin-profile` |
+| **SpiderPublish** | `spiderpublish` |
+| **SpiderSite** | `capture-landing-page` · `extract-website-branding` · `scrape-website-extract-leads` |
+| **SpiderSocial** | `social-media-enrichment` |
+| **SpiderVerify** | `verify-email-deliverability` |
+| **VayaPin** | `vayapin` |
+| **Workspace** | `auth` · `integrations` · `workspace` |
 
-Works for Claude Code, Cursor, Codex, and Antigravity from one command.
-Skills install into your **agent runtime** — they never touch your project's
-`CLAUDE.md`, `AGENTS.md`, or `.cursorrules`.
-
-## What's inside
-
-| Skill | What it teaches | Status |
-|---|---|---|
-| `spiderflows` | Run SpiderIQ flows (server-side pipelines). Today: the lead / local-business chain — Google Maps → site crawl → email verify → optional VayaPin pin (sold as both leadSearch and localSeo). Single run or multi-location campaign, full lifecycle, results via IDAP. More flows added here as recipes. | ✅ v0.1.0 |
-| `spiderpublish` | Pages, posts, docs, components, navigation, themes, forms, booking flows, custom domains, two-phase deploy | ✅ v0.1.0 |
-| `spidermail` | SpiderMail: master inbox across every mailbox, threads, full-text search, send/reply/forward, templates, labels · views · snooze · bulk-triage, attachments, security quarantine, and Smartlead/lemlist/Instantly warmup + deliverability. 45 methods. | ✅ v0.3.0 |
-| `use-the-gateway` | SpiderGate: LLM completions, task-alias routing, usage, traces, cost tracking | ✅ |
-
-Each skill is a folder under [`skills/`](./skills) with its own `SKILL.md`,
-recipe library, and reference docs. Skills are discovered independently —
-your agent loads the one whose frontmatter matches the task. The table above
-highlights the main product families; additional skills (media catalog,
-workspace/admin, content-platform, events-stream, and more) also live under
-[`skills/`](./skills).
-
-## Designer kits (a different door)
-
-Designers building full-time SpiderPublish templates use the per-product
-designer kits, not this repo. Greenfield bootstrap:
-
-```bash
-npx degit SpiderIQ/SpiderPublish/designer-kit my-templates-project
-```
-
-## How skills work
-
-1. You install the suite once via `npx skills add SpiderIQ/skills`.
-2. Each skill's frontmatter (`description` block) is always-loaded into your
-   agent's context. Costs ~50–100 tokens per skill.
-3. When you ask the agent to do something, the skill whose description matches
-   loads its `SKILL.md` body — a lean router pointing at a specific recipe.
-4. The agent reads the matching recipe, executes its steps, and verifies the
-   result before returning.
-
-Three-tier progressive disclosure: frontmatter (always) → SKILL.md body (on
-match) → recipe file (on routing). Per-recipe content never burns context
-unless the agent's task actually needs it.
-
-## Contributing
-
-Recipes get tighter as we run into more failure modes. If your agent failed
-on a SpiderIQ task, the right fix is usually a better recipe or a sharper
-anti-pattern in the relevant `SKILL.md`. Open an issue or PR.
-
-## License
-
-MIT. See [LICENSE](./LICENSE).
+Each folder is one skill: `SKILL.md` (router) · `client/schema.yaml` (API surface + guidance)
+· `references/` (procedures) · `learnings/` (institutional memory) · `registry/` (installable assets).

@@ -1,1 +1,0 @@
-Liquid template engine + Cloudflare-edge deploy in 2-5 seconds
