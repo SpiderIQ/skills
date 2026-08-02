@@ -1,4 +1,30 @@
-# CLI / MCP gaps — CLOSED by the companion tools PR (was: the delta)
+# CLI / MCP gaps
+
+> ## CURRENT STATE — 2026-08-02 (read this; everything below it is history)
+>
+> This skill now teaches **52 methods**. The 2026-06-11 delta recorded below was
+> closed at the time; since then the provider-expansion initiative added four
+> surfaces, and **one of them is not yet on the CLI/MCP path.**
+>
+> | Surface | HTTP | `@spideriq/cli` | `@spideriq/mcp-mail` |
+> |---|---|---|---|
+> | New providers — Gmail / Workspace / iCloud (`createMailbox`, `listMailProviders`) | ✅ | ✅ | ✅ |
+> | Body envelope on reads (`body_source`, `size_*`, `rfc822_message_id`) | ✅ | ✅ | ✅ |
+> | `convertDocument` / `getConversion` (file → markdown) | ✅ | ✅ `spideriq convert` | ✅ `convert_document`, `get_conversion` |
+> | **`convertMailBody` (markdown ↔ HTML)** | ✅ `POST /mail/convert` | ❌ **none** | ❌ **none** |
+>
+> **If you are driving SpiderIQ through the CLI or MCP, `convertMailBody` is not
+> reachable — call the HTTP route directly.** Marketplace clients (this skill)
+> generate from `client/schema.yaml`, so they *do* have it.
+>
+> Closing the gap needs a CLI verb + a `convert_mail_body` MCP tool + an
+> `@spideriq/core` method, shipped as one npm cohort. Tracked as the "step 6"
+> follow-up on the SpiderMail provider-expansion board
+> (`651fbf00-e57c-4695-ae65-5d111f1bd5bb`).
+
+---
+
+## History — the 2026-06-11 delta, since CLOSED by the companion tools PR
 
 > **STATUS UPDATE 2026-06-11: these gaps are now CLOSED.** The companion PR
 > `feat/mail-cli-mcp-tools` brings `@spideriq/core` + `@spideriq/mcp-mail` +

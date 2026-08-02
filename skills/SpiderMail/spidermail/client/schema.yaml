@@ -1,13 +1,15 @@
 # Send/Receive Email Skill — API surface + envelope contract (Initiative A)
-# ONE skill for the SpiderMail agent surface: real mailboxes (Zoho / Google
-# Workspace / Outlook) read + written by an agent over a PAT. Read is a direct
-# DB query; send/reply/forward is an async job through the SpiderMail worker
-# queue. Templates (Jinja2) render on the server; attachments are extracted by
-# the poller and ride inline on the message read.
+# ONE skill for the SpiderMail agent surface: real mailboxes (Zoho / Gmail /
+# Google Workspace / Outlook / iCloud, plus any IMAP host via generic_imap) read
+# + written by an agent over a PAT. Read is a direct DB query; send/reply/forward
+# is an async job through the SpiderMail worker queue. Templates (Jinja2) render
+# on the server; attachments are extracted by the poller and ride inline on the
+# message read.
 #
 # Source of truth for Tier-3 marketplace client generation. Every method below
 # maps to a route VERIFIED served in app/api/v1/mail.py, mail_templates.py,
-# mail_views.py, mail_outreach.py, or jobs/spidermail.py (2026-06-11). No phantom
+# mail_views.py, mail_outreach.py, mail_convert.py, or jobs/spidermail.py
+# (re-verified 2026-08-02 against the provider-expansion initiative). No phantom
 # endpoints. Outreach methods are brand-scoped (/brands/{id}/mail/outreach/*) —
 # reads PAT-ok, writes brand-admin (require_brand_admin_or_super).
 #
@@ -16,7 +18,7 @@
 # /jobs/*) segment, so the full URL is e.g. https://spideriq.ai/api/v1/mail/inbox.
 
 name: spidermail
-version: "0.4.0"
+version: "0.7.0"
 description: >
   Agent-driven email over SpiderMail — read a mailbox (inbox, single message,
   conversation thread, full-text search, one-call session bootstrap), send/reply/
@@ -27,6 +29,8 @@ description: >
   PAT-scoped. Agent-friendly ?format=yaml|md on every read.
 category: communication
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -78,20 +82,27 @@ methods:
       message across all the tenant's mailboxes, newest first); pass `email` to
       scope to one mailbox, or `view_id` to apply a saved view's filter. Filter
       by `folder` and `unread_only`; paginate with `limit`/`offset`.
+
+      By default rows carry only a 200-character `body_text_preview`. Set
+      `include_body=true` AND `format=yaml` to get each message's full resolved
+      body inline — that combination avoids an N+1 fan-out to getMessage and is
+      the cheapest way to read a page of mail. See the `body_source` note under
+      getMessage for what the body envelope means.
     guidance:
       use: "browse what just arrived — the master inbox, one mailbox, or a saved view"
       next: "getMessage to open one (marks it read); getThread to see the whole conversation"
-      warn: "no `email` = ALL mailboxes (master inbox). Reading a message via getMessage marks it read; getInbox does not."
+      warn: "no `email` = ALL mailboxes (master inbox). Reading a message via getMessage marks it read; getInbox does not. `include_body` defaults FALSE and only takes effect with format=yaml — asking for full bodies as JSON silently returns previews only."
       telemetry_signal_default: "hot"
     http: GET /mail/inbox
     params:
-      email:       { type: string,  required: false, description: 'Scope to one mailbox address. Omit for the client-wide Master Inbox.' }
-      view_id:     { type: integer, required: false, description: 'Apply a saved view (/mail/views) filter_config by id' }
-      unread_only: { type: boolean, required: false, description: 'Only unread messages' }
-      folder:      { type: string,  required: false, description: 'INBOX (default) | Sent | Drafts | Trash' }
-      limit:       { type: integer, required: false, description: 'Page size (default 20, max 100)' }
-      offset:      { type: integer, required: false, description: 'Pagination offset (default 0)' }
-      format:      { type: string,  required: false, description: 'json (default) | yaml | md' }
+      email:        { type: string,  required: false, description: 'Scope to one mailbox address. Omit for the client-wide Master Inbox.' }
+      view_id:      { type: integer, required: false, description: 'Apply a saved view (/mail/views) filter_config by id' }
+      unread_only:  { type: boolean, required: false, description: 'Only unread messages' }
+      folder:       { type: string,  required: false, description: 'INBOX (default) | Sent | Drafts | Trash' }
+      include_body: { type: boolean, required: false, description: 'Include each message full resolved body + envelope (default FALSE). Requires format=yaml to appear.' }
+      limit:        { type: integer, required: false, description: 'Page size (default 20, max 100)' }
+      offset:       { type: integer, required: false, description: 'Pagination offset (default 0)' }
+      format:       { type: string,  required: false, description: 'json (default) | yaml | md' }
     response: { format: json }
 
   getSession:
@@ -117,10 +128,33 @@ methods:
       headers. Reading MARKS THE MESSAGE READ. With include_attachments (default
       true) the response carries each attachment's filename, type, size, and an
       extracted-text preview inline.
+
+      With `format=yaml` the body arrives as an ENVELOPE rather than a bare
+      string, and the envelope always explains itself:
+
+        body             the resolved body — plain text as stored, or markdown
+                         converted from the HTML part
+        body_source      WHY that body is what it is:
+                           text/plain          served from the stored plain part
+                           converted           HTML was converted to markdown
+                           none                the message genuinely has no body
+                           html_too_large      HTML exceeded the 65,536-byte
+                                               per-message conversion cap
+                           html_not_converted  the request's shared conversion
+                                               budget was already spent on
+                                               earlier messages in the page
+        size_original    bytes of the source part
+        size_normalized  bytes of the body actually returned
+        rfc822_message_id  the RFC Message-ID header (YAML only; the JSON
+                           response calls this field `message_id`)
+
+      An empty `body` is therefore never ambiguous: `none` means there was
+      nothing to read, while `html_too_large` / `html_not_converted` mean we
+      declined the work and you can re-request that message on its own.
     guidance:
       use: "open a single message to read its full body + attachment previews"
       next: "sendEmail action=reply with reply_to_message_id=<this id>; updateMessage to (un)star/label"
-      warn: "side effect: this marks the message read. `message_id` is the numeric DB id from a list/search row, not the RFC Message-ID header."
+      warn: "side effect: this marks the message read. `message_id` is the numeric DB id from a list/search row, not the RFC Message-ID header. The body envelope (body_source / size_original / size_normalized / rfc822_message_id) is emitted ONLY for format=yaml — the JSON response returns the plain model without it."
       telemetry_signal_default: "warm"
     http: GET /mail/messages/{message_id}
     params:
@@ -133,11 +167,15 @@ methods:
     description: >
       Get an entire conversation thread by thread_id — every inbound and
       outbound message in the thread, in order. The thread_id is on each message
-      row; it is computed from the RFC References/In-Reply-To chain.
+      row; it is computed from the RFC References/In-Reply-To chain. With
+      `format=yaml` every message carries the same body envelope described under
+      getMessage, and the whole thread shares ONE conversion budget — so a long
+      thread of large HTML messages can legitimately return
+      `body_source: html_not_converted` on its later messages.
     guidance:
       use: "see the whole back-and-forth before replying, so you keep context"
       next: "sendEmail action=reply with reply_to_message_id = the latest message's id in the thread"
-      warn: "thread_id is the computed thread root id (a message field), not a message id and not a subject."
+      warn: "thread_id is the computed thread root id (a message field), not a message id and not a subject. Body envelopes are format=yaml only, and the per-request conversion budget is shared across the whole thread."
       telemetry_signal_default: "warm"
     http: GET /mail/threads/{thread_id}
     params:
@@ -193,29 +231,67 @@ methods:
       format: { type: string, required: false, description: 'json (default) | yaml | md' }
     response: { format: json }
 
+  listMailProviders:
+    description: >
+      List the supported providers and their published connection defaults —
+      hosts, ports, the sent-folder name, whether an app password is required,
+      where to generate one, and which username shape each protocol expects.
+    guidance:
+      use: "show the user which providers are supported, or explain the app-password requirement before asking them for credentials"
+      next: "createMailbox — you do NOT need to pass anything from here, the same presets are applied server-side"
+      warn: >
+        read-only discovery. It reports iCloud's asymmetric username shape; do not
+        paper over that by sending the email address for both protocols. A preset
+        may also carry routed_providers — named providers that WORK but are not
+        preset values of their own (Fastmail, on the generic_imap entry). Read
+        that list before telling a user their provider is unsupported: its `route`
+        field is the value to send as `provider`, and the `name` is not a valid
+        one. If a routed provider has send_capable=false, do not enrol it as a
+        bulk sending source no matter what the user asks for.
+      telemetry_signal_default: "cold"
+    http: GET /mail/providers
+    params: {}
+    response: { format: json }
+
   createMailbox:
     description: >
       Register/connect an external mailbox by its IMAP + SMTP credentials.
       Passwords are Fernet-encrypted at rest. The poller begins ingesting on the
-      next cycle.
+      next cycle. Hosts, ports and usernames are optional — they default to the
+      provider's published settings.
     guidance:
-      use: "connect a Zoho / Google Workspace / Outlook mailbox so the agent can read + send from it"
+      use: "connect a Zoho / Gmail / Google Workspace / Outlook / iCloud / Fastmail / self-hosted mailbox so the agent can read + send from it"
       next: "testMailbox to confirm connectivity before relying on it"
-      warn: "needs BOTH imap_* and smtp_* creds (use an app-specific password where the provider requires one). Wrong port/TLS fails silently — 465=SSL, 587=STARTTLS."
+      warn: >
+        Pass ONLY email_address, provider and the two passwords unless the server
+        is non-standard — omitted hosts/ports/usernames are filled from the
+        provider preset, and that is the only way to get iCloud right (its IMAP
+        username is the bare local part while its SMTP username is the full
+        address). Nearly every provider rejects the account password and requires
+        an app-specific one. Gmail/Workspace need 2-Step Verification, and app
+        passwords are unavailable on security-key-only and Advanced Protection
+        accounts. provider=generic_imap infers nothing and needs all six
+        connection fields. FASTMAIL IS NOT A PROVIDER VALUE — `provider:
+        "fastmail"` is rejected. Fastmail connects as provider=generic_imap with
+        imap.fastmail.com:993 / smtp.fastmail.com:465 / Sent, it needs an app
+        password, its Basic tier has no IMAP/SMTP at all so the integration
+        cannot work on it, and it is INBOX-ONLY: Fastmail's terms ban email
+        warming and they close accounts rather than throttle them. See
+        listMailProviders → generic_imap → routed_providers.
       telemetry_signal_default: "cold"
     http: POST /mail/mailboxes
     params:
       email_address: { type: string,  required: true,  description: 'Mailbox email address' }
-      provider:      { type: string,  required: true,  description: 'zoho | google_workspace | outlook' }
-      imap_host:     { type: string,  required: true,  description: 'IMAP server hostname' }
-      imap_username: { type: string,  required: true,  description: 'IMAP login username' }
+      provider:      { type: string,  required: true,  description: 'zoho | gmail | google_workspace | outlook | icloud | generic_imap' }
       imap_password: { type: string,  required: true,  description: 'IMAP password / app password (encrypted at rest)' }
-      smtp_host:     { type: string,  required: true,  description: 'SMTP server hostname' }
-      smtp_username: { type: string,  required: true,  description: 'SMTP login username' }
       smtp_password: { type: string,  required: true,  description: 'SMTP password / app password (encrypted at rest)' }
+      imap_host:     { type: string,  required: false, description: 'IMAP server hostname (default: the provider''s published host)' }
+      imap_username: { type: string,  required: false, description: 'IMAP login username (default: the shape this provider expects)' }
+      smtp_host:     { type: string,  required: false, description: 'SMTP server hostname (default: the provider''s published host)' }
+      smtp_username: { type: string,  required: false, description: 'SMTP login username (default: the shape this provider expects)' }
       display_name:  { type: string,  required: false, description: 'Sender display name' }
-      imap_port:     { type: integer, required: false, description: 'IMAP port (default 993)' }
-      smtp_port:     { type: integer, required: false, description: 'SMTP port (default 587)' }
+      imap_port:     { type: integer, required: false, description: 'IMAP port (default: the provider''s published port, usually 993)' }
+      smtp_port:     { type: integer, required: false, description: 'SMTP port (default: the provider''s published port)' }
     response: { format: json }
 
   testMailbox:
@@ -828,4 +904,83 @@ methods:
     params:
       brand_id:      { type: string, required: true, description: 'Numeric brand id' }
       connection_id: { type: string, required: true, description: 'Outreach connection id' }
+    response: { format: json }
+
+  # ── Document conversion (card 2.3) ───────────────────────────
+  # Same worker as sendEmail — the SpiderMail worker is the only job-consuming
+  # image carrying liteparse + LibreOffice + ImageMagick + Ghostscript.
+  convertDocument:
+    description: >
+      Convert a document (PDF / DOCX / XLSX / PPTX / CSV / HTML / image) to
+      markdown. Returns a job_id, NOT the markdown — extraction runs OCR and
+      office conversion on a worker and can take minutes. Supply exactly one of
+      media_id (already uploaded to SpiderMedia) or content_base64 (inline,
+      ≤10 MB decoded). The document type is decided by MAGIC BYTES, so filename
+      and mime_type are advisory: a mislabelled file still converts correctly,
+      and a .pdf that is really something else reports its real type.
+    guidance:
+      use: "turn a PDF/DOCX/XLSX/PPTX/image into markdown an agent can actually read"
+      next: "getConversion with the returned job_id — a 202 means QUEUED, not converted"
+      warn: "ASYNC — there is no synchronous variant and asking for one will not produce a body. full_text defaults FALSE (you get a 1500-char preview); set it true only when you need the whole document, because large extractions move real bytes. ocr='never' is much cheaper on a big scanned corpus but ERRORS on images, which have no text layer."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderConvert/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: The conversion payload
+        properties:
+          media_id:       { type: string,  required: false, description: 'SpiderMedia media_id of an uploaded document. Use for anything over a few MB.' }
+          content_base64: { type: string,  required: false, description: 'Base64 document bytes for small inline submissions (≤10 MB decoded)' }
+          filename:       { type: string,  required: false, description: 'Original filename. ADVISORY ONLY — type comes from magic bytes.' }
+          mime_type:      { type: string,  required: false, description: 'Declared MIME type. Advisory only, same as filename.' }
+          full_text:      { type: boolean, required: false, description: 'Return the complete markdown body instead of the 1500-char preview (default false)' }
+          ocr:            { type: string,  required: false, description: 'auto (default) | force | never — OCR policy for scanned documents' }
+          test:           { type: boolean, required: false, description: 'Route to the test queue (default false)' }
+    response: { format: json }
+
+  getConversion:
+    description: >
+      Fetch a finished conversion. Returns markdown, preview, pages,
+      source_format, size_original, size_markdown and truncated. `source_format`
+      is what the magic bytes said, not what was declared. `truncated` true means
+      the body is incomplete — either full_text was false, or the extraction
+      exceeded the inline limit and storage_key holds the remainder.
+    guidance:
+      use: "read the markdown produced by convertDocument"
+      next: "if truncated=true and storage_key is set, the full text is on the CDN — re-submit with full_text=true only if you actually need all of it"
+      warn: "CHECK THE `security` FIELD BEFORE FEEDING THIS TO A MODEL. Extracted document text is a prompt-injection vector; security.safe=false means the document contains instruction-like content. The text is returned unmodified — you decide what to do with it."
+      telemetry_signal_default: "warm"
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id: { type: string, required: true,  description: 'The job_id returned by convertDocument' }
+      format: { type: string, required: false, description: 'json (default) | yaml | md — yaml/md are markedly cheaper to read' }
+    response: { format: json }
+
+  # ── Body conversion, markdown ↔ HTML (card 3.2) ───────────────
+  # A DIFFERENT operation from convertDocument. This one is SYNCHRONOUS, takes a
+  # string rather than a file, and only speaks markdown/html. It exists because
+  # the send path and the read path used to disagree about when markdown→HTML
+  # should fire; the caller now declares the intent and nothing is ever sniffed.
+  convertMailBody:
+    description: >
+      Convert an email body between markdown and HTML, synchronously, in the
+      response. You declare both formats — `from` and `to` must differ and
+      neither is inferred from the content. `mode` selects the flavour: `raw`
+      reproduces byte-for-byte what the existing send/read paths already
+      produce, `fit` (the default) adapts the output for its destination and is
+      round-trip stable, `minimal` is the smallest faithful output. The response
+      echoes from/to/mode alongside the byte sizes, so a caller never has to
+      guess what happened to its input.
+    guidance:
+      use: "prepare a body for a destination — markdown you wrote into send-ready HTML, or an HTML body into markdown you can read — without a job or a round-trip"
+      next: "sendEmail with the converted body, or feed the markdown to a model"
+      warn: "SYNCHRONOUS and string-only — this is NOT convertDocument (that one takes a FILE, is async, and returns a job_id). `from` must differ from `to` or you get 422. The 65,536-byte cap counts UTF-8 BYTES, not characters, so multi-byte content hits it at far fewer characters than 65,536 — over-limit returns 413."
+      telemetry_signal_default: "warm"
+    http: POST /mail/convert
+    params:
+      from:    { type: string, required: true,  description: 'Format of `content`: markdown | html' }
+      to:      { type: string, required: true,  description: 'Format to convert into: markdown | html. MUST differ from `from` (422 otherwise).' }
+      content: { type: string, required: true,  description: 'The body to convert. Max 65,536 bytes encoded as UTF-8 (413 over-limit).' }
+      mode:    { type: string, required: false, description: 'raw | fit (default) | minimal — see the description; `raw` matches what send/read already emit' }
     response: { format: json }

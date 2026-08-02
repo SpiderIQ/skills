@@ -1,19 +1,22 @@
 ---
 name: spidermail
 description: >
-  Agent-driven email over SpiderMail. Read a real mailbox (Zoho / Google
-  Workspace / Outlook): master inbox, single message, full conversation thread,
-  full-text search, and a one-call session bootstrap. Send, reply, and forward
-  through a registered mailbox — write the body in markdown, it auto-converts to
-  professional HTML. Render and manage Jinja2 templates (signature / header /
-  layout / full). Keep the inbox tidy: mark read/unread, star, label. Review the
-  security quarantine. Use it for "check my email", "read my inbox", "reply to
-  this", "send an email to…", "search my mail for…", "forward this", "what's
-  unread", "draft a reply", "apply my signature template". Inbound HTML arrives
-  as clean structured data (~37x fewer tokens); outbound markdown becomes HTML.
-  Per-tenant, PAT-scoped. NOT for FINDING new prospects (use spiderflows /
-  lead-search) or validating that an address is deliverable (use spiderVerify).
-version: "0.4.0"
+  Agent-driven email over SpiderMail. Read a real mailbox (Zoho / Gmail / Google
+  Workspace / Outlook / iCloud, or any IMAP host via generic_imap): master inbox,
+  single message, full conversation thread, full-text search, and a one-call
+  session bootstrap. Send, reply, and forward through a registered mailbox —
+  write the body in markdown, it auto-converts to professional HTML. Convert a
+  document (PDF / DOCX / XLSX / PPTX) to markdown, or a mail body between
+  markdown and HTML on demand. Render and manage Jinja2 templates (signature /
+  header / layout / full). Keep the inbox tidy: mark read/unread, star, label.
+  Review the security quarantine. Use it for "check my email", "read my inbox",
+  "reply to this", "send an email to…", "search my mail for…", "forward this",
+  "what's unread", "draft a reply", "apply my signature template", "connect my
+  Gmail", "turn this PDF into markdown". Inbound HTML arrives as clean structured
+  data (~37x fewer tokens); outbound markdown becomes HTML. Per-tenant,
+  PAT-scoped. NOT for FINDING new prospects (use spiderflows / lead-search) or
+  validating that an address is deliverable (use spiderVerify).
+version: "0.7.0"
 category: communication
 ---
 
@@ -23,7 +26,7 @@ Full email for an agent acting on a brand's behalf — over real IMAP/SMTP
 mailboxes, with one read path and one (async) write path.
 
 ```
-  ┌──────────────── a tenant's registered mailboxes (Zoho · GWS · Outlook) ───────────────┐
+  ┌──── a tenant's mailboxes (Zoho · Gmail · GWS · Outlook · iCloud · generic_imap) ──────┐
   │  inbound: poller → clean YAML (~37x fewer tokens)     outbound: markdown → pro HTML    │
   └───────────────────────────────────────────────────────────────────────────────────────┘
    READ  (direct DB, instant)            WRITE (async, worker queue)        MANAGE
@@ -97,7 +100,10 @@ the recipient "looked right" from a search result. When developing or unsure, se
 | Draft or improve copy (no send) | `composeAssist` | `references/send-reply-forward.md` |
 | Review / release the security quarantine | `listQuarantine` · `releaseMessage` | `references/read-inbox-threads.md` |
 | Connect / test / remove a mailbox | `createMailbox` · `testMailbox` · `deleteMailbox` | `references/read-inbox-threads.md` |
+| See which providers are supported (and how each connects) | `listMailProviders` | `references/read-inbox-threads.md` |
 | Check warmup / deliverability of cold-email senders | `getOutreachHealthOverview` · `getSenderHealth` | `references/outreach-warmup.md` |
+| Turn a PDF/DOCX/XLSX/PPTX/image into markdown | `convertDocument` → `getConversion` | `references/convert-documents.md` |
+| Convert a mail BODY between markdown and HTML (sync, no job) | `convertMailBody` | `references/convert-documents.md` |
 | Manage a Smartlead/lemlist/Instantly connection | `listOutreachConnections` · `syncOutreachConnection` | `references/outreach-warmup.md` |
 
 ## The one thing that bites: send is async
@@ -153,6 +159,9 @@ surfaces sender deliverability/warmup health. See `references/outreach-warmup.md
   label definitions, saved views.
 - `references/outreach-warmup.md` — Smartlead/lemlist/Instantly connections,
   sender warmup + deliverability health, the brand-admin write boundary.
+- `references/convert-documents.md` — the TWO conversion surfaces and how to tell
+  them apart: `convertDocument` (a FILE → markdown, async, returns a job_id) vs
+  `convertMailBody` (a STRING, markdown ↔ HTML, synchronous). Read before either.
 - `references/gaps.md` — what the CLI and MCP surfaces do NOT yet expose (read if
   you're on the CLI/MCP path, not the marketplace client).
 

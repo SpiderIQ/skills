@@ -1,0 +1,15 @@
+{
+  "title": "convertDocument returns a preview by default, and `truncated: true` does not mean the document was cut off",
+  "summary": "full_text defaults to FALSE — the result carries `preview` (first 1500 chars) and `markdown: null`. Agents that read `markdown` and find null conclude the conversion failed; it succeeded, they just did not ask for the body. Separately, `truncated: true` has two causes that need different responses: full_text was false (ask again with full_text=true), or the extraction exceeded the 1 MB inline limit and the rest is on the CDN under storage_key (follow the key — re-submitting will truncate identically). Reading truncated as 'the document was cut short' leads to a pointless retry loop.",
+  "created_at": "2026-07-31",
+  "updated_at": "2026-07-31",
+  "tags": ["spiderconvert", "async", "preview", "truncation", "cdn"],
+  "references": [
+    "app/schemas/spider_convert.py (SpiderConvertResult: markdown/preview/truncated/storage_key field semantics)",
+    "app/services/document_converter.py (full_text branch: preview-only vs inline vs object storage)",
+    "docs/services/SpiderMail/LEARNINGS.md §8 (full attachment text is opt-in — preview + summary only)",
+    "docs/services/SpiderMail/LEARNINGS.md §11 (extracted text >1MB goes to the CDN, not Postgres)",
+    "docs/services/SpiderMail/LEARNINGS.md §54 (the CDN write endpoint never existed until card 2.3)",
+    "tests/unit/api/test_spiderconvert.py::TestFullTextIsOptIn + ::TestLargeTextGoesToObjectStorage"
+  ]
+}
