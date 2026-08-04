@@ -30,19 +30,33 @@ that their mail is set up.
    returns `health: "connecting"`, never `"active"`. Call `listMailboxes` after
    the poller has had a cycle to confirm it reached `active`.
 
-## The 422: `mailbox_verification_failed`
+## The 422: `MAILBOX_VERIFICATION_FAILED`
+
+Read `error.code`. Everything you need is inside the `error` object — this is
+the platform error envelope, the same shape every 4xx on this API uses.
 
 ```
 POST /mail/mailboxes  →  422
 {
-  "error": "mailbox_verification_failed",
-  "imap_ok": false,          "imap_error": "<the server's own text>",
-  "smtp_ok": true,           "smtp_error": null,
-  "verification_unavailable": false,
-  "message": "...Nothing was saved.",
-  "retry_hint": "..."
+  "error": {
+    "code": "MAILBOX_VERIFICATION_FAILED",
+    "message": "...Nothing was saved.",
+    "suggested_action": "Resubmit with skip_verification=true to ...",
+    "imap_ok": false,          "imap_error": "<the server's own text>",
+    "smtp_ok": true,           "smtp_error": null,
+    "verification_unavailable": false
+  }
 }
 ```
+
+> ⚠️ **Changed in 0.9.0 (card UI.3).** This block previously documented a flat
+> body with a lowercase `error` string and a `retry_hint` key. That shape was
+> never actually emitted — the endpoint raised it as a bare dict, which the
+> error-envelope middleware stringified, so what really went over the wire was
+> a **Python dict repr** inside `error.message`. The endpoint now emits the
+> envelope above for real. If you cached the old shape, re-read it: `error` is
+> an OBJECT, the slug moved to `error.code` in upper case, and `retry_hint` is
+> now `suggested_action`.
 
 **Nothing was saved.** There is no half-created mailbox to clean up, and
 re-sending the same request is not a retry of a partial write.

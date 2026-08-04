@@ -307,9 +307,12 @@ methods:
         warming and they close accounts rather than throttle them. See
         listMailProviders → generic_imap → routed_providers.
 
-        🔴 A 422 `mailbox_verification_failed` means NOTHING WAS SAVED — do not
-        treat it as a partial success and do not retry blind. Its detail body is
-        structured: `imap_ok` / `smtp_ok` name which protocol failed,
+        🔴 A 422 `error.code = MAILBOX_VERIFICATION_FAILED` means NOTHING WAS
+        SAVED — do not treat it as a partial success and do not retry blind.
+        Read it off `error`, the platform envelope object, NOT a top-level
+        `error` string and NOT `detail` (changed in 0.9.0, card UI.3 — the flat
+        shape this once described was never emitted). The object is structured:
+        `imap_ok` / `smtp_ok` name which protocol failed,
         `imap_error` / `smtp_error` carry the server's own text, and
         `verification_unavailable` is the field that decides what to do next.
         TRUE means WE could not complete the check, so offering

@@ -152,7 +152,7 @@ surfaces sender deliverability/warmup health. See `references/outreach-warmup.md
   vs per-mailbox inbox, the read side effect, threads, attachment previews, YAML.
 - `references/connect-a-mailbox.md` — **Always read** before connecting a mailbox
   or reporting that one works: verify-before-save and the `422
-  mailbox_verification_failed` body, when `skip_verification=true` is honest vs
+  MAILBOX_VERIFICATION_FAILED` envelope body, when `skip_verification=true` is honest vs
   reckless, the five `health` states, and why `is_active` is not health.
 - `references/send-reply-forward.md` — the async send/reply/forward flow,
   markdown bodies, the queued→poll loop, the HARD-GATE in practice.
