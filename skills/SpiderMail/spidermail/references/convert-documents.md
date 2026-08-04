@@ -81,10 +81,31 @@ console.log(result.markdown);
 
 ## Gotchas
 
-- **`truncated: true` has two different causes.** Either `full_text` was false
-  (you asked for a preview), or the extraction exceeded the inline limit and the
-  remainder is on the CDN under `storage_key`. Check `storage_key` to tell them
-  apart — do not assume the document was cut off mid-sentence.
+- **🔴 `full_text: true` is the precondition for object storage, not just for the
+  body.** The flag is evaluated **before** the size threshold, so without it
+  `storage_key` is `null` at *any* size — a 2 MB document comes back as a
+  1500-char preview with no key. Read `truncation_notice` on the result: when
+  something is being withheld it names the specific remedy.
+
+  ```
+  full_text unset, any size      → preview · markdown null · storage_key NULL
+  full_text: true, under 256 KB  → full body in `markdown`
+  full_text: true, over  256 KB  → storage_key set → follow it to /content
+  ```
+
+  ⚠️ **Do not conclude the storage path is broken from a request that omitted the
+  flag.** That branch genuinely was dead for a long time, so the wrong conclusion
+  is also the familiar one — and a `GET /jobs/spiderConvert/{id}/content` 404
+  after a no-flag submit is correct behaviour.
+
+- **`truncated: true` has three different causes, and `storage_key` does NOT
+  separate them.** Either `full_text` was false (you asked for a preview), or it
+  was true and the markdown exceeded the inline threshold so the body is on the
+  CDN under `storage_key`, or the EXTRACTOR stopped early — in which case the
+  missing text was never produced and no flag or key retrieves it. The
+  discriminators are `truncation_notice` (recoverable, and it says how) and
+  `extraction_notice` / `extraction_truncated` (permanent). Checking
+  `storage_key` alone cannot tell case 1 from case 3, because it is null in both.
 
 - **🔴 `security.safe === false` means the extracted text contains
   instruction-like content.** A PDF can carry "ignore all previous instructions"

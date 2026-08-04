@@ -16,7 +16,7 @@ description: >
   data (~37x fewer tokens); outbound markdown becomes HTML. Per-tenant,
   PAT-scoped. NOT for FINDING new prospects (use spiderflows / lead-search) or
   validating that an address is deliverable (use spiderVerify).
-version: "0.7.0"
+version: "0.8.0"
 category: communication
 ---
 
@@ -99,8 +99,9 @@ the recipient "looked right" from a search result. When developing or unsure, se
 | List folders | `listFolders` | `references/organize-inbox.md` |
 | Draft or improve copy (no send) | `composeAssist` | `references/send-reply-forward.md` |
 | Review / release the security quarantine | `listQuarantine` · `releaseMessage` | `references/read-inbox-threads.md` |
-| Connect / test / remove a mailbox | `createMailbox` · `testMailbox` · `deleteMailbox` | `references/read-inbox-threads.md` |
-| See which providers are supported (and how each connects) | `listMailProviders` | `references/read-inbox-threads.md` |
+| Connect / test / remove a mailbox | `createMailbox` · `testMailbox` · `deleteMailbox` | `references/connect-a-mailbox.md` |
+| Know whether a mailbox actually WORKS (not just exists) | `listMailboxes` → read `health` | `references/connect-a-mailbox.md` |
+| See which providers are supported (and how each connects) | `listMailProviders` | `references/connect-a-mailbox.md` |
 | Check warmup / deliverability of cold-email senders | `getOutreachHealthOverview` · `getSenderHealth` | `references/outreach-warmup.md` |
 | Turn a PDF/DOCX/XLSX/PPTX/image into markdown | `convertDocument` → `getConversion` | `references/convert-documents.md` |
 | Convert a mail BODY between markdown and HTML (sync, no job) | `convertMailBody` | `references/convert-documents.md` |
@@ -149,6 +150,10 @@ surfaces sender deliverability/warmup health. See `references/outreach-warmup.md
 
 - `references/read-inbox-threads.md` — **Always read** before reading mail: master
   vs per-mailbox inbox, the read side effect, threads, attachment previews, YAML.
+- `references/connect-a-mailbox.md` — **Always read** before connecting a mailbox
+  or reporting that one works: verify-before-save and the `422
+  mailbox_verification_failed` body, when `skip_verification=true` is honest vs
+  reckless, the five `health` states, and why `is_active` is not health.
 - `references/send-reply-forward.md` — the async send/reply/forward flow,
   markdown bodies, the queued→poll loop, the HARD-GATE in practice.
 - `references/templates.md` — Jinja2 template types, preview-before-send, the
