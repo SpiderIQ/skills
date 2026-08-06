@@ -233,7 +233,12 @@ methods:
         last successful NULL forever. That is what `stalled` exists to catch.
 
         A mailbox reporting `active` is not a promise that its history is fully
-        ingested — see the reference on connecting a mailbox.
+        ingested — see the reference on connecting a mailbox. Each row also
+        carries its ingest bounds (`sync_scope`, `sync_scope_n`,
+        `sync_since_date`) and its cadence (`poll_interval_seconds`, null =
+        the platform 300s tick). Read those before concluding that mail is
+        "missing": a mailbox on `last_n: 500` is behaving correctly when it
+        does not hold last year's messages.
 
         the `from_email` you send with MUST be one of these registered addresses.
       telemetry_signal_default: "warm"
@@ -286,7 +291,9 @@ methods:
       422 without creating anything if either fails. On success the response
       carries health=`connecting`, NOT `active` — the probe proved the
       credentials, it did not prove a poll has run. The poller promotes it to
-      `active` on its first successful cycle.
+      `active` on its first successful cycle. A NEW mailbox ingests the LAST
+      500 MESSAGES by default (`sync_scope: last_n`), not its whole history —
+      see sync_scope below before assuming older mail will appear.
     guidance:
       use: "connect a Zoho / Gmail / Google Workspace / Outlook / iCloud / Fastmail / self-hosted mailbox so the agent can read + send from it"
       next: "re-read the mailbox via listMailboxes and check `health` — a successful create means the credentials work, not that the mailbox is ingesting"
@@ -321,6 +328,17 @@ methods:
         registers a mailbox you have been told is broken. Fix the password
         instead; on the five preset providers the near-certain cause is an
         account password where an app-specific one is required.
+
+        📥 SCOPE THE INGEST DELIBERATELY (added 0.10.0, card S.1). Omitting
+        sync_scope gives `last_n` = 500 messages, which is the right answer
+        for almost every agent. Do NOT reach for `sync_scope: "all"` to be
+        thorough — it ingests the ENTIRE mailbox at roughly 100 messages per
+        5-minute cycle (~28,800/day, so ~3.5 days for a 100k mailbox, stored
+        in full), and on Gmail it is a live rate-limit hazard rather than a
+        theoretical one. Ask the user before choosing it. The three shapes are
+        mutually exclusive and the server rejects a mixture: `last_n` takes
+        sync_scope_n and NOT sync_since_date, `since_date` takes
+        sync_since_date and NOT sync_scope_n, and `all` takes NEITHER.
       telemetry_signal_default: "cold"
     http: POST /mail/mailboxes
     params:
@@ -336,6 +354,63 @@ methods:
       display_name:  { type: string,  required: false, description: 'Sender display name' }
       imap_port:     { type: integer, required: false, description: 'IMAP port (default: the provider''s published port, usually 993)' }
       smtp_port:     { type: integer, required: false, description: 'SMTP port (default: the provider''s published port)' }
+      sync_scope:    { type: string,  required: false, description: 'How far back to ingest on connect: last_n (DEFAULT) | since_date | all. The default is last_n/500 — deliberately not `all`. Mailboxes connected before migration 481 carry `all` because that was the only behaviour that existed; that is a legacy column default, not a recommendation.' }
+      sync_scope_n:  { type: integer, required: false, description: 'Message count for sync_scope=last_n (1..100000, defaults to 500). An UPPER BOUND, not an exact count: the start UID is derived from the folder''s UIDNEXT and UIDs are sparse wherever mail was deleted, so you may receive FEWER than N — never more. Rejected with sync_scope=since_date or all.' }
+      sync_since_date: { type: string, required: false, description: 'Cutoff date (ISO 8601, YYYY-MM-DD) for sync_scope=since_date. REQUIRED with that scope, rejected with last_n or all.' }
+      poll_interval_seconds: { type: integer, required: false, description: 'Per-mailbox poll cadence (60..86400). Omit for the platform default (300s). This can only make a mailbox poll LESS often — the global tick is the scheduler resolution, so the effective cadence is max(this, 300s) and a value under 300 buys nothing. Use it to BACK OFF a provider that is rate-limiting you.' }
+    response: { format: json }
+
+  updateMailbox:
+    description: >
+      Change a registered mailbox's settings: display name, on/off switch,
+      default template + variables, and — since card S.1 — its INGEST SCOPE and
+      poll cadence. A PATCH: an omitted field is left alone, never reset. No
+      IMAP/SMTP password is required or accepted; ownership is by the
+      authenticated client plus the address, so this cannot change credentials.
+      Returns the full updated mailbox row.
+    guidance:
+      use: "re-scope a mailbox that ingested too little or too much history, back off a rate-limited provider's poll cadence, rename the sender, or disable polling without deleting anything"
+      next: "listMailboxes and read sync_scope / poll_interval_seconds back — a scope change takes effect on the NEXT poll cycle, not immediately"
+      warn: >
+        🔴 CHANGING sync_scope REWINDS THE MAILBOX. Any scope change clears the
+        resolved floor and rewinds the read watermarks, so the next cycle
+        re-resolves from scratch under the new scope. This is not incidental —
+        the poller always walks FORWARD and applies the floor as
+        max(watermark, floor), so lowering the floor alone would do nothing
+        once the watermark had passed it, and "widening backfills
+        automatically" would be a silent no-op.
+
+        What that costs you, stated plainly: it RE-WALKS, so it spends
+        provider bandwidth again, bounded by the unchanged 100-messages-per-
+        cycle cap. What it does NOT cost you: nothing is deleted and nothing is
+        duplicated. Re-ingest is idempotent on a global UNIQUE(message_id), and
+        NARROWING a scope only stops the poller reaching further back — mail
+        already stored stays stored. Deleting stored mail is a separate,
+        explicit action this endpoint never performs.
+
+        ⚠️ THE DEFAULTING RULE IS THE OPPOSITE OF createMailbox. On create,
+        `sync_scope: "last_n"` with no count defaults to 500. On UPDATE the
+        same request is a 422 — `sync_scope_n is required when
+        sync_scope='last_n'`. A PATCH cannot tell "use the default" apart from
+        "leave it alone", so it refuses to guess. Always send the count
+        explicitly here. Same for since_date. Passing a parameter that does
+        not belong to the new scope is also a 422.
+
+        Sending poll_interval_seconds WITHOUT sync_scope changes cadence only
+        and does NOT rewind — use that when a provider is rate-limiting you
+        and you do not want to re-walk anything.
+      telemetry_signal_default: "cold"
+    http: PATCH /mail/mailboxes/{email}
+    params:
+      email:         { type: string,  required: true,  description: 'Mailbox email address to update (path parameter)' }
+      display_name:  { type: string,  required: false, description: 'Sender display name used in the From header' }
+      is_active:     { type: boolean, required: false, description: 'Enable/disable inbound IMAP polling. This is the operator switch, NOT a health signal — read `health` from listMailboxes for that.' }
+      default_template_id: { type: integer, required: false, description: 'Default template for outbound mail from this mailbox. Pass 0 to CLEAR it (0 is the sentinel for null, not a template id).' }
+      template_variables:  { type: object,  required: false, description: 'Default template variable values, merged with job-level data at send time' }
+      sync_scope:    { type: string,  required: false, description: 'all | last_n | since_date. REWINDS the mailbox — see the warning. Widening makes the next cycles walk further back; narrowing only stops reaching back and deletes nothing.' }
+      sync_scope_n:  { type: integer, required: false, description: 'Message count for sync_scope=last_n (1..100000). REQUIRED here whenever sync_scope=last_n — unlike createMailbox, this does NOT default to 500.' }
+      sync_since_date: { type: string, required: false, description: 'Cutoff date (ISO 8601) for sync_scope=since_date. Required with that scope.' }
+      poll_interval_seconds: { type: integer, required: false, description: 'Per-mailbox poll cadence (60..86400). Can only make the mailbox poll LESS often than the 300s platform tick. Send it alone to back off a provider without triggering a rewind.' }
     response: { format: json }
 
   testMailbox:
@@ -964,7 +1039,7 @@ methods:
       and a .pdf that is really something else reports its real type.
     guidance:
       use: "turn a PDF/DOCX/XLSX/PPTX/image into markdown an agent can actually read"
-      next: "getConversion with the returned job_id — a 202 means QUEUED, not converted"
+      next: "getConversion with the returned job_id — a 202 means QUEUED, not converted. Read getConversion's warning first: as of 2026-08-06 that read path returns data: null for every convert job (card C.8), so a null there does not mean your conversion failed."
       warn: "ASYNC — there is no synchronous variant and asking for one will not produce a body. full_text defaults FALSE (you get a 1500-char preview); set it true only when you need the whole document, because large extractions move real bytes. ocr='never' is much cheaper on a big scanned corpus but ERRORS on images, which have no text layer."
       telemetry_signal_default: "cold"
     http: POST /jobs/spiderConvert/submit
@@ -997,7 +1072,27 @@ methods:
     guidance:
       use: "read the markdown produced by convertDocument"
       next: "if truncated=true, read truncation_notice — it names the remedy. storage_key set means follow it to /content; storage_key null means re-submit with full_text=true (it is null at ANY size when the flag was unset, so its absence is NOT evidence the document is small or that storage is broken)"
-      warn: "CHECK THE `security` FIELD BEFORE FEEDING THIS TO A MODEL. Extracted document text is a prompt-injection vector; security.safe=false means the document contains instruction-like content. The text is returned unmodified — you decide what to do with it."
+      warn: >
+        🔴 KNOWN DEFECT, OPEN AS OF 2026-08-06 (card C.8). This endpoint
+        currently returns `data: null` for EVERY spiderConvert job, in all
+        three formats (json / yaml / md). It is a type-dispatch omission, not
+        a failure of your conversion: `spiderConvert` is missing from the
+        results endpoint's passthrough set and has no transform branch, so a
+        payload that exists and is correct gets flattened away on the way out.
+        A small document fails identically to a large one, so this is not a
+        size or truncation effect.
+
+        ⇒ DO NOT read `data: null` here as "the conversion failed" and do not
+        retry the conversion — the retry will convert successfully and return
+        null again. Check `status` on the job instead: `completed` means the
+        markdown was produced and is simply unreachable through this route
+        today. A fix is in flight; this warning will be removed when it lands.
+
+        CHECK THE `security` FIELD BEFORE FEEDING THIS TO A MODEL, once the
+        payload is reachable. Extracted document text is a prompt-injection
+        vector; security.safe=false means the document contains
+        instruction-like content. The text is returned unmodified — you decide
+        what to do with it.
       telemetry_signal_default: "warm"
     http: GET /jobs/{job_id}/results
     params:

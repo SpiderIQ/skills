@@ -30,6 +30,10 @@ that their mail is set up.
    returns `health: "connecting"`, never `"active"`. Call `listMailboxes` after
    the poller has had a cycle to confirm it reached `active`.
 
+5. **Say how much history you asked for.** A new mailbox imports its last 500
+   messages, not everything. Tell the user that, and see the next section
+   before you reach for `sync_scope: "all"`.
+
 ## The 422: `MAILBOX_VERIFICATION_FAILED`
 
 Read `error.code`. Everything you need is inside the `error` object — this is
@@ -93,6 +97,74 @@ It proves **authentication** — that these credentials open an IMAP session and
 an SMTP session. It does **not** prove the mailbox can deliver mail to a
 recipient, and it does not prove a poll has ever run. Do not report "your
 mailbox is working and ready to send" on the strength of a 201.
+
+## How much mail comes in: scope and cadence
+
+*Added 0.10.0 (card S.1). Before it, every mailbox ingested its entire history
+because that was the only behaviour that existed.*
+
+Two independent settings, on both `createMailbox` and `updateMailbox`:
+
+| Setting | Values | Default |
+|---|---|---|
+| `sync_scope` | `last_n` · `since_date` · `all` | `last_n`, count **500**, on a NEW mailbox |
+| `poll_interval_seconds` | `60`–`86400` | null = the platform 300s tick |
+
+The three scopes are mutually exclusive and the server rejects a mixture:
+`last_n` takes `sync_scope_n` and not `sync_since_date`; `since_date` takes
+`sync_since_date` and not `sync_scope_n`; `all` takes **neither**.
+
+### WRONG / RIGHT
+
+```jsonc
+// WRONG — "be thorough". This asks for the entire mailbox.
+{ "email_address": "…", "provider": "gmail", "sync_scope": "all", … }
+
+// RIGHT — the default is already the right answer; say nothing.
+{ "email_address": "…", "provider": "gmail", "imap_password": "…", … }
+
+// RIGHT — a deliberate, user-approved wider window.
+{ …, "sync_scope": "since_date", "sync_since_date": "2026-01-01" }
+```
+
+**What `all` actually costs.** Roughly 100 messages per 5-minute cycle —
+~28,800 a day, so about **3.5 days for a 100,000-message mailbox**, stored in
+full. On Gmail it is a live rate-limit hazard, not a theoretical one. Ask the
+user before choosing it.
+
+**`sync_scope_n` is an upper bound, not an exact count.** The starting UID is
+derived from the folder's UIDNEXT and UIDs are sparse wherever mail was
+deleted, so you may receive fewer than N — never more. A mailbox holding 480
+messages against `last_n: 500` is correct, not broken.
+
+### Re-scoping later
+
+`updateMailbox` changes both settings on a live mailbox. **Any scope change
+rewinds it**: the resolved floor is cleared and the read watermarks reset, so
+the next cycle re-resolves from scratch under the new scope.
+
+That is deliberate rather than incidental. The poller always walks *forward*
+and applies the floor as `max(watermark, floor)`, so once a watermark has
+passed the floor, lowering the floor alone changes nothing — "widen the scope
+and it backfills" would be a silent no-op that looked like it worked.
+
+- It **re-walks**, so it spends provider bandwidth again (bounded by the same
+  100-per-cycle cap).
+- It **deletes nothing and duplicates nothing**. Re-ingest is idempotent on a
+  global `UNIQUE(message_id)`, and narrowing only stops the poller reaching
+  further back — mail already stored stays stored.
+
+🔴 **The defaulting rule inverts between the two calls.** On `createMailbox`,
+`sync_scope: "last_n"` with no count means 500. On `updateMailbox` the same
+request is a **422** — a PATCH cannot distinguish "use the default" from
+"leave it alone", so it refuses to guess. Always send `sync_scope_n`
+explicitly when updating.
+
+**To back off a rate-limited provider without re-walking anything**, send
+`poll_interval_seconds` *alone*. Cadence-only changes do not rewind. Note it
+can only make a mailbox poll *less* often: the global tick is the scheduler's
+resolution, so the effective cadence is `max(interval, 300s)` and a value
+under 300 buys nothing.
 
 ## The five health states
 

@@ -100,6 +100,7 @@ the recipient "looked right" from a search result. When developing or unsure, se
 | Draft or improve copy (no send) | `composeAssist` | `references/send-reply-forward.md` |
 | Review / release the security quarantine | `listQuarantine` · `releaseMessage` | `references/read-inbox-threads.md` |
 | Connect / test / remove a mailbox | `createMailbox` · `testMailbox` · `deleteMailbox` | `references/connect-a-mailbox.md` |
+| Change how far back a mailbox ingests, or how often it polls | `updateMailbox` (`sync_scope` · `poll_interval_seconds`) | `references/connect-a-mailbox.md` |
 | Know whether a mailbox actually WORKS (not just exists) | `listMailboxes` → read `health` | `references/connect-a-mailbox.md` |
 | See which providers are supported (and how each connects) | `listMailProviders` | `references/connect-a-mailbox.md` |
 | Check warmup / deliverability of cold-email senders | `getOutreachHealthOverview` · `getSenderHealth` | `references/outreach-warmup.md` |
