@@ -424,6 +424,14 @@ methods:
       og_image_url:      { type: string,  required: false, description: 'OG/Twitter share image for the post. Same host allowlist as cover_image_url — upload via uploadMedia first.' }
       custom_fields:     { type: object,  required: false, description: 'Free-form key/value bag stored on the post and exposed to the template as post.custom_fields' }
       vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). Resolve via vayapinCards first." }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Explicit publication date (ISO-8601; naive read as UTC). Independent of status —
+          the post stays a DRAFT. Use it to preserve an imported post's original date so the
+          blog index and feeds read in true publication order. For a FUTURE go-live, publish
+          the post and use schedulePost instead.
       project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
     response: { format: json }
 
@@ -477,6 +485,14 @@ methods:
       og_image_url:      { type: string,  required: false, description: 'OG/Twitter share image for the post. Same host allowlist as cover_image_url — upload via uploadMedia first.' }
       custom_fields:     { type: object,  required: false, description: 'Free-form key/value bag stored on the post and exposed to the template as post.custom_fields' }
       vayapin_pins:      { type: array,   required: false, items: string, description: "VayaPin pin public CODES (COUNTRY:CODE, e.g. ['DE:KAIMUL']) — the `vayapin` field from vayapinCards, NOT the pin UUID (UUID is silently dropped). PATCH REPLACES the whole pin set: send the full list, [] clears. Resolve codes via vayapinCards first." }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Explicit publication date (ISO-8601; naive read as UTC). Independent of status —
+          the post stays a DRAFT. Use it to preserve an imported post's original date so the
+          blog index and feeds read in true publication order. For a FUTURE go-live, publish
+          the post and use schedulePost instead.
       project:           { type: string,  required: false, description: 'proj_… website id (omit for default project)' }
     response: { format: json }
 
@@ -496,6 +512,13 @@ methods:
     http: POST /dashboard/content/posts/{post_id}/publish
     params:
       post_id: { type: string, required: true }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Publication date to stamp instead of now (ISO-8601; naive read as UTC) — the
+          archive-import path. Wins over any date already on the post. For a FUTURE
+          go-live use schedulePost instead.
     response: { format: json }
 
   previewPost:
@@ -1444,20 +1467,38 @@ methods:
       use: "discover changelog entries + their ids before publishing or correcting one"
       next: "publishChangelog to make one live; updateChangelog to correct one"
       warn: >
-        Pass include_body=true only when you need the prose, and pair it with limit —
+        Pass include_body=true only when you need the prose, and pair it with page_size —
         bodies are full Tiptap documents.
+      pitfalls:
+        - >
+          The list is ordered by DATE, not by version string. Do NOT re-sort it in a template
+          with Liquid's built-in `sort` — that is a TEXT sort and puts v2.10.0 between v2.1.0
+          and v2.2.0. Fix the dates, or pass sort=version here.
       telemetry_signal_default: "warm"
     http: GET /dashboard/content/changelog
     params:
       status:       { type: string,  required: false, description: 'Filter by status: draft | published | archived' }
-      limit:        { type: integer, required: false, description: 'Max entries (1-200, default 50)' }
-      offset:       { type: integer, required: false, description: 'Pagination offset (default 0)' }
+      page:         { type: integer, required: false, description: '1-based page number (the house pattern). Wins over limit/offset.' }
+      page_size:    { type: integer, required: false, description: 'Entries per page (1-200, default 50).' }
+      sort:         { type: string,  required: false, description: "Ordering, newest first: 'published_at' (default, release date) or 'version' (semver compared NUMERICALLY, so v2.10.0 outranks v2.9.0)." }
+      limit:        { type: integer, required: false, description: 'Legacy alias for page_size (1-200, default 50)' }
+      offset:       { type: integer, required: false, description: 'Legacy alias — raw row offset (default 0)' }
       include_body: { type: boolean, required: false, description: "Include each entry's full Tiptap body. Expensive — pair with limit." }
       format:       { type: string,  required: false, description: 'json | yaml | md' }
     response: { format: json }
 
   createChangelog:
-    description: Create a changelog entry (draft).
+    description: >
+      Create a changelog entry (draft). Pass published_at to pre-stamp the REAL release
+      date — the public /changelog timeline is ordered by date, so a backfilled history
+      without it lands in import order rather than release order.
+    guidance:
+      use: "add a version-stamped release note"
+      next: "publishChangelog to make it live"
+      warn: "version is unique per brand — a duplicate returns 409."
+      pitfalls:
+        - "Backfilling history? Pass published_at on EVERY entry, oldest first — the page orders by date."
+        - "published_at does NOT publish the entry; it stays a draft until publishChangelog."
     http: POST /dashboard/content/changelog
     params:
       title:   { type: string, required: true }
@@ -1476,13 +1517,33 @@ methods:
             items: object
             description: Ordered list of Tiptap block nodes (paragraph, heading, bulletList, image, …).
       version: { type: string, required: false }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Explicit release date (ISO-8601, e.g. "2026-06-15T14:00:00Z"; naive read as UTC).
+          Does NOT publish the entry. Use it whenever the entry is historical.
     response: { format: json }
 
   publishChangelog:
-    description: Publish a changelog entry (fires the changelog.published notification).
+    description: >
+      Publish a changelog entry (fires the changelog.published notification on the FIRST
+      publish only — correcting a live entry never double-notifies).
+    guidance:
+      use: "make a draft changelog entry live on /changelog + the RSS/Atom feeds"
+      next: "listChangelog to confirm it is there and in the right position"
+      warn: >
+        No deploySite needed — entries are fetched live by the renderer. Deploy only if you
+        also changed templates or settings.
     http: POST /dashboard/content/changelog/{entry_id}/publish
     params:
       entry_id: { type: string, required: true }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Release date to stamp instead of now (ISO-8601; naive read as UTC). WINS over any
+          date already on the entry, so this is also the correction path for a wrong date.
     response: { format: json }
 
   updateChangelog:
@@ -1490,7 +1551,7 @@ methods:
       Update a changelog entry (PATCH — only the fields you send change). Entries
       are NOT frozen once created: use this to correct an already-published one.
     guidance:
-      use: "edit a changelog entry — title, version, or body (fix a wrong/empty body)"
+      use: "edit a changelog entry — title, version, body, or the release date"
       next: "publishChangelog -> deploySite"
       warn: "version stays unique per brand (a collision returns 409). body accepts a Tiptap doc OR {\"markdown\": ...} / {\"html\": ...} — it's normalized to Tiptap server-side, so a markdown body no longer stores clean then renders title-only."
     http: PATCH /dashboard/content/changelog/{entry_id}
@@ -1498,6 +1559,12 @@ methods:
       entry_id: { type: string, required: true }
       title:    { type: string, required: false }
       version:  { type: string, required: false, description: 'Unique per brand — a collision returns 409.' }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Correct the release date (ISO-8601; naive read as UTC). The supported way to re-date
+          a backfilled changelog so the date-ordered public timeline reads in true order.
       body:
         type: object
         required: false
@@ -1605,6 +1672,14 @@ methods:
       release_type:   { type: string, required: false, values: ["press_release", "statement", "media_alert", "newsbyte"] }
       dateline_city:  { type: string, required: false, description: 'e.g. "BERLIN".' }
       dateline_date:  { type: string, required: false, description: 'YYYY-MM-DD.' }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Explicit go-live timestamp (ISO-8601; naive read as UTC). Independent of status —
+          a created release stays a DRAFT. Use it to preserve the original date when importing
+          an archive. NOT dateline_date, which is the separate PRINTED editorial date. For a
+          FUTURE go-live use schedulePressRelease.
       boilerplate_id: { type: string, required: false, description: 'Boilerplate to append as the "About" tail.' }
       media_kit_id:   { type: string, required: false, description: 'Media kit to attach.' }
       contact_ids:
@@ -1643,6 +1718,12 @@ methods:
       release_type:   { type: string, required: false, values: ["press_release", "statement", "media_alert", "newsbyte"] }
       dateline_city:  { type: string, required: false }
       dateline_date:  { type: string, required: false }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Correct the go-live timestamp (ISO-8601; naive read as UTC) so an imported archive
+          reads in true order. NOT dateline_date (the printed editorial date).
       boilerplate_id: { type: string, required: false }
       media_kit_id:   { type: string, required: false }
       contact_ids:    { type: array, required: false, items: string }
@@ -1671,6 +1752,14 @@ methods:
     http: POST /dashboard/content/press/{release_id}/publish
     params:
       release_id: { type: string, required: true, description: 'Press release id.' }
+      published_at:
+        type: string
+        required: false
+        description: >
+          Go-live date to stamp instead of now (ISO-8601; naive read as UTC), for importing a
+          historical release. NOTE the notification still fires on the first publish, backdated
+          or not — to import an archive silently, create the releases with published_at set
+          instead of publishing each one.
     response: { format: json }
 
   unpublishPressRelease:

@@ -7,7 +7,7 @@ agent — which is the differentiator here. No other newsroom product exposes a
 write-capable API; the incumbents are read-only or have no public API at all.
 
 Reach for a **post** instead for ongoing editorial content, and the **changelog**
-for version-stamped release notes. To **design the newsroom page itself** — which
+(`references/changelog.md`) for version-stamped release notes. To **design the newsroom page itself** — which
 components to compose, the four archetypes, the `press` data source — see
 `references/press-page-design.md`. This reference is the *content* half (the
 releases); that one is the *page* half.
@@ -25,6 +25,18 @@ releases); that one is the *page* half.
 
 Everything is **project-scoped**. Bind a project first (`spideriq use <id>`, an
 `-w/--workspace`, or an `X-Project-Id` header).
+
+### Importing an archive of past releases
+
+`createPressRelease` / `updatePressRelease` / `publishPressRelease` all accept
+`published_at` (ISO-8601, naive read as UTC) — the go-live timestamp, which the
+newsroom index and feeds order by. It is **not** `dateline_date`, the separate
+date printed on the release itself.
+
+⚠️ **Publishing notifies the journalist list on the FIRST transition, backdated
+or not.** So do NOT import a back catalogue by publishing each release. Create
+them already carrying their real dates, and publish only what you actually want
+announced.
 
 ---
 

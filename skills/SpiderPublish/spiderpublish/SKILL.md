@@ -105,6 +105,9 @@ Confirm the deploy step happened before reporting a change as live.
 | Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
 | Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
+| **Publish a changelog entry** (version-stamped release notes at `/changelog` + RSS/Atom) | `createChangelog`→`publishChangelog` (`updateChangelog` to correct one) | `references/changelog.md` |
+| **Backfill a changelog / blog / newsroom history with its REAL dates** — anything where "the order on the page is wrong" | pass `published_at` on `createChangelog` / `createPost` / `createPressRelease` (or on publish/update to correct) | `references/changelog.md` |
+| The changelog page renders in the wrong order (v2.10.0 below v2.2.0) | fix the DATES, or `listChangelog(sort="version")` / the `sort_semver` filter — NEVER Liquid's built-in `sort` | `references/changelog.md` |
 | Run a newsroom — publish a press release, with press contacts, a boilerplate and a downloadable media kit | `createPressContact`→`createPressBoilerplate`→`createPressKit`→`createPressRelease`→`publishPressRelease` (or `schedulePressRelease` / `embargoPressRelease`) | `references/press-newsroom.md` |
 | **Design the newsroom PAGE** — compose the press components, pick 1 of 4 archetypes (the release list self-binds to `press`) | `listSiteTemplates`→`applySiteTemplate`(`newsroom-minimal`\|`-startup-dark`\|`-startup-light`\|`-corporate`\|`-agency`) · or `createPage`→`insertSection`(`sys-press-releases`·`sys-press-kit`·`sys-press-marquee`) — a `featured`/`grid` release index needs `createPage(blocks=[{layout:…}])`, NOT `insertSection` | `references/press-page-design.md` |
 | Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
@@ -182,6 +185,11 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
   records, publish + expose (is_public), and render them as a dynamic component.
 - `references/content.md` — pages, posts, docs, authors/tags/categories, nav,
   settings, domains. **Read before any content write.**
+- `references/changelog.md` — version-stamped release notes: the 3-call path,
+  setting `published_at` explicitly (the backfill path — the public timeline is
+  ordered by DATE), pagination, and the version-sort trap that a template-side
+  `| sort: "version"` walks straight into. **Read before any changelog write,
+  and before backfilling ANY content type's history.**
 - `references/press-newsroom.md` — run a newsroom: press releases plus the
   contact roster, boilerplates and media kits around them. **Read before any
   press write** — scheduling auto-publishes at the set time and embargo mints

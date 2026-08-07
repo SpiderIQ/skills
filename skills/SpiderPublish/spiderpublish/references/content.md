@@ -1,5 +1,12 @@
 # Content — pages, posts, docs, navigation, domains, settings
 
+> **Publish dates.** `createPost` / `updatePost` / `publishPost` all accept
+> `published_at` (ISO-8601, naive read as UTC). Set it when importing an archive
+> so the blog index and feeds read in true publication order — the index is
+> ordered by date. For a FUTURE go-live use `schedulePost` instead. Version-
+> stamped release notes are a different content type: see
+> `references/changelog.md`.
+
 The core CMS surface. Authoring (create/update/delete/publish/list-with-drafts) goes through
 `POST/PATCH/GET /api/v1/dashboard/content/...` (or the project-scoped
 `/api/v1/dashboard/projects/{pid}/content/...`) with a Bearer PAT; genuinely public reads
