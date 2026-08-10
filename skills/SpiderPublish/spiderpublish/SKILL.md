@@ -118,6 +118,7 @@ Confirm the deploy step happened before reporting a change as live.
 | Make/edit a reusable component | `createComponent` · `updateComponent` · `publishComponent` · `rollbackComponent` | `references/components.md` |
 | Apply a theme / starter site | `listThemes`→`applyTheme` · `listSiteTemplates`→`applySiteTemplate` | `references/templates-deploy.md` |
 | Add a landing/opt-in/thank-you/VSL page (clone + adapt — the default) | `listPageTemplates`→`applyPageTemplate` | `references/templates-deploy.md` |
+| **Personalise a landing page per prospect** (`/lp/{page}/{id}` — outreach, ABM, a page per account) | `createPage`(`template="dynamic_landing"`)→`publishPage`→`deploySite`; identifier via `?resolve_key=` | `references/dynamic-landing.md` |
 | Customise a Liquid template | `getTemplate` · `upsertTemplate` · `previewTemplate` | `references/templates-deploy.md` |
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
 | Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
