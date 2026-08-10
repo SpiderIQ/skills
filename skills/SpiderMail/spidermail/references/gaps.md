@@ -1,26 +1,28 @@
 # CLI / MCP gaps
 
-> ## CURRENT STATE — 2026-08-02 (read this; everything below it is history)
+> ## CURRENT STATE — 2026-08-07 (read this; everything below it is history)
 >
-> This skill now teaches **52 methods**. The 2026-06-11 delta recorded below was
-> closed at the time; since then the provider-expansion initiative added four
-> surfaces, and **one of them is not yet on the CLI/MCP path.**
+> This skill teaches **52 methods**, and **every one of them is reachable from
+> all three surfaces.** There are no open CLI/MCP gaps.
 >
 > | Surface | HTTP | `@spideriq/cli` | `@spideriq/mcp-mail` |
 > |---|---|---|---|
 > | New providers — Gmail / Workspace / iCloud (`createMailbox`, `listMailProviders`) | ✅ | ✅ | ✅ |
 > | Body envelope on reads (`body_source`, `size_*`, `rfc822_message_id`) | ✅ | ✅ | ✅ |
-> | `convertDocument` / `getConversion` (file → markdown) | ✅ | ✅ `spideriq convert` | ✅ `convert_document`, `get_conversion` |
-> | **`convertMailBody` (markdown ↔ HTML)** | ✅ `POST /mail/convert` | ❌ **none** | ❌ **none** |
+> | `convertDocument` / `getConversion` (file → markdown, **async**) | ✅ | ✅ `spideriq convert` | ✅ `convert_document`, `get_conversion` |
+> | `convertMailBody` (markdown ↔ HTML, **sync**) | ✅ `POST /mail/convert` | ✅ `spideriq mail convert` | ✅ `convert_mail_body` |
 >
-> **If you are driving SpiderIQ through the CLI or MCP, `convertMailBody` is not
-> reachable — call the HTTP route directly.** Marketplace clients (this skill)
-> generate from `client/schema.yaml`, so they *do* have it.
+> The last row closed on 2026-08-07 (card `681ffc4f`, "step 6" on the SpiderMail
+> provider-expansion board `651fbf00-e57c-4695-ae65-5d111f1bd5bb`) — core
+> 1.62.0 / cli 1.58.0 / mcp-tools 1.73.0 / mcp 1.76.0 / mcp-mail 1.9.0.
 >
-> Closing the gap needs a CLI verb + a `convert_mail_body` MCP tool + an
-> `@spideriq/core` method, shipped as one npm cohort. Tracked as the "step 6"
-> follow-up on the SpiderMail provider-expansion board
-> (`651fbf00-e57c-4695-ae65-5d111f1bd5bb`).
+> ⚠️ **The two converts are different operations sharing a verb.**
+> `spideriq convert` / `convert_document` take a **FILE**, run a job on a worker
+> and return a `job_id` you must poll. `spideriq mail convert` /
+> `convert_mail_body` take a **STRING** and answer in the same request. Choosing
+> wrong does not error — you read `undefined` where a body should be. See
+> `references/convert-documents.md`, which is split Part 1 / Part 2 for this
+> reason.
 
 ---
 
