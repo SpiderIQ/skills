@@ -1,0 +1,13 @@
+{
+  "title": "country_code and region are locale hints — they never place a search",
+  "summary": "In a bulk geo target, only `label` (appended to the query text as \"{query}, {label}\") or an explicit latitude/longitude pair actually steers where the provider looks. `country_code` and `region` are locale hints passed to the provider and nothing more. A geo entry carrying only `country_code: \"US\"` does not target the US — it produces the bare query with a US locale, which is a nationwide-or-arbitrary result set rather than the targeted one the caller intended. This is landmine L2 in wire form, and it is easy to trip because the field name reads like targeting.",
+  "created_at": "2026-08-09",
+  "updated_at": "2026-08-09",
+  "tags": ["bulk", "geo", "targeting", "landmine-L2"],
+  "references": [
+    "app/schemas/bulk_lead_sourcing.py:85-115 — BulkGeoTarget, 'a LOCALE hint only — it does NOT steer the search centre (landmine L2)'",
+    "app/services/lead_sourcing/base.py:255-275 — expanded_queries() builds '{query}, {suffix}' from geo query_suffix only",
+    "docs/services/SpiderWorkflows/flows/bulk-lead-sourcing-TARGET.md — landmine L2",
+    "recipes/run-bulk.md"
+  ]
+}

@@ -27,8 +27,15 @@ description: >
   (OTO) funnel that lands a Stripe-canonical order. Trigger commerce on: "build a tripwire
   funnel", "sell a product / one-time offer / upsell", "checkout funnel", "subscription
   funnel", "set up a commerce funnel", "read my orders / revenue". Commerce funnels are
-  created by forking a template (funnel_template_apply), NOT by hand. More flows are added
-  here as recipes.
+  created by forking a template (funnel_template_apply), NOT by hand.
+  And bulk lead sourcing (flow:bulkLeadSourcing): buy leads in BULK from a data provider
+  — ONE provider job covering many search terms across many locations, deduplicated, then
+  split one downstream job per lead through the same Site → Verify → VayaPin chain.
+  Trigger bulk on: "bulk lead sourcing", "buy a lead list", "source leads in bulk",
+  "leads across many cities at once", "one big scrape instead of a campaign",
+  "outscraper", "bulk import leads", "a few thousand leads in <region>". Use it instead of
+  a campaign when the user wants breadth in a SINGLE purchase; it dedups across the whole
+  result set but has NO per-location retry. More flows are added here as recipes.
 ---
 
 # SpiderFlows
@@ -105,6 +112,23 @@ catalog/cart only). **You can author the whole funnel EXCEPT the product itself*
 creation is the Medusa Admin UI today ([8.6c]). See
 [flows/commerce-funnels/recipes/build-tripwire-oto.md](flows/commerce-funnels/recipes/build-tripwire-oto.md).
 
+The fifth flow — **bulkLeadSourcing** — is the lead chain bought wholesale. Same
+downstream stages, different way of getting breadth.
+
+```
+flow:bulkLeadSourcing   (one PURCHASE, not one search per location)
+provider job  →  one flat result set  →  exact-key dedup  →  fan out PER LEAD
+(queries x geo)   (bought once)          (place_id)          Site → Verify → VayaPin
+```
+
+A **campaign** runs one Maps search per location and can be stopped, inspected
+and retried location-by-location. **Bulk** buys everything in one call, dedups
+across the whole set, and has **no per-location retry** — a thin result is
+re-bought, not retried. The result envelope is identical to a campaign's
+(24/24 business fields, verified live), so anything that reads campaign results
+reads bulk results unchanged. See
+[flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md).
+
 ## Approach
 
 - **Single location** — one city, one search. Fastest; use
@@ -125,6 +149,25 @@ without a `population` or `regions` narrowing, STOP: narrow the filter, or submi
 and immediately check `total_locations` in the response and `stopCampaign` if it is
 larger than intended. A single-location run is always safe — this gate is campaigns
 only. ([flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md))
+</HARD-GATE>
+
+<HARD-GATE name="bulk-is-one-irreversible-purchase">
+A **bulk** run (`sourceLeadsBulk`) buys records from a third-party provider in
+**one call that cannot be stopped halfway or unbought** — unlike a campaign,
+which spends incrementally and can be stopped mid-flight. Two things routinely
+go wrong, both silently:
+(1) **Omitting `limits.max_records_per_query` buys 500 records per search.** Two
+queries x three cities reads as "6 searches" and is a **3,000-record** purchase.
+Quote the user **records**, never searches.
+(2) **`country_code` does not place a search** — only `geo[].label` or an
+explicit lat/lng does. A geo entry of just `{country_code:"US"}` buys a
+nationwide/arbitrary set that looks perfectly valid and is not what was asked
+for.
+Before submitting: set the per-query limit, state the estimated RECORD count to
+the user, and read `estimated_records` back out of the 202 to confirm. A 429
+carrying `bulk_records_per_job_exceeded` has **no** `Retry-After` on purpose —
+retrying it unchanged fails forever; narrow the run.
+([flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md))
 </HARD-GATE>
 
 <HARD-GATE name="vayapin-default-on">
@@ -173,6 +216,10 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 | run one city / one search (lead list or local SEO) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
 | run a search across many locations (country / region / population band) | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
 | run a US campaign deep by ZIP code (one state at a time — "state = country") | [flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md](flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md) |
+| decide between a CAMPAIGN and a BULK purchase (read before either, if unsure) | [flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md) |
+| buy a large lead set across many terms x many places in ONE purchase | [flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md) |
+| know what a bulk run will cost and what refuses it, BEFORE submitting | [flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md) |
+| read a bulk run's leads (same envelope as a campaign) | [flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | auto-export a campaign's verified leads into a SmartLead outreach campaign | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |
@@ -204,6 +251,7 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 | Site | `mode` (contacts / compendium / leads / full), `max_pages`, `extract_team`, CHAMP `product_description`+`icp_description` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
 | Verify | `check_gravatar`, `check_dnsbl`, `max_emails_per_business` | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
 | VayaPin | `enabled` (path-dependent default — see the HARD-GATE) | [flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md) |
+| Social enrichment | `social_media_enrichment.enabled` — recover public social contact info for businesses that finish with **no verified email**, then re-verify and merge back. **Plan-gated, default ON** (send `enabled: false` to skip); a non-entitled client never runs it regardless of the flag | [flows/maps-site-verify-vayapin/recipes/per-stage-settings.md](flows/maps-site-verify-vayapin/recipes/per-stage-settings.md) |
 | SmartLead (finalize) | `enabled`, `connection_id`, `remote_campaign_id`, `only_with_vayapin_seo` — auto-export verified leads at completion | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |
 
 ## Methods (native tool calls — opvsHUB & marketplace)
@@ -214,6 +262,7 @@ This skill ships as typed tool calls generated from `client/schema.yaml`:
 |---|---|---|
 | `searchLeads` | run one location (single) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
 | `createCampaign` | run across many locations | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
+| `sourceLeadsBulk` | buy many queries x locations in ONE provider job, dedup, fan out per lead | [flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md) |
 | `listCampaigns` / `getCampaignStatus` / `getJobStatus` | list + poll progress | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 | `stopCampaign` / `continueCampaign` / `updateCampaign` | halt / resume / edit config | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | `retryLocation` / `retryFailedLocations` | recover failures | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
@@ -249,6 +298,12 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[flows/maps-site-verify-vayapin/recipes/vayapin-export.md](flows/maps-site-verify-vayapin/recipes/vayapin-export.md)** — what vayapin publishes, the opt-out, verifying pins.
 - **[flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md](flows/maps-site-verify-vayapin/recipes/campaign-results-shape.md)** — the fields a finished business record carries.
 
+**flow:bulkLeadSourcing (bulk purchase of the lead chain):**
+- **[flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md)** — which of the two to use, and the three differences that bite. **Read first.**
+- **[flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md)** — submit; every field, and why `country_code` does not place a search.
+- **[flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md)** — the estimate arithmetic, the two refusal arms, the 1,000-query expansion ceiling. **Read before composing any bulk body.**
+- **[flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md)** — reading results (identical envelope to a campaign; `metadata` differs by design).
+
 **flow:perplexity-site-companydata-people (Company Intel):**
 - **[flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md)** · **[flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md)** — submit (one company / a list of ≤50).
 - **[flows/perplexity-site-companydata-people/recipes/read-results.md](flows/perplexity-site-companydata-people/recipes/read-results.md)** — read the account brief (registry + LinkedIn are standalone IDAP types).
@@ -279,3 +334,4 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - `flows/siteScraper/scripts/verify-site-complete.sh` — audits a finished site crawl (pages crawled, contacts, which optional sections landed).
 - `flows/emailVerify/scripts/verify-emails-complete.sh` — audits a finished emailVerify run (per-status breakdown; flags high `unknown` / not-completed).
 - `flows/linkedinProfiles/scripts/verify-people-complete.sh` — audits a finished linkedinProfiles run against the mode it ran (profile / search / company).
+- `flows/bulkLeadSourcing/scripts/verify-bulk-complete.sh` — audits a finished bulk run **without trusting the status code**: it asserts on contact data, which the purchased seed provably cannot contain, so a false green (flow died, seed echoed) exits non-zero instead of reading as success.

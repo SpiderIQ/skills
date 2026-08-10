@@ -68,6 +68,18 @@ See the HARD-GATE and [vayapin-export.md](vayapin-export.md) — `enabled` defau
 **on** for `/lead-search` (omitted `workflow`) and follows your value on campaigns.
 **Always set it explicitly.**
 
+## `social_media_enrichment` — recover contacts for leads with no verified email
+
+| Setting | Default | What |
+|---|---|---|
+| `enabled` | `true` | for businesses that finish the chain with **no verified email**, recover public social-media contact info (email / phone / real website / socials), re-verify, and merge the result back into the lead |
+
+**Plan-gated and default ON.** The stage only runs if the client's plan includes it —
+an entitled client's runs enrich unless you send `enabled: false`; a non-entitled
+client's runs never enrich regardless of the flag. It adds contacts, it never
+overwrites what the chain already found. The client-facing name is **Social Media
+Enrichment** — never surface a vendor name.
+
 ## Domain filters (on `workflow`, all default `true`)
 
 `filter_social_media`, `filter_review_sites`, `filter_directories`, `filter_maps`

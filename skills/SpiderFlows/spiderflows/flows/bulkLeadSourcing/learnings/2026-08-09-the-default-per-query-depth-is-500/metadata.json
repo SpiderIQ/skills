@@ -1,0 +1,14 @@
+{
+  "title": "Omitting max_records_per_query buys 500 records per search, not a small sample",
+  "summary": "The estimate is a deliberate UPPER bound built from the caps the request will actually send the provider. When `limits.max_records_per_query` is omitted it falls back to BULK_DEFAULT_RECORDS_PER_QUERY (500) — chosen to match what the Outscraper adapter really sends, so an omitted limit cannot make the estimate look optimistic. The consequence is that a body which reads as small (2 queries x 3 cities = 6 searches) is a 3,000-record purchase. Agents anchor on the search count because that is the number they wrote; the number that matters is records, and it is 500x larger by default.",
+  "created_at": "2026-08-09",
+  "updated_at": "2026-08-09",
+  "tags": ["bulk", "cost", "limits", "estimate"],
+  "references": [
+    "app/services/lead_sourcing/estimate.py:128-163 — estimate_for(); per_query falls back to BULK_DEFAULT_RECORDS_PER_QUERY",
+    "app/core/config.py:699 — BULK_DEFAULT_RECORDS_PER_QUERY = 500",
+    "app/core/config.py:693 — BULK_DEFAULT_MAX_RECORDS_PER_JOB = 25000 (the per-job ceiling arm)",
+    "app/services/dispatcher/rules/bulk_budget_guard.py — the two arms and why arm 2 is prospective",
+    "recipes/cost-and-limits.md"
+  ]
+}

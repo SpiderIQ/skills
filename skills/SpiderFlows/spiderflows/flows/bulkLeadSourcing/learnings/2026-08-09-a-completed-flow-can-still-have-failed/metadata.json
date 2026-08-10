@@ -1,0 +1,13 @@
+{
+  "title": "A 200 with a full record does not prove the chain ran — a failed WindMill flow reports success on every customer surface",
+  "summary": "A live production defect, not a bulk-specific one: when the underlying WindMill flow fails, every customer-visible surface still reports the run as completed with a full 200 body. The bulk first attempt looked entirely healthy — submit, poll, fetch, parse, dedup and fan-out all worked and returned records — while the flow's first module had 401'd and no stage had actually run. The only signal that separated the two states was campaign_workflow_jobs being 0 rather than >0. This affects the live lead chain (LSV2) identically; the failure_module payload is byte-identical between the bulk flow and the live campaign flow. When provenance matters, assert on evidence the seed could not contain (e.g. verified emails, which only SpiderSite+SpiderVerify can produce) rather than on the status code.",
+  "created_at": "2026-08-09",
+  "updated_at": "2026-08-09",
+  "tags": ["bulk", "provenance", "false-green", "windmill", "verification"],
+  "references": [
+    "board 383553ef task 8dce0024 (1.6 /test-live) — attempt 1 FAIL: module a 401, campaign_workflow_jobs=0, yet every surface reported completed",
+    "board 383553ef task da79d127 — the open high-priority bug card tracking this defect in LSV2 production",
+    "docs/services/SpiderWorkflows/LEARNINGS.md — check v2_job_completed.flow_status, never jobs.status",
+    "recipes/read-results.md"
+  ]
+}

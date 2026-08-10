@@ -22,6 +22,8 @@ description: >
   lead-search + campaigns skills.
 category: data-collection
 base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -183,6 +185,86 @@ methods:
               limit: { type: integer }
               only_with_vayapin_seo: { type: boolean }
       test:         { type: boolean, required: false, description: 'Route to test queue' }
+    response: { format: json }
+
+  sourceLeadsBulk:
+    description: >
+      Buy leads in BULK from a data provider: ONE provider job covering many
+      search terms across many locations, deduplicated, then split into one
+      downstream job per lead. Returns bulk_job_id + job_id immediately (202);
+      the provider is NOT called during the request.
+    guidance:
+      use: "breadth in a single purchase — many queries x many locations at once, where createCampaign would run one Maps search per location"
+      next: "getJobStatus on the returned job_id (there is NO bulk-specific status route), then getJobResults / readResources once the fan-out completes."
+      warn: "this SPENDS provider credits. The 202 carries estimated_records + estimated_cost_usd — that is what the budget guard was evaluated against, not a quote you can renegotiate. queries x geo labels multiply: 5 queries x 20 labels = 100 searches in one purchase. country_code/region are LOCALE hints and never place a search — only geo.label or an explicit lat/lng does. vayapin publishes PERMANENT public profiles; set workflow.vayapin.enabled explicitly."
+      scope: "source_kind BOUNDS which stages are eligible: google_maps feeds every stage; linkedin_company can never feed vayapin (no address / no place_id) and enabling it is a 422, never a silent skip."
+      telemetry_signal_default: "cold"
+    http: POST /bulk-lead-sourcing/submit
+    params:
+      source:
+        type: object
+        required: true
+        description: 'The provider-neutral buy order: { provider, source_kind, queries[], geo[], limits{}, filters{}, language }.'
+        properties:
+          provider: { type: string, description: "Registered lead-source adapter, e.g. 'outscraper'." }
+          source_kind: { type: string, values: [google_maps, linkedin_company], description: 'Shape of source to buy. Bounds downstream stage eligibility.' }
+          queries:
+            type: array
+            items: { type: string }
+            description: 'BARE search terms (e.g. ["restaurants","cafes"]), 1-1000 entries. The effective search list is queries x geo labels.'
+          geo:
+            type: array
+            description: 'Geographic targets, 0-1000 entries. A LABELLED entry multiplies the query list; a coordinate-only entry steers the search centre.'
+            items:
+              type: object
+              properties:
+                label: { type: string, description: "Place appended to each query, e.g. 'Atlanta, Georgia, USA'. THIS is what places the search." }
+                latitude: { type: number, description: 'Search-centre latitude, -90..90.' }
+                longitude: { type: number, description: 'Search-centre longitude, -180..180.' }
+                country_code: { type: string, description: 'ISO-2. LOCALE hint only — does NOT steer the search centre.' }
+                region: { type: string, description: 'Provider region/locale hint.' }
+          limits:
+            type: object
+            description: 'Caps on this run.'
+            properties:
+              max_records_per_query: { type: integer, description: 'Records per expanded query, 1-100000. Omit for the platform default.' }
+              max_total_records: { type: integer, description: 'Ceiling on total records for the whole job, 1-1000000.' }
+          filters: { type: object, description: 'Provider-specific knobs. The adapter refuses any key that would overwrite a field this request already owns.' }
+          language: { type: string, description: 'Result language (default en).' }
+      settings:
+        type: object
+        required: false
+        description: 'What runs AFTER sourcing. settings.workflow is the SAME WorkflowConfig a campaign uses, verbatim — bounded by source_kind.'
+        properties:
+          workflow:
+            type: object
+            properties:
+              spidersite:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  mode: { type: string, values: [contacts, compendium, leads, full] }
+              spiderverify:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+              vayapin:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+              social_media_enrichment:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+              smartlead:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  connection_id: { type: integer }
+                  remote_campaign_id: { type: string }
+                  only_with_vayapin_seo: { type: boolean }
+      priority: { type: integer, required: false, description: 'Queue priority for the fanned-out leads, 0-10 (default 5).' }
+      test:     { type: boolean, required: false, description: 'Route to test queues; no production side effects.' }
     response: { format: json }
 
   listCampaigns:
