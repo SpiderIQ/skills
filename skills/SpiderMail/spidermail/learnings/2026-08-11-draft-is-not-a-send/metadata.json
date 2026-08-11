@@ -1,0 +1,16 @@
+{
+  "title": "A broadcast draft is not a send, scheduling one is not a send either, and cancelling is not an undo",
+  "summary": "Three adjacent calls each look like they send mail and only one does. sendCreateBroadcast creates a draft; setting scheduled_at on it records INTENT and enqueues nothing, so an agent that composes + schedules and reports 'it will go out Monday' has sent nothing at all. sendQueueBroadcast is the single call that puts mail on the wire, and it is irreversible per row: sendCancelBroadcast abandons a broadcast that has not fanned out but deliberately does NOT withdraw rows already enqueued, so it is a stop-before-start, never an undo. The symmetric error is treating the queue response as a failure — already_enqueued>0 is a resumed idempotent fan-out and provider_configured:false is a deliberate dormant queue, while the real refusals are 422 no_audience, 422 no_sources and a 503 that must not be retried because suppression fails CLOSED.",
+  "created_at": "2026-08-11",
+  "updated_at": "2026-08-11",
+  "tags": ["spidermail", "broadcast", "send", "irreversible", "idempotency", "draft"],
+  "references": [
+    "app/api/v1/dashboard_send_broadcasts.py:174-185 create_broadcast — 'Creates a draft. Nothing is enqueued and no mail can leave until POST /{id}/queue'",
+    "app/api/v1/dashboard_send_broadcasts.py:224-233 cancel_broadcast — 'Already-queued rows are deliberately NOT withdrawn'",
+    "app/api/v1/dashboard_send_broadcasts.py:245-264 queue_broadcast — 202, already_enqueued is a RESUMED fan-out, provider_configured=false is a dormant state",
+    "app/schemas/send_broadcasts.py:148-151 scheduled_at — 'Hold fan-out until this instant', stored on the draft",
+    "app/schemas/send_broadcasts.py:228-245 BroadcastQueueResponse.already_enqueued / provider_configured",
+    "app/api/v1/dashboard_send_broadcasts.py:66-69 suppression_unavailable -> 503, 'refusing to send (fail-closed)'",
+    "packages/mcp-tools/src/mail/send.ts:21-29 — the three contracts an agent gets wrong by default, stated in each tool's description"
+  ]
+}

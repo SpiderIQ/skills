@@ -6,27 +6,43 @@
 # on the server; attachments are extracted by the poller and ride inline on the
 # message read.
 #
+# The skill also covers the SEND tier — the fleet layer UNDER the mailbox
+# methods. `sendEmail` puts ONE message through ONE mailbox; the send* methods
+# operate the sending POOL: onboard a domain the tenant owns (BYO), read the
+# pool and its reputation, and drive a broadcast from draft to fan-out.
+#
 # Source of truth for Tier-3 marketplace client generation. Every method below
 # maps to a route VERIFIED served in app/api/v1/mail.py, mail_templates.py,
-# mail_views.py, mail_outreach.py, mail_convert.py, or jobs/spidermail.py
-# (re-verified 2026-08-02 against the provider-expansion initiative). No phantom
-# endpoints. Outreach methods are brand-scoped (/brands/{id}/mail/outreach/*) —
-# reads PAT-ok, writes brand-admin (require_brand_admin_or_super).
+# mail_views.py, mail_outreach.py, mail_convert.py, jobs/spidermail.py, or
+# dashboard_send_{byo,broadcasts,analytics}.py (send tier re-verified
+# 2026-08-11 against the Broadcasting v3 Phase-2 routes). No phantom endpoints.
+# Outreach methods are brand-scoped (/brands/{id}/mail/outreach/*) — reads
+# PAT-ok, writes brand-admin (require_brand_admin_or_super).
 #
 # Auth: SPIDERIQ_PAT (Bearer client_id:api_key:api_secret) per the SpiderCLI
-# convention. base_url is /api/v1; every method path carries its own /mail/* (or
-# /jobs/*) segment, so the full URL is e.g. https://spideriq.ai/api/v1/mail/inbox.
+# convention. base_url is /api/v1; every method path carries its own /mail/*
+# (or /jobs/*, /dashboard/send/*) segment, so the full URL is e.g.
+# https://spideriq.ai/api/v1/mail/inbox.
+#
+# The send tier is tenant-scoped by the CALLER'S OWN TOKEN
+# (require_tenant_scoped_access, cookie OR PAT). No method takes a client_id and
+# none ever should: tenancy resolves server-side, and a caller-supplied tenant
+# id would be a cross-tenant lever.
 
 name: spidermail
-version: "0.7.0"
+version: "0.9.0"
 description: >
   Agent-driven email over SpiderMail — read a mailbox (inbox, single message,
   conversation thread, full-text search, one-call session bootstrap), send/reply/
   forward through a registered mailbox, render and manage Jinja2 templates, mark
-  messages read/starred/labelled, and review the security quarantine. Inbound
-  HTML is delivered as clean structured data (~37x fewer tokens); outbound bodies
-  are written in markdown and auto-converted to professional HTML. Per-tenant,
-  PAT-scoped. Agent-friendly ?format=yaml|md on every read.
+  messages read/starred/labelled, and review the security quarantine. Run
+  BROADCASTS on your own sending pool: bring your own sending domain (SPF / DKIM
+  / tracking-CNAME verified, your provider key stored encrypted), read the pool's
+  warm-up state and reputation, then draft, preview, size and fan out a paced
+  broadcast. Inbound HTML is delivered as clean structured data (~37x fewer
+  tokens); outbound bodies are written in markdown and auto-converted to
+  professional HTML. Per-tenant, PAT-scoped. Agent-friendly ?format=yaml|md on
+  every read.
 category: communication
 base_url: /api/v1
 upstream:
@@ -55,17 +71,32 @@ triggers:
   - email thread
   - email template
   - mark as read
+  - broadcast
+  - send a broadcast
+  - email campaign
+  - newsletter
+  - bring your own domain
+  - sending domain
+  - SPF
+  - DKIM
+  - deliverability
+  - bounce rate
+  - sending reputation
+  - warm up
 
 guidance:
   use: >
     Handle email on a brand's behalf — read a real mailbox (inbox / message /
     thread / search / session), send/reply/forward, render+manage templates, and
     keep the inbox tidy (read/star/labels). Inbound arrives as clean data, outbound
-    is written in markdown.
+    is written in markdown. The send* methods add the fleet layer: onboard your own
+    sending domain, read the pool's warm-up state and reputation, and run a paced
+    broadcast from draft to fan-out.
   not:
     - "spiderflows / lead-search -> FIND prospects and emails to contact (this sends to addresses you already have)"
     - "spiderVerify -> validate that an address is deliverable BEFORE sending (this does not verify recipients)"
     - "the SpiderPublish content tools -> publish a web page or a marketing site (this is 1:1 email, not web content)"
+    - "mail-admin (admin-skills) -> PROVISION mailboxes on a provider org; that is the operator control plane, this is the tenant's own surface"
   intent_aliases: ["q", "query", "search_query"]   # Q1 — searchMail takes textual search
   pitfalls:
     - "A send is ASYNC: POST returns a job_id (queued), NOT a delivered email. Poll the job to confirm — a queued job can still fail at SMTP."
@@ -73,6 +104,11 @@ guidance:
     - "reply/forward need the numeric reply_to_message_id (the message `id`), NOT the RFC Message-ID header string."
     - "Outbound bodies containing secrets (API keys, passwords, private keys) are BLOCKED by the credential scanner before SMTP — never put a token in body_text."
     - "Attachment text rides inline on getMessage (?include_attachments) as a preview; there is no separate attachment-fetch endpoint (see references/gaps.md)."
+    - "DRAFT IS NOT A SEND. sendCreateBroadcast creates a draft and `scheduled_at` only RECORDS intent — sendQueueBroadcast is the one and only call that puts mail on the wire, and rows already enqueued are not withdrawn by a later cancel."
+    - "A `null` DNS verdict from sendCheckDomain is UNDETERMINABLE, never a pass. `verified` is true only when all three checks are true."
+    - "On a queue result, `already_enqueued > 0` (a resumed, idempotent fan-out) and `provider_configured: false` (a deliberate dormant queue) are NOT failures. The real refusals are 422 no_audience, 422 no_sources and 503 suppression-unavailable."
+    - "Do NOT score engagement on `opened` — Apple MPP and proxy preloading fire open pixels with no human involved. Use `clicked` / `unique_clickers`; `opens_are_estimates` is always true."
+    - "A null complaint_pct / bounce_pct is UNKNOWN, never healthy — and a null rate on a funnel means a ZERO denominator, not a zero rate. Never render either as 0%."
 
 methods:
   # ── Read: inbox, message, thread, search, session ─────────────
@@ -1126,4 +1162,389 @@ methods:
       to:      { type: string, required: true,  description: 'Format to convert into: markdown | html. MUST differ from `from` (422 otherwise).' }
       content: { type: string, required: true,  description: 'The body to convert. Max 65,536 bytes encoded as UTF-8 (413 over-limit).' }
       mode:    { type: string, required: false, description: 'raw | fit (default) | minimal — see the description; `raw` matches what send/read already emit' }
+    response: { format: json }
+
+  # ══════════════════════════════════════════════════════════════
+  # SEND TIER — your own sending pool (Broadcasting v3, card 2.SK)
+  # ══════════════════════════════════════════════════════════════
+  # The layer UNDER sendEmail. sendEmail puts ONE message through ONE registered
+  # mailbox; these operate the sending FLEET. Routes live at
+  # /api/v1/dashboard/send/* and are tenant-scoped by the caller's own PAT
+  # (require_tenant_scoped_access, allow_api_client=True). Reads take `member`,
+  # anything that can put mail on the wire takes `admin` — a read-only token gets
+  # 403 on enroll / create / update / cancel / queue.
+  #
+  # The MCP tool name for each of these is the snake_case of the method name
+  # (sendCheckDomain -> send_check_domain), so the mapping needs no table.
+  #
+  # Read references/run-a-broadcast.md before driving the whole flow.
+
+  # ── BYO sending domain: publish DNS, we verify, it joins your pool ──
+  sendCheckDomain:
+    description: >
+      Dry-run the SPF / DKIM / tracking-CNAME checks for a sending domain you
+      own. Stores nothing, binds nothing and needs no API key — so you can
+      publish records, check, fix and re-check as often as you like.
+
+      Each check is TRI-STATE: `ok=true` read and correct, `ok=false` read and
+      wrong/missing, `ok=null` UNDETERMINABLE (the resolver could not be read).
+      The top-level `verified` is true only when all three are true. When a check
+      fails, its `expected` field names the exact record to publish — the DKIM
+      one names `<selector>._domainkey.<domain>` — so hand that to the user
+      instead of a generic error.
+    guidance:
+      use: "before enrolling a sending domain, and any time a tenant asks why their domain will not verify — this is the loop they iterate on"
+      next: "sendEnrollDomain once verified=true; sendListSources to confirm it joined the pool"
+      warn: "ok=null is UNDETERMINABLE, NEVER a pass — reporting a null verdict as success sends a tenant to enrolment that will refuse. Capped at 20 checks per minute per tenant; the 429 carries Retry-After."
+      telemetry_signal_default: "warm"
+    http: POST /dashboard/send/byo/check
+    params:
+      domain:          { type: string, required: true,  description: "The sending domain, e.g. 'mg.example.com' (3-253 chars)" }
+      provider:        { type: string, required: false, description: "Sending provider (default: 'mailgun')" }
+      dkim_selector:   { type: string, required: false, description: "The DKIM selector from your provider dashboard — a SINGLE label (default: 'mailo')" }
+      tracking_domain: { type: string, required: false, description: "Defaults to 'email.<domain>' when omitted" }
+    response: { format: json }
+
+  sendEnrollDomain:
+    description: >
+      Verify a sending domain, store the tenant's OWN provider API key
+      encrypted, and bind the sending source to this tenant. Admin-level.
+      Nothing is written unless the DNS verifies; the credential is stored
+      BEFORE the source is bound.
+
+      This BINDS an already-enrolled source — it never CREATES one. A mailbox
+      with no capacity row is refused with 409 `source_not_enrolled` rather than
+      provisioned. It also never promotes a cold domain to `active`: the
+      returned `state` is reported unchanged, so the warm-up ramp still applies.
+      The api_key is never echoed back — only an opaque `vault_key_ref`.
+    guidance:
+      use: "the one write that turns a verified domain into a sending source this tenant owns"
+      next: "sendListSources to read the new source's warm-up state and daily cap"
+      warn: "REQUIRES verified DNS and admin role. For an EU Mailgun account you MUST pass api_base='https://api.eu.mailgun.net' — an EU key against the US host 401s and the source is terminalised. enable_tracking=false binds NO tracking domain: link rewriting is OFF (safe — your links are never routed through a host you do not own) at the cost of every click and open event. Capped at 10 enrolments per hour per tenant."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/byo/enroll
+    params:
+      mailbox_id:      { type: integer, required: true,  description: 'The already-enrolled sending source to bind. Must already have a capacity row, or 409 source_not_enrolled.' }
+      domain:          { type: string,  required: true,  description: 'The sending domain to bind' }
+      api_key:         { type: string,  required: true,  description: 'YOUR provider API key (8-512 chars). Stored encrypted; never returned.' }
+      provider:        { type: string,  required: false, description: "Sending provider (default: 'mailgun')" }
+      dkim_selector:   { type: string,  required: false, description: "DKIM selector (default: 'mailo')" }
+      tracking_domain: { type: string,  required: false, description: "Defaults to 'email.<domain>'. Ignored when enable_tracking is false." }
+      enable_tracking: { type: boolean, required: false, description: 'Default true. FALSE binds tracking_domain to NULL — link rewriting OFF, never the platform tracking host.' }
+      api_base:        { type: string,  required: false, description: "Provider API base. REQUIRED for EU Mailgun ('https://api.eu.mailgun.net')." }
+      brand_id:        { type: integer, required: false, description: 'Recorded for admin surfaces. NOT the isolation key — that is always the tenant.' }
+    response: { format: json }
+
+  # ── the pool and its reputation ────────────────────────────────
+  sendListSources:
+    description: >
+      List the tenant's sending pool — every mailbox acting as a sending source,
+      with warm-up state, daily cap, sent-today, minimum inter-send gap, the BYO
+      sending identity and per-source complaint/bounce rates.
+
+      Read this before queueing anything: capacity and warm-up state are what
+      decide whether an audience drains in a day or a month. `state` is one of
+      warming | active | paused | blocked | auth_failed | retiring | retired.
+      A mailbox registered for READING mail is not automatically a sending
+      source — only mailboxes with a pacing row appear here.
+    guidance:
+      use: "answer 'what can this tenant send from, and how fast' — the first read of any broadcast flow"
+      next: "sendGetCapacity for the drain math; sendGetDeliverability for the reputation behind these sources"
+      warn: "A null complaint_pct / bounce_pct is UNKNOWN, never healthy: with metrics_available=true it means this source dispatched nothing in the window; with it false the aggregation could not run at all. Never render either as 0%. A NULL tracking_domain means link tracking is OFF for that source — it does NOT inherit the platform host. Re-entry (resuming a reputation pause, clearing auth_failed, un-retiring) is operator-gated and has no API here by design — do not offer it."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/deliverability/sources
+    params:
+      range:  { type: string, required: false, description: '24h | 7d (default) | 30d | 90d — windows the reputation rates only; pacing state and caps are always current' }
+      format: { type: string, required: false, description: 'json (default) | llm — `llm` splices a `guidance` block into the response (what to read, what to call next, the pitfalls). NOT yaml/md: those are per-endpoint on the /mail/* routes and are not implemented on the send tier.' }
+    response: { format: json }
+
+  sendGetDeliverability:
+    description: >
+      Reputation summary for the sending pool over `range`: funnel totals
+      (dispatched -> delivered -> opened -> clicked plus
+      bounced/complained/unsubscribed/failed), each rate as a percentage of
+      DISPATCHED, the provider thresholds those rates are judged against, and
+      which feedback links are actually live (`ingest`).
+    guidance:
+      use: "answer 'is our sending reputation healthy' and check a domain before scaling volume on it"
+      next: "sendGetDeliverabilityTimeseries for the trend; sendListUndeliverable for the individual failures"
+      warn: "Do NOT score engagement on `opened` — Apple Mail Privacy Protection and proxy preloading fire open pixels with no human involved; use clicked / unique_clickers (opens_are_estimates is always true). A null rate means a ZERO denominator, not a zero rate. `totals.accepted` is a raw provider-event count, normally 0 — it is an INPUT to dispatched, never a denominator. has_events=false with ingest.provider_webhook='dormant' means the feedback door is shut, NOT that delivery is clean."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/deliverability/summary
+    params:
+      range:     { type: string, required: false, description: '24h | 7d (default) | 30d | 90d' }
+      source_id: { type: string, required: false, description: 'Restrict to a single sending source (36-char id). Omit for the whole pool.' }
+      format: { type: string, required: false, description: 'json (default) | llm — `llm` splices a `guidance` block into the response (what to read, what to call next, the pitfalls). NOT yaml/md: those are per-endpoint on the /mail/* routes and are not implemented on the send tier.' }
+    response: { format: json }
+
+  sendGetDeliverabilityTimeseries:
+    description: >
+      Daily bounce and complaint rates across `range`, with the threshold lines
+      (complaint limit 0.30%, bounce safe 2%, bounce critical 5%) to compare
+      against. The trend, where sendGetDeliverability gives the totals — use it
+      to tell a one-off bad batch apart from a degrading domain.
+    guidance:
+      use: "distinguish a single bad batch from a domain whose reputation is trending down"
+      next: "sendListUndeliverable to see what actually bounced on a bad day"
+      warn: "The series is SPARSE, not gap-filled — only days with events or dispatches appear, and a day with no volume comes back with null rates. Do not plot a null as 0."
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/send/deliverability/timeseries
+    params:
+      range:     { type: string, required: false, description: '24h | 7d (default) | 30d | 90d' }
+      source_id: { type: string, required: false, description: 'Restrict to a single sending source (36-char id)' }
+      format: { type: string, required: false, description: 'json (default) | llm — `llm` splices a `guidance` block into the response (what to read, what to call next, the pitfalls). NOT yaml/md: those are per-endpoint on the /mail/* routes and are not implemented on the send tier.' }
+    response: { format: json }
+
+  sendListUndeliverable:
+    description: >
+      The individual bounces, complaints and failures behind the rates — newest
+      first, keyset-paginated. Filter with `kind`; page by passing the returned
+      `next_cursor` back as `cursor`.
+    guidance:
+      use: "see WHICH addresses failed and why, after a rate looks wrong"
+      next: "sendGetDeliverability for the aggregate the failures roll up into"
+      warn: "This does NOT suppress anything — `suppress_recipient` is a flag the suppression builder consumes, and writing suppression is a different surface. `next_cursor` is opaque and relative to the ACTIVE FILTER SET: changing kind or range invalidates it. severity='permanent' is the hard bounce; 'temporary' is retryable."
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/send/deliverability/undeliverable
+    params:
+      range:     { type: string,  required: false, description: '24h | 7d (default) | 30d | 90d' }
+      kind:      { type: string,  required: false, description: 'all (default) | bounce | complaint | failed' }
+      limit:     { type: integer, required: false, description: 'Rows per page, 1-200 (default 25)' }
+      cursor:    { type: string,  required: false, description: 'Opaque keyset cursor from the previous page' }
+      source_id: { type: string,  required: false, description: 'Restrict to a single sending source (36-char id)' }
+      format: { type: string, required: false, description: 'json (default) | llm — `llm` splices a `guidance` block into the response (what to read, what to call next, the pitfalls). NOT yaml/md: those are per-endpoint on the /mail/* routes and are not implemented on the send tier.' }
+    response: { format: json }
+
+  # ── broadcasts: draft -> preview -> size -> queue ──────────────
+  sendPreviewAudience:
+    description: >
+      Resolve an audience query to a deliverable count WITHOUT persisting
+      anything. Always reports the SUBTRACTIONS (`suppressed`, `duplicates`,
+      `invalid`) alongside the final `deliverable` number — a shrinking audience
+      is normally the deliverability guard working, not missing data.
+
+      `missing_values` reports, per merge tag, how many deliverable recipients
+      have no value for it: a tag used in the body with a non-zero count here
+      renders as an empty gap ("Hi ,") for that many people.
+    guidance:
+      use: "size an audience before you compose, and see exactly what the guards removed"
+      next: "sendPreviewBroadcast to check the render; sendGetCapacity to see how long it drains"
+      warn: "suppression_checked=false means the count is PROVISIONAL — the queue path refuses outright in that state rather than mailing an unchecked list. email_status='any' is the most common cause of a bounce-rate breach: it mails addresses SpiderVerify never confirmed."
+      telemetry_signal_default: "warm"
+    http: POST /dashboard/send/broadcasts/audience/preview
+    params:
+      mode:               { type: string,  required: false, description: "crm (default) | subscribers | paste" }
+      board_id:           { type: string,  required: false, description: "mode='crm': restrict to one CRM board. Omit for every contact the tenant owns." }
+      email_status:       { type: string,  required: false, description: "mode='crm': 'valid' (default) keeps only SpiderVerify-confirmed addresses; 'any' mails unverified ones", values: ["valid", "any"] }
+      require_first_name: { type: boolean, required: false, description: "mode='crm': drop contacts with no first_name so {{first_name}} never renders empty" }
+      topics:
+        type: array
+        required: false
+        items: { type: string }
+        description: "mode='subscribers': restrict to these topics. Empty/omitted = all topics."
+      addresses:
+        type: array
+        required: false
+        items: { type: string }
+        description: "mode='paste': explicit address list, max 5000."
+    response: { format: json }
+
+  sendPreviewBroadcast:
+    description: >
+      Render a subject + markdown body exactly as a recipient will receive it —
+      subject, HTML part and plain-text part. Server-side on purpose: it runs the
+      SAME renderer as fan-out, so the preview cannot drift from what actually
+      goes out. Pass a `sample` contact to see the {{first_name}}-style merge
+      fields filled in; omit it and tags render as themselves.
+    guidance:
+      use: "check the rendered message before it is queued — subject, HTML and text parts together"
+      next: "sendCreateBroadcast (or sendUpdateBroadcast) once the render is right"
+      warn: "Persists NOTHING — this renders a string, it does not save a draft. Rendering the markdown yourself in a different library is the one way to make the preview lie."
+      telemetry_signal_default: "warm"
+    http: POST /dashboard/send/broadcasts/preview
+    params:
+      subject_template: { type: string, required: false, description: 'Subject line, may contain merge fields e.g. {{first_name}}' }
+      body_md:          { type: string, required: false, description: 'Body in markdown (max 500,000 chars)' }
+      sample:
+        type: object
+        required: false
+        description: 'A sample recipient to render the merge fields against.'
+        properties:
+          email:           { type: string, required: true, description: 'Sample recipient address' }
+          first_name:      { type: string, description: 'Value for {{first_name}}' }
+          full_name:       { type: string, description: 'Value for {{full_name}}' }
+          current_company: { type: string, description: 'Value for {{current_company}}' }
+    response: { format: json }
+
+  sendGetCapacity:
+    description: >
+      What this tenant can actually send: the combined warm-up-aware daily cap,
+      capacity remaining today, the earliest the pacing engine could release the
+      first message, and — when you pass `audience_size` — how many days the
+      audience takes to drain at that rate.
+    guidance:
+      use: "call this before queueing anything large; it is what turns '40,000 recipients' into 'that is 12 days'"
+      next: "sendQueueBroadcast once the drain estimate is acceptable"
+      warn: "provider_configured=false means nothing can leave yet REGARDLESS of capacity — the rows would queue and hold. drain_days is null when capacity is 0, which is not the same as 'instant'."
+      telemetry_signal_default: "warm"
+    http: GET /dashboard/send/broadcasts/capacity
+    params:
+      mailbox_ids:   { type: string,  required: false, description: 'Comma-separated mailbox ids. Omitted = every source the tenant owns.' }
+      audience_size: { type: integer, required: false, description: 'Audience size to compute a drain estimate for (default 0, max 10,000,000)' }
+    response: { format: json }
+
+  sendListBroadcasts:
+    description: >
+      List the tenant's broadcasts newest-first with status (draft | queueing |
+      queued | cancelled) and live delivery progress. Use it to find the
+      broadcast id the get / update / cancel / queue methods take.
+    guidance:
+      use: "find a broadcast id, or check where an in-flight fan-out has got to"
+      next: "sendGetBroadcast for one in full, including per-state progress counters"
+      warn: "`status` is the AUTHORING lifecycle, not delivery — a broadcast sits at 'queued' for the whole fan-out. Delivery lives in `progress` (queued/sending/sent/failed/skipped)."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/broadcasts
+    params:
+      limit:  { type: integer, required: false, description: 'Rows to return, 1-200 (default 50)' }
+      offset: { type: integer, required: false, description: 'Rows to skip (default 0)' }
+    response: { format: json }
+
+  sendCreateBroadcast:
+    description: >
+      Create a broadcast DRAFT. THIS DOES NOT SEND ANYTHING — and setting
+      `scheduled_at` does not send it either; that field records intent on the
+      draft. Mail leaves only when you call sendQueueBroadcast.
+
+      The draft stores the audience as a QUERY, not a resolved address list, so
+      it re-resolves against current data when you queue it — an audience that
+      grew between composing and sending is not silently under-sent.
+    guidance:
+      use: "save a composed broadcast so it can be reviewed, sized and later fanned out"
+      next: "sendPreviewAudience -> sendPreviewBroadcast -> sendGetCapacity -> sendQueueBroadcast"
+      warn: "Creating a draft is NOT sending, and neither is scheduling one. Requires the admin role. Returns 201 with the draft; nothing is enqueued."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/broadcasts
+    params:
+      name:             { type: string, required: false, description: "Internal label (default 'Untitled broadcast')" }
+      subject_template: { type: string, required: false, description: 'Subject, may contain merge fields' }
+      preheader:        { type: string, required: false, description: 'Inbox preview text shown after the subject' }
+      body_md:          { type: string, required: false, description: 'Body in markdown (max 500,000 chars)' }
+      from_name:        { type: string, required: false, description: 'Display name on the From header' }
+      reply_to:         { type: string, required: false, description: 'Reply-To address' }
+      audience:
+        type: object
+        required: false
+        description: 'WHO to send to, expressed as a QUERY. Re-resolved at fan-out.'
+        properties:
+          mode:               { type: string,  description: "crm (default) | subscribers | paste", values: ["crm", "subscribers", "paste"] }
+          board_id:           { type: string,  description: "mode='crm': restrict to one CRM board" }
+          email_status:       { type: string,  description: "mode='crm': 'valid' (default) | 'any'", values: ["valid", "any"] }
+          require_first_name: { type: boolean, description: "mode='crm': drop contacts with no first_name" }
+          topics:             { type: array,   items: { type: string }, description: "mode='subscribers': restrict to these topics" }
+          addresses:          { type: array,   items: { type: string }, description: "mode='paste': explicit address list, max 5000" }
+      source_mailbox_ids:
+        type: array
+        required: false
+        items: { type: integer }
+        description: 'Sending sources that may carry it (max 64). Omitted/empty = every active source.'
+      scheduled_at:     { type: string, required: false, description: 'ISO 8601 timestamp recording WHEN you intend to send. Records intent only — it does NOT queue the broadcast.' }
+    response: { format: json }
+
+  sendGetBroadcast:
+    description: >
+      Get one broadcast in full, including live delivery progress (queued /
+      sending / sent / failed / skipped / total) aggregated from the send queue
+      at read time. This is how you follow a fan-out after sendQueueBroadcast
+      returns.
+    guidance:
+      use: "watch a fan-out drain, or read back exactly what a draft is going to send"
+      next: "sendGetDeliverability once volume has landed, to see how it was received"
+      warn: "Progress is aggregated at READ time and never cached on the broadcast — poll it rather than trusting an earlier copy. 404 is a genuine not-found for this tenant; there is no cross-tenant read."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/broadcasts/{broadcast_id}
+    params:
+      broadcast_id: { type: string, required: true,  description: 'The broadcast id (36-char)' }
+    response: { format: json }
+
+  sendUpdateBroadcast:
+    description: >
+      Update a DRAFT broadcast. True PATCH — only the fields you pass are
+      written. Drafts only: a queued broadcast returns 409 `not_draft`, because
+      editing it would change what the composer shows without changing a single
+      already-queued message.
+    guidance:
+      use: "fix a draft's copy, audience, sources or intended time before it is queued"
+      next: "sendPreviewBroadcast to re-check the render, then sendQueueBroadcast"
+      warn: "409 not_draft means the broadcast is already queued or cancelled and this edit would be cosmetic — it can no longer change what recipients receive. Requires the admin role."
+      telemetry_signal_default: "cold"
+    http: PATCH /dashboard/send/broadcasts/{broadcast_id}
+    params:
+      broadcast_id:     { type: string, required: true,  description: 'The draft to update' }
+      name:             { type: string, required: false, description: 'Internal label' }
+      subject_template: { type: string, required: false, description: 'Subject, may contain merge fields' }
+      preheader:        { type: string, required: false, description: 'Inbox preview text' }
+      body_md:          { type: string, required: false, description: 'Body in markdown' }
+      from_name:        { type: string, required: false, description: 'Display name on the From header' }
+      reply_to:         { type: string, required: false, description: 'Reply-To address' }
+      audience:
+        type: object
+        required: false
+        description: 'Replacement audience QUERY (same shape as sendCreateBroadcast).'
+        properties:
+          mode:               { type: string,  description: "crm (default) | subscribers | paste", values: ["crm", "subscribers", "paste"] }
+          board_id:           { type: string,  description: "mode='crm': restrict to one CRM board" }
+          email_status:       { type: string,  description: "mode='crm': 'valid' (default) | 'any'", values: ["valid", "any"] }
+          require_first_name: { type: boolean, description: "mode='crm': drop contacts with no first_name" }
+          topics:             { type: array,   items: { type: string }, description: "mode='subscribers': restrict to these topics" }
+          addresses:          { type: array,   items: { type: string }, description: "mode='paste': explicit address list, max 5000" }
+      source_mailbox_ids:
+        type: array
+        required: false
+        items: { type: integer }
+        description: 'Replacement source list (max 64).'
+      scheduled_at:     { type: string, required: false, description: 'ISO 8601, or null to clear the intended send time' }
+    response: { format: json }
+
+  sendCancelBroadcast:
+    description: >
+      Cancel a broadcast that has not been fanned out. Rows ALREADY queued are
+      deliberately NOT withdrawn — pulling messages out from under the send loop
+      is a different, riskier operation than abandoning a draft. So this stops a
+      broadcast from starting; it does not reliably stop one already in flight.
+      Answers 204 with no body.
+    guidance:
+      use: "abandon a draft, or stop a broadcast that has not started fanning out"
+      next: "sendListBroadcasts to confirm the status flipped to 'cancelled'"
+      warn: "THIS IS NOT AN UNDO for a queued broadcast. Anything already enqueued still sends. If mail is already on the wire, say so plainly rather than implying it was recalled. Requires the admin role."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/broadcasts/{broadcast_id}
+    params:
+      broadcast_id: { type: string, required: true, description: 'The broadcast to cancel' }
+    response: { format: json }
+
+  sendQueueBroadcast:
+    description: >
+      THE IRREVERSIBLE STEP — fans the draft out into the send queue, and real
+      mail goes to real people. Confirm with the user before calling it. Returns
+      202: the rows are enqueued and the pacing engine releases them at the
+      pool's warm-up-aware rate.
+
+      TWO RESULTS THAT LOOK LIKE FAILURES AND ARE NOT. `already_enqueued > 0` is
+      a RESUMED fan-out — the enqueue is idempotent per (broadcast, address), so
+      a retry after an interruption fills only the gaps instead of
+      double-sending. `provider_configured: false` means the rows are queued and
+      will HOLD until credentials exist: a deliberate dormant state, reported
+      honestly rather than faked as sent.
+
+      The real refusals: 422 `no_audience` (zero deliverable recipients), 422
+      `no_sources` (no active sending source), and 503 when the suppression list
+      cannot be read — it fails CLOSED rather than mailing an unchecked list.
+    guidance:
+      use: "the single call that puts a broadcast on the wire, after the audience, render and capacity have all been checked"
+      next: "sendGetBroadcast to watch progress; sendGetDeliverability once volume lands"
+      warn: "IRREVERSIBLE for every row it enqueues — sendCancelBroadcast does NOT withdraw them. Get explicit user confirmation of the audience size and the sending sources first. Requires the admin role. Do not retry on a 503: it means suppression could not be read, and a retry that succeeds mails a list nobody checked."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/broadcasts/{broadcast_id}/queue
+    params:
+      broadcast_id: { type: string, required: true, description: 'The draft to fan out' }
     response: { format: json }

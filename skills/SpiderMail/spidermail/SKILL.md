@@ -1,29 +1,39 @@
 ---
 name: spidermail
 description: >
-  Agent-driven email over SpiderMail. Read a real mailbox (Zoho / Gmail / Google
-  Workspace / Outlook / iCloud, or any IMAP host via generic_imap): master inbox,
-  single message, full conversation thread, full-text search, and a one-call
-  session bootstrap. Send, reply, and forward through a registered mailbox —
-  write the body in markdown, it auto-converts to professional HTML. Convert a
-  document (PDF / DOCX / XLSX / PPTX) to markdown, or a mail body between
-  markdown and HTML on demand. Render and manage Jinja2 templates (signature /
-  header / layout / full). Keep the inbox tidy: mark read/unread, star, label.
-  Review the security quarantine. Use it for "check my email", "read my inbox",
-  "reply to this", "send an email to…", "search my mail for…", "forward this",
-  "what's unread", "draft a reply", "apply my signature template", "connect my
-  Gmail", "turn this PDF into markdown". Inbound HTML arrives as clean structured
-  data (~37x fewer tokens); outbound markdown becomes HTML. Per-tenant,
-  PAT-scoped. NOT for FINDING new prospects (use spiderflows / lead-search) or
-  validating that an address is deliverable (use spiderVerify).
-version: "0.8.0"
+  Agent-driven email over SpiderMail — read, send, and broadcast. ONE-TO-ONE over
+  a real mailbox (Zoho / Gmail / Google Workspace / Outlook / iCloud, or any IMAP
+  host via generic_imap): master inbox, single message, conversation thread,
+  full-text search, one-call session bootstrap, send/reply/forward in markdown
+  (auto-converted to professional HTML), Jinja2 templates, read/star/label, the
+  security quarantine, and document (PDF / DOCX / XLSX / PPTX) → markdown
+  conversion. Use for "check my email", "read my inbox", "reply to this", "send
+  an email to…", "search my mail for…", "forward this", "what's unread", "draft a
+  reply", "apply my signature template", "connect my Gmail", "turn this PDF into
+  markdown".
+
+  ONE-TO-MANY over the tenant's own sending pool: bring your own sending domain
+  (SPF / DKIM / tracking-CNAME verified, your provider key stored encrypted, the
+  source joins your pool), read warm-up state, caps and reputation, then draft,
+  preview, size and fan out a paced broadcast. Use for "send a broadcast", "email
+  my list", "run a campaign", "newsletter", "add my sending domain", "why won't
+  my domain verify", "what's my SPF/DKIM record", "how fast can we send", "is our
+  sending reputation healthy", "what's our bounce rate", "who bounced". ⚠️ A draft
+  is NOT a send, and scheduling one is not either — only send_queue_broadcast puts
+  mail on the wire, and it cannot be undone.
+
+  Per-tenant, PAT-scoped. NOT for FINDING prospects (spiderflows / lead-search),
+  validating an address is deliverable (spiderVerify), or PROVISIONING mailboxes
+  on a provider org (the admin mail-admin skill).
+version: "0.9.0"
 category: communication
 ---
 
 # spidermail — SpiderMail
 
 Full email for an agent acting on a brand's behalf — over real IMAP/SMTP
-mailboxes, with one read path and one (async) write path.
+mailboxes, with one read path and one (async) write path. Plus the **send tier**
+underneath: the tenant's own sending pool, for one message to many.
 
 ```
   ┌──── a tenant's mailboxes (Zoho · Gmail · GWS · Outlook · iCloud · generic_imap) ──────┐
@@ -35,6 +45,10 @@ mailboxes, with one read path and one (async) write path.
    getMessage ─ open one (marks read)             "    =forward                quarantine ─ list/release
    getThread  ─ whole conversation        ↳ returns a job_id (QUEUED)
    searchMail ─ FTS + filters             ↳ poll the job → delivered|failed
+  ┌──── SEND TIER — the same mailboxes acting as a paced sending POOL ────────────────────┐
+  │  sendCheckDomain → sendEnrollDomain → sendListSources → sendCreateBroadcast (DRAFT)    │
+  │  → sendQueueBroadcast 🚨 the only call that sends → sendGetDeliverability              │
+  └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Approach
@@ -49,8 +63,16 @@ mailboxes, with one read path and one (async) write path.
    (`get_job_status`) before telling the user it went out.
 5. **Tidy** — `updateMessage` to mark read / star / label.
 
-Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — for
-40–76% fewer tokens.
+**One message to MANY is a different flow** — not `sendEmail` in a loop. Go to
+`references/run-a-broadcast.md` and the send-tier decision tree below.
+
+Add `?format=yaml` (or `md`) to any **`/mail/*`** read — or set
+`SPIDERIQ_FORMAT=yaml` — for 40–76% fewer tokens. ⚠️ **The send tier does not
+implement yaml/md**: those are per-endpoint on the mailbox routes, and an
+undeclared query param is silently ignored rather than rejected, so a caller
+gets JSON believing it asked for YAML. The four deliverability reads do support
+`?format=llm`, which is a different thing — it splices a `guidance` block into
+the response.
 
 <HARD-GATE name="confirm-recipient-before-real-send">
 Email is IRREVERSIBLE — there is no unsend. Before any send/reply/forward with
@@ -107,6 +129,66 @@ the recipient "looked right" from a search result. When developing or unsure, se
 | Turn a PDF/DOCX/XLSX/PPTX/image into markdown | `convertDocument` → `getConversion` | `references/convert-documents.md` |
 | Convert a mail BODY between markdown and HTML (sync, no job) | `convertMailBody` | `references/convert-documents.md` |
 | Manage a Smartlead/lemlist/Instantly connection | `listOutreachConnections` · `syncOutreachConnection` | `references/outreach-warmup.md` |
+
+### …and for BROADCASTS (the send tier — one message to many)
+
+| The user wants to… | Call | Read |
+|---|---|---|
+| Send one message to a whole list | the flow below, start to finish | **`references/run-a-broadcast.md`** |
+| Use their own sending domain | `sendCheckDomain` → `sendEnrollDomain` | `references/byo-sending-domain.md` |
+| Know why a domain won't verify | `sendCheckDomain` → read each check's `expected` | `references/byo-sending-domain.md` |
+| See what they can send from, and how fast | `sendListSources` · `sendGetCapacity` | `references/pool-and-reputation.md` |
+| Size a list before composing | `sendPreviewAudience` | `references/run-a-broadcast.md` |
+| See the message as a recipient will | `sendPreviewBroadcast` | `references/run-a-broadcast.md` |
+| Save a broadcast (NOT send it) | `sendCreateBroadcast` · `sendUpdateBroadcast` | `references/run-a-broadcast.md` |
+| **Actually send it** | `sendQueueBroadcast` 🚨 | **`references/run-a-broadcast.md`** |
+| Follow a fan-out in progress | `sendGetBroadcast` · `sendListBroadcasts` | `references/run-a-broadcast.md` |
+| Stop a broadcast that hasn't started | `sendCancelBroadcast` | `references/run-a-broadcast.md` |
+| Know if sending reputation is healthy | `sendGetDeliverability` (+`Timeseries`) | `references/pool-and-reputation.md` |
+| See what bounced / complained | `sendListUndeliverable` | `references/pool-and-reputation.md` |
+
+## Broadcasts: one call sends, three others only look like they do
+
+`sendEmail` puts **one** message through **one** mailbox. The `send*` methods
+above are the layer under it — the tenant's **sending pool**, paced by a
+warm-up-aware engine, under a domain they own.
+
+```
+  add domain ─→ verify ─→ joins pool ─→ compose ─→ PACED SEND ─→ watch reputation
+  sendCheckDomain  sendEnrollDomain   sendPreviewAudience  sendQueueBroadcast
+                   sendListSources    sendPreviewBroadcast     🚨 irreversible
+                   sendGetCapacity    sendCreateBroadcast  sendGetBroadcast
+                                        (a DRAFT)          sendGetDeliverability
+```
+
+<HARD-GATE name="confirm-before-queueing-a-broadcast">
+`sendQueueBroadcast` puts REAL MAIL on the wire to REAL PEOPLE, and rows already
+enqueued are NOT withdrawn by `sendCancelBroadcast` — there is no undo. Before
+calling it, state back to the user and get explicit confirmation of: the
+**deliverable count** (`sendPreviewAudience`), the **sending sources**, and the
+**drain estimate** (`sendGetCapacity`). Never call it to "test the flow" — the
+two preview methods are the dry-runs and they persist nothing.
+</HARD-GATE>
+
+- **A DRAFT IS NOT A SEND, and scheduling one is not either.**
+  `sendCreateBroadcast` creates a draft; `scheduled_at` **records intent** and
+  enqueues nothing. Say "draft saved" — never "scheduled" or "queued". Only
+  `sendQueueBroadcast` sends. See `learnings/2026-08-11-draft-is-not-a-send/`.
+- **A `null` DNS verdict is UNDETERMINABLE, never a pass.** `sendCheckDomain`
+  returns tri-state checks and `verified` is true only when all three are `true`.
+  Each failed check's `expected` names the exact record to publish — the DKIM one
+  names `<selector>._domainkey.<domain>`. Hand that to the user verbatim.
+- **Two queue results are NOT failures:** `already_enqueued > 0` is a resumed,
+  idempotent fan-out, and `provider_configured: false` is a deliberate dormant
+  queue. The real refusals are `422 no_audience`, `422 no_sources`, and a `503`
+  when suppression can't be read — **never retry that one**, it fails CLOSED on
+  purpose.
+- **Opens are not engagement.** `opens_are_estimates` is always true (Apple MPP
+  and proxy preloading). Score on `clicked` / `unique_clickers`. And a `null`
+  rate is a zero *denominator*, not a zero rate — never render it as 0%.
+- **Reads take `member`, writes take `admin`.** A read-only token gets 403 on
+  enroll / create / update / cancel / queue. No method takes a `client_id`:
+  tenancy resolves server-side from your PAT.
 
 ## The one thing that bites: send is async
 
@@ -168,6 +250,17 @@ surfaces sender deliverability/warmup health. See `references/outreach-warmup.md
 - `references/convert-documents.md` — the TWO conversion surfaces and how to tell
   them apart: `convertDocument` (a FILE → markdown, async, returns a job_id) vs
   `convertMailBody` (a STRING, markdown ↔ HTML, synchronous). Read before either.
+- `references/run-a-broadcast.md` — **Always read** before running a broadcast:
+  the whole flow (add domain → verify → pool → compose → paced send → watch), the
+  hard gate on the one irreversible call, and the two queue results that look
+  like failures and are not.
+- `references/byo-sending-domain.md` — **Always read** before checking or
+  enrolling a sending domain: the tri-state DNS verdict (`null` is never a pass),
+  the `expected` record to hand the user, the four refusals, and why EU Mailgun
+  needs `api_base`.
+- `references/pool-and-reputation.md` — the seven source states and which are
+  un-claimable, effective vs nominal caps, and how to read deliverability without
+  scoring opens or rendering a null as 0%.
 - `references/gaps.md` — what the CLI and MCP surfaces do NOT yet expose (read if
   you're on the CLI/MCP path, not the marketplace client).
 
@@ -177,6 +270,11 @@ surfaces sender deliverability/warmup health. See `references/outreach-warmup.md
   no idempotency key, retries double-send.
 - `learnings/2026-06-10-attachments-inline-only/` — attachment text is an inline
   preview on getMessage; the emitted `retrieve_via` URL is not a served route.
+- `learnings/2026-07-31-convert-preview-by-default/` — the conversion surface
+  previews by default rather than committing.
+- `learnings/2026-08-11-draft-is-not-a-send/` — three broadcast calls look like
+  they send and one does; `scheduled_at` schedules nothing, cancel is not an undo,
+  and the queue response's "failures" usually aren't.
 
 ## See also
 
