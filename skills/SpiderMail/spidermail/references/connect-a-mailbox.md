@@ -180,6 +180,28 @@ verbatim.
 | `stalled` | No poll for over 6 hours (`MAIL_STALE_POLL_HOURS`), and no error was reported. |
 | `disabled` | Switched off by the operator. |
 
+## `ever_connected` — read it ALONGSIDE `health`, never instead of it
+
+Every mailbox row also carries **`ever_connected`** (boolean): has this mailbox
+ever completed a *successful* poll? It is **orthogonal** to `health` — a fact
+the five states cannot carry, and deliberately a boolean rather than a sixth
+state so your existing branch table over those five stays correct.
+
+It matters most where `health` is least informative:
+
+| `health` | `ever_connected` | What to do |
+|---|---|---|
+| `disabled` | `true` | Nothing. A working mailbox someone paused. |
+| `disabled` | `false` | **Never commissioned.** Switching it on will not make it connect — fix the credentials first, or delete it. |
+| `error` | `false` | It has never once worked. The settings are wrong; this is not a regression. |
+| `error` | `true` | A regression — it worked before. Read `health_since` for how long it has been down. |
+
+`false` means *"we hold no evidence this mailbox ever connected"* — a claim
+about what we can see, not a claim that it is currently broken. It is derived
+from every column that only a successful poll can write, so a mailbox that
+worked long ago and was switched off is never falsely reported as never having
+connected.
+
 ## Gotchas
 
 - **🔴 `is_active` is not health, and reading it is the bug this contract exists

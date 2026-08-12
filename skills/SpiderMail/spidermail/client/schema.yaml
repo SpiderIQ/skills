@@ -250,7 +250,10 @@ methods:
       completed), `error` (the last poll failed — read poll_error_cause /
       poll_error_action), `stalled` (no poll for over 6 hours and no error
       reported) or `disabled` (switched off). `health_detail` is one
-      plain-English sentence for the same state.
+      plain-English sentence for the same state. Each row also carries
+      `ever_connected` (boolean) — has this mailbox EVER completed a successful
+      poll? It is ORTHOGONAL to `health`, not a sixth state, and both must be
+      read to know what to do about a mailbox.
     guidance:
       use: "see which mailboxes you can send-from / read, and which of them are actually working"
       next: "getSession <email> to bootstrap one; getInbox for the master view"
@@ -267,6 +270,17 @@ methods:
         NULL` is not evidence of health — the poller clears that column on a
         clean run, so a mailbox the loop silently stopped visiting keeps its
         last successful NULL forever. That is what `stalled` exists to catch.
+
+        🔴 `disabled` does NOT tell you whether the mailbox ever worked — branch
+        on `ever_connected` as well. `disabled` + ever_connected=true is a
+        working mailbox someone paused, and needs nothing done. `disabled` +
+        ever_connected=false was never commissioned: switching it on will not
+        make it connect, so fix its credentials FIRST or delete it. The same
+        composition applies to `error`: ever_connected=false means it has never
+        once worked, ever_connected=true means a regression — a different
+        conversation with the account owner. This is a boolean rather than a
+        sixth `health` value precisely so your existing branch table over the
+        five states stays correct.
 
         A mailbox reporting `active` is not a promise that its history is fully
         ingested — see the reference on connecting a mailbox. Each row also
