@@ -1,5 +1,20 @@
 # Forms & booking — conversational forms, lead-gen, embed, cal.com bookings
 
+> **REQUIRES — read before you plan.**
+> **Using THIS skill?** ✅ You can do all of it. `listFlows` `getFlow` `createFlow` `updateFlow` `publishFlow` `unpublishFlow` `deleteFlow` `listFlowTemplates` `cloneFlowTemplate` `listBookingServices` `createBookingService` `listBookings` — these call the HTTP API directly, so no MCP tool ceiling applies.
+> **On MCP instead?** ⚠️ The 28 `form_*` and 15 `booking_*`/`service_*` tools are `@spideriq/mcp` (kitchen sink) **ONLY** — absent from `@spideriq/mcp-publish` in every configuration. If your Step-0 probe found no `form_create`: say so, then either ask the user to point their MCP config at `@spideriq/mcp`, or drive the HTTP routes below with the Bearer PAT. **Do not simulate a form with a page block and call it done.**
+> **Gate shape:** `publishFlow` puts `dry_run` / `confirm_token` in the **BODY**, not the query string — unlike the content tools.
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+> **Two names for the same call.** The recipes below use the **MCP tool** names
+> (`form_create`, `form_publish`, …). Driving this skill's HTTP methods instead?
+> Substitute `createFlow({kind:'form'})` · `getFlow` · `updateFlow` · `publishFlow` ·
+> `unpublishFlow` · `deleteFlow` · `listFlowTemplates` · `cloneFlowTemplate`, plus
+> `listBookingServices` / `createBookingService` / `listBookings` for booking.
+> Same routes, same gates — only the caller differs.
+
+
 Forms and bookings are one `booking_flows` table with a `kind` discriminator; both serve from
 `https://<tenant>/f/<flow_id>`. The data model, the `kind='form'` vs `kind='booking'` URL
 semantics, the cal.com slot-resolver, calendar-OAuth-by-invite, and the Rule 62 visual-check
@@ -886,7 +901,7 @@ All three work for both `kind='form'` AND `kind='booking'`. URL is always `/f/<f
 
 1. **Tenant scope verified.** Run `./scripts/verify-tenant-scope.sh` (exit 0 = safe).
 2. **Form exists + is published.** `status: active`. The embed snippet generates regardless of status (pure string composition), but the runtime needs `active` to render. Check with `form_get({flow_id})`.
-3. **MCP server with `form_*`.** `@spideriq/mcp` kitchen-sink (134+) — see [`../reference/tool-surface.md`](tool-surface.md).
+3. **MCP server with `form_*`.** `@spideriq/mcp` (431 tools; use `SPIDERIQ_MCP_MODE=facade`) — see [`../reference/tool-surface.md`](tool-surface.md).
 
 ### The 1-call path (standalone URL)
 
@@ -1300,7 +1315,7 @@ For a fully custom form authored field-by-field → [`build-form.md`](forms-book
 ### Prerequisites
 
 1. **Tenant scope verified.** Run `./scripts/verify-tenant-scope.sh` (exit 0 = safe).
-2. **Form tools available.** `form_*` tools live in `@spideriq/mcp` (kitchen-sink, 134+ tools), NOT in `@spideriq/mcp-publish` (the 87-tool atomic build). If your MCP entry is `mcp-publish`, switch to `mcp` for this recipe — see [`../reference/tool-surface.md`](tool-surface.md).
+2. **Form tools available.** `form_*` tools live in `@spideriq/mcp` (431 tools), NOT in `@spideriq/mcp-publish` in ANY configuration. If your MCP entry is `mcp-publish`, switch to `@spideriq/mcp` **with `SPIDERIQ_MCP_MODE=facade`** — the unfiltered 431-tool list makes some clients silently abort. See [`tool-surface.md`](tool-surface.md).
 
 ### The 3-call path (with `auto_create: true`)
 

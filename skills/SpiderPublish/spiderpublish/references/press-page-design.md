@@ -1,9 +1,17 @@
 # Design a newsroom page — compose the press components into a page a journalist can scan
 
+> **REQUIRES — read before you plan.**
+> **Page composition:** `createPage` `insertSection` `listSiteTemplates` `applySiteTemplate` — every universe from mcp-publish default up (`applySiteTemplate` is dropped by the `mac-128` slice).
+> **The releases themselves:** ✅ available in THIS skill over HTTP; ⚠️ `@spideriq/mcp` (kitchen sink) only on MCP — see `press-newsroom.md`.
+> **You can BUILD the newsroom page without the release tools.** Build it, then say plainly which surface the releases need.
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 You want to **build the newsroom**, not just publish a release into it. That is a different job:
 `press-newsroom.md` teaches the *content* API (create a release, contacts, a kit); this reference
 teaches the *page* — which components to drop, in what order, bound to what data, styled to which of
-four archetypes. The goal a good newsroom optimises for is **time-to-headline** and
+six `newsroom*` starters. The goal a good newsroom optimises for is **time-to-headline** and
 **time-to-asset**: a reporter arrives knowing roughly what and when, and needs the headline plus a
 downloadable logo fast. A newsroom is *scanned*, not *browsed*.
 
@@ -84,9 +92,9 @@ createPage(title="Newsroom", slug="newsroom", template="default",
 
 ---
 
-## The four archetypes — pick one, then build to it
+## The six `newsroom*` starters — pick one, then build to it
 
-Every newsroom is one of four archetypes, distinguished by **who scans it** and **what they came
+Every newsroom is one of six `newsroom*` starters, distinguished by **who scans it** and **what they came
 for**. Pick the archetype first; it decides the hero, the index strategy, and whether the kit or the
 marquee leads. This table is the load-bearing decision aid — read the "Index strategy" column against
 the honesty rules in the next section.

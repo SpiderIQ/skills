@@ -9,7 +9,7 @@ domain file re-explains deploy, the block schema, the booking model, or the tool
 
 | File | Read when… |
 |---|---|
-| [`tool-surface.md`](tool-surface.md) | First call in any SpiderPublish session — which MCP package to install (`@spideriq/mcp-publish` 87 atomic vs `@spideriq/mcp` 134+ kitchen-sink), the three discovery endpoints (`/content/help`, `/content/help/block-fields`, `/dashboard/idap/merge-tags`), CLI-vs-MCP-vs-HTTP, and the "prefer one-shot tools" rule. |
+| [`tool-surface.md`](tool-surface.md) | First call in any SpiderPublish session — which MCP configuration to use (facade mode: 9 listed / 431 reachable — and why the unfiltered 431-tool list makes some clients silently abort), the three discovery endpoints (`/content/help`, `/content/help/block-fields`, `/dashboard/idap/merge-tags`), CLI-vs-MCP-vs-HTTP, and the "prefer one-shot tools" rule. |
 | [`block-types.md`](block-types.md) | Before composing any non-component block — the 15 default block types + the exact `data.*` keys the default theme reads (wrong names render BLANK, not 422), the `css`-field-not-`<style>` Shadow-DOM rule, and the canonical 6 anti-patterns. |
 | [`deploy-protocol.md`](deploy-protocol.md) | Before any production mutation/deploy — the two-phase `?dry_run=true` → `?confirm_token=cft_…` gate (opt-in vs safe-default), the five-lock tenant defense, the `ConfirmTokenError` 403/409/410 map, and "verify the 200 with a visual check." |
 | [`booking-model.md`](booking-model.md) | Before any form/booking work — the `booking_flows` `kind` discriminator, the `flow` JSONB shape, cal.com as slot-resolver, calendar-OAuth-by-invite, the `/f/<id>` URL surface (never compose `/book/<id>` by hand — the W13 incident), the 25 field types, and the Rule 62 visual-check assertion. |

@@ -1,5 +1,12 @@
 # reference/deploy-protocol
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** — reference for the dry_run/confirm_token gate on every destructive tool
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The full two-phase pipeline — `?dry_run=true` → preview → `?confirm_token=cft_…` — and the five-lock tenant defense around it. Cited by every mutation recipe. Read once per session; don't repeat it inside individual recipes.
 
 ## TL;DR — the three things to remember
@@ -70,7 +77,7 @@ This closes the silent-write window where the agent confirms a stale preview tha
 | **410** | `expired` | Token sat past TTL (5 min for deploy, 7 days for tool-level) | Re-run dry_run; use the new token immediately |
 | **409** | `consumed` | Token already redeemed | Re-run dry_run for the new mutation |
 | **409** | `replayed` | Same token, same payload, second call within a few seconds | Idempotent guard — your mutation likely already landed. Read the resource to confirm |
-| **403** | `client_mismatch` | PAT scoped to one tenant; token issued under another | Stop. Check [`../_shared/auth.md`](../_shared/auth.md) — you're in the wrong session |
+| **403** | `client_mismatch` | PAT scoped to one tenant; token issued under another | Stop. Check [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md) — you're in the wrong session |
 | **403** | `action_mismatch` | Token was for "publish"; you called "delete" | Use the right tool, get a fresh token |
 | **403** | `resource_mismatch` | Token's `page_id` ≠ the one you're confirming | Wrong resource — re-run dry_run on the right one |
 | **403** | `snapshot_mismatch` | Resource changed between dry_run and confirm (something else edited it) | Re-run dry_run; surface the diff to the user |
@@ -88,7 +95,7 @@ Don't write the two-phase flow by hand for production tenants. The shipped wrapp
   --auto
 ```
 
-The `--auto` flag confirms immediately after dry_run if the diff is non-empty; omit it for human-in-the-loop review. The script's exit codes are documented in [`../../../scripts/README.md`](../../../scripts/README.md).
+The `--auto` flag confirms immediately after dry_run if the diff is non-empty; omit it for human-in-the-loop review. The script's exit codes are documented in `scripts/` in the SpiderIQ repo (internal).
 
 For MCP calls, the kitchen-sink dispatcher does the same — call the tool with `dry_run: true`, read the response, then call again with the returned `confirm_token`.
 
@@ -181,9 +188,9 @@ On dev tenants, `content_create_page({ title: "test" })` immediately is fine. On
 
 ## See also
 
-- [`../../../scripts/README.md`](../../../scripts/README.md) — the `dry-run-then-confirm.py` wrapper + exit codes
+- `scripts/` in the SpiderIQ repo (internal) — the `dry-run-then-confirm.py` wrapper + exit codes
 - [`../../../scripts/verify-tenant-scope.sh`](../../../scripts/verify-tenant-scope.sh) — Locks 1+3 pre-flight
 - [`booking-model.md`](booking-model.md) — gated mutations on the booking surface
-- [`../_shared/auth.md`](../_shared/auth.md) — which auth (X-Admin-Key vs PAT vs session) goes where
+- [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md) — which auth (X-Admin-Key vs PAT vs session) goes where
 - [`tool-surface.md`](tool-surface.md) — full tool catalog with per-tool gate flavour
 - [catalog/CLAUDE.md → Multi-Tenant Safety](https://github.com/SpiderIQ/SpiderIQ/blob/master/docs/services/catalog/CLAUDE.md#multi-tenant-safety-phase-1112--five-lock-tenant-defense) — canonical internal spec

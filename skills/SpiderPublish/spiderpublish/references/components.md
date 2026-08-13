@@ -1,5 +1,13 @@
 # Components — author, find, update + propagate, rollback
 
+> **REQUIRES — read before you plan.**
+> **Package:** `@spideriq/mcp` **or** `@spideriq/mcp-publish` (default). ⚠️ **NOT** under the `mac-128` slice.
+> **Tools:** `createComponent` `updateComponent` `publishComponent` `rollbackComponent` `componentUpdateAndPropagate`
+> Authoring works in every universe. **Browsing the 363-component library** (`listMarketplaceComponents`, `marketplace_search`) needs default-or-kitchen-sink — it is dropped by the `mac-128` slice.
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 Custom + library components live under `/api/v1/dashboard/content/components/...` (Bearer PAT).
 A component is `html_template` + a separate `css` field (Shadow-DOM scoped — inline `<style>`
 is dropped; see [`block-types.md`](block-types.md)). The two one-shots that matter:

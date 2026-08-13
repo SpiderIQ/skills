@@ -1,5 +1,13 @@
 # Audit — audit-and-fix, audit-driven edit, deploy readiness, link audit, visual check
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `deployReadiness` `content_audit_links` `content_visual_check`
+> Assert on `dom.shadow_hosts`, never `body_text_preview`, for anything inside a Shadow DOM or iframe.
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The pre-flight and verification surface. `content_deploy_readiness`, the link auditor
 (`/api/v1/dashboard/content/audit/links` and the project-scoped variant), and the Playwright
 `content_visual_check` sidecar catch the silent-200 and silent-blank failures that unit tests
@@ -744,7 +752,7 @@ The deploy returning 200 means "the request was accepted." It does NOT mean "eve
 
 ### What the sidecar can't do
 
-- **Click through forms.** Visual-check renders the page; it doesn't fill or submit. For interactive flows, you need an actual browser session ([`agent-browser`](CLAUDE.md#browser-automation-agent-browser) or Playwright directly).
+- **Click through forms.** Visual-check renders the page; it doesn't fill or submit. For interactive flows, you need an actual browser session (`agent-browser` (internal tooling) or Playwright directly).
 - **Auth-walled pages.** No cookie injection (yet). Public URLs only.
 - **JavaScript-driven popups that fire on `mouseleave`.** The screenshot won't capture the popup (no cursor movement). Verify CRO popups manually in a browser.
 - **Per-tenant analytics events.** The sidecar's console may show GTM/GA initialisation, but `gtag('event', ...)` calls don't get verified — those need a real visitor session.

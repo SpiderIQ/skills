@@ -1,5 +1,12 @@
 # Integrations & import — Airtable, cal.com, Cloudflare, HubSpot, Stripe, IDAP, clone, directory
 
+> **REQUIRES — read before you plan.**
+> **Package:** mixed — see the split below.
+> **Tools:** `import_from_url` `directory_import_from_idap` `content_import_openapi` `content_import_markdown` (any universe) · cal.com wiring rides the booking surface (kitchen sink)
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 Outside-system bridges and importers. Each integration has its own auth (the third-party's key,
 configured per-tenant) layered on the SpiderPublish PAT. Clone (public URL → Liquid template)
 and the directory-listings importer live here too because they're "bring outside content in"

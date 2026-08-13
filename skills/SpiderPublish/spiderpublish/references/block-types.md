@@ -1,5 +1,12 @@
 # reference/block-types
 
+> **REQUIRES — read before you plan.**
+> **Package:** n/a — no MCP tools of its own.
+> **Tools:** — reference only (no tool calls)
+> Pairs with `template_inspect_block_fields` (any universe) for the live field map.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The ContentBlock model — block-types the default theme renders, accepted `data.*` fields per type, the `css`-field rule, and the most-confused mistakes that produce blank sections instead of 422s. Cited by `content/landing-page.md`, `content/blog-post.md`, and every recipe that touches `blocks[]`.
 
 ## TL;DR
@@ -247,7 +254,7 @@ The validator now rejects `data.content` strings loudly post-PR-#841. Older sess
 | `component_version` at TOP LEVEL (optional) | `data.version` → silently ignored |
 | Component props live in `data` | Top-level `props: {}` → silently ignored |
 
-To discover what props a component accepts, call `content_get_component_by_slug({ slug: "<the-slug>" })` and inspect `props_schema`. See [`../components/find-component.md`](../components/find-component.md).
+To discover what props a component accepts, call `content_get_component_by_slug({ slug: "<the-slug>" })` and inspect `props_schema`. See [`components.md#find-component`](components.md#find-component).
 
 ## The `css`-field rule for components
 
@@ -306,9 +313,9 @@ Use this BEFORE composing any non-component block. Costs ~50 tokens; saves the s
 
 ## See also
 
-- [`../content/landing-page.md`](../content/landing-page.md) — canonical end-to-end recipe using these block types
-- [`../content/blog-post.md`](../content/blog-post.md) — Tiptap JSON body shape (post.body, not block.data.content)
-- [`../components/create-component.md`](../components/create-component.md) — Tiers 1-4 component authoring
-- [`../components/find-component.md`](../components/find-component.md) — discovering existing components + props
+- [`content.md#landing-page`](content.md#landing-page) — canonical end-to-end recipe using these block types
+- [`content.md#blog-post`](content.md#blog-post) — Tiptap JSON body shape (post.body, not block.data.content)
+- [`components.md#create-component`](components.md#create-component) — Tiers 1-4 component authoring
+- [`components.md#find-component`](components.md#find-component) — discovering existing components + props
 - [`tool-surface.md`](tool-surface.md) — full tool catalog
 - catalog/LEARNINGS.md Rules 64 + 65 — the source incidents

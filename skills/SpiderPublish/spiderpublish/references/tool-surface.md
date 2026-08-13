@@ -1,29 +1,78 @@
 # reference/tool-surface
 
-CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the three discovery endpoints, and the "prefer one-shot tools over multi-step choreography" rule. Read once per session.
+> **REQUIRES — read before you plan.**
+> **Package:** n/a — no MCP tools of its own.
+> **Tools:** — meta: CLI vs MCP vs HTTP, the four MCP configurations, discovery endpoints
+> Read this if Step 0 in SKILL.md left you unsure which universe you are in.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
+CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the three discovery endpoints, and the "prefer one-shot tools over multi-step choreography" rule.
 
 ## TL;DR
 
-- **Pick by runtime ceiling.** `@spideriq/mcp-publish` is 87 atomic tools (content + media + booking minus `form_*`). `@spideriq/mcp` is 134+ kitchen-sink. If your host (Antigravity, Claude Desktop) has a 128-tool ceiling, use mcp-publish. If your host (Claude Code, Cursor, Codex) doesn't, use mcp.
+- **Use facade mode.** `@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade` lists **9** tools and makes all **431** reachable through `tool_search` → `tool_help` → `tool_call`. It is the only configuration that puts the full surface in front of a size-limited client.
+- **Everything else trades away capability.** See the picker below — and note that the unfiltered kitchen sink does not merely truncate, it makes some clients **silently abort the ingest**.
 - **Three discovery endpoints** for live capability scan. Call once per session, cache.
 - **Prefer one-shot tools** (`content_get_component_by_slug` over paginating `list_components`; `form_create_from_template({ auto_create: true })` over `form_create` + N×`form_add_field`) — saves tokens AND avoids partial-state bugs.
 
 ## The MCP package picker
 
-| Package | Tools | When to use |
-|---|---|---|
-| `@spideriq/mcp-publish` | 87 atomic (publish/content + media + booking minus `form_*`) | Antigravity, Claude Desktop, ChatGPT MCP-bridge clients — anything with a hard tool-list ceiling around 128. Atomic = each tool does one thing; lower descriptive overhead. |
-| `@spideriq/mcp` | 134+ kitchen-sink (everything above + `form_*` + mcp-mail + mcp-gate + mcp-leads + mcp-admin) | Claude Code, Cursor, Codex — IDE-class hosts without a ceiling. One MCP entry covers every SpiderPublish/Forms/Mail/Gate surface. |
+| Configuration | Listed | Reaches | Verdict |
+|---|---|---|---|
+| `@spideriq/mcp` + `SPIDERIQ_MCP_MODE=facade` | **9** | **all 431** via `tool_search` | ✅ **use this** |
+| `@spideriq/mcp` (unfiltered) | 431 | all 431 — **if the client accepts the list** | ⚠️ Antigravity **silently aborts** at this size |
+| `@spideriq/mcp-publish` | 163 | content · templates · deploy · marketplace. **No** forms/booking/press/funnels/section-overrides | loads everywhere; incomplete |
+| `@spideriq/mcp-publish` + `SPIDERIQ_MCP_SLICE=mac-128` | 95 | the above **minus the reuse path** | ⛔ never |
 
-If you're not sure: `@spideriq/mcp` covers more, install that. If you hit "tools/list response too large" errors or your client truncates the schema, switch to `@spideriq/mcp-publish`.
+```json
+"spideriq": {
+  "command": "npx",
+  "args": ["-y", "@spideriq/mcp@latest"],
+  "env": { "SPIDERIQ_MCP_MODE": "facade", "SPIDERIQ_FORMAT": "yaml" }
+}
+```
+
+> ### The size limit, as MEASURED (2026-08-12) — not as guessed
+>
+> Every doc in this repo said "~128 tools", a figure from a May 2026 code comment
+> nobody re-measured. Two live Antigravity runs:
+>
+> ```
+>   163 tools  →  ingests cleanly, 163 schema files written to the client cache
+>   431 tools  →  SILENTLY ABORTS. no error, no warning. the client keeps the
+>                 PREVIOUS package's cached tools, so the session believes it
+>                 switched and has not.
+> ```
+>
+> So the real bound is somewhere between 163 and 431 and **nobody has bisected it**.
+> Re-measure before quoting a number — a third-party client's limit expires like any
+> other external fact.
+>
+> The silent abort is the dangerous half: it fails by *succeeding wrongly*. If your
+> tool list looks like a package you did not configure, that is what happened.
+
+> ### ⛔ Never set `SPIDERIQ_MCP_SLICE=mac-128`
+>
+> Its keep-list declares 130 names but **35 are ghosts** — renamed or never present
+> (`content_get_help` vs the real `template_get_help`; `content_insert_section` vs
+> `page_insert_section`; `content_marketplace_search` vs `marketplace_search`; six
+> `form_*` names not in mcp-publish at all). The filter is a plain name intersection,
+> so every ghost is a silent no-op: it serves **95**, not 130. Worse, it drops six
+> tools that ARE present by default — `page_insert_section`, `marketplace_search`,
+> `content_list_marketplace_components`, `content_apply_site_template`,
+> `content_get_playbook`, `content_list_marketplace_bg_videos` — the entire
+> adapt-don't-generate path, plus the intent→recipe lookup.
+
+If you're not sure: `@spideriq/mcp` **with facade mode**. It is smaller than every alternative *and* reaches more.
 
 ### Installation
 
 ```bash
-# mcp-publish (atomic 87)
-npx @spideriq/mcp-publish@latest
+# facade mode — 9 listed, 431 reachable (recommended)
+SPIDERIQ_MCP_MODE=facade npx @spideriq/mcp@latest
 
-# mcp (kitchen-sink 134+)
+# unfiltered kitchen sink — 431 listed (only if your client accepts that size)
 npx @spideriq/mcp@latest
 ```
 
@@ -41,11 +90,15 @@ Both pull from `https://npm.spideriq.ai` (Verdaccio mirror). Auth: configure `.m
 }
 ```
 
-After install, run `request_access` → `check_access_status` (PAT flow) before any tenant-scoped call. See [`../_shared/auth.md`](../_shared/auth.md).
+After install, run `request_access` → `check_access_status` (PAT flow) before any tenant-scoped call. See [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md).
 
 ## The 128-tool ceiling story (why the split exists)
 
-Antigravity, Claude Desktop, and a handful of other hosts cap tool-list payload size at roughly 128 tools — beyond that, the host either truncates silently or fails the entire MCP handshake. The full SpiderIQ surface (publish + mail + gate + leads + admin) ships ~134 tools. To stay under the ceiling for those hosts, the `publish/` slice is packaged separately as `@spideriq/mcp-publish` with the `form_*` family carved out (forms are a separate enough domain that they live in `mcp` only).
+The full SpiderIQ surface is **431** tools (publish + forms + booking + press + funnels + mail + gate + leads + admin). Size-limited clients cannot take that list — Antigravity silently aborts on it (see the measurement above).
+
+Two historical answers, both now superseded by facade mode: `@spideriq/mcp-publish` (**163**) carves out the families a content-authoring agent needs least often — `form_*` (28), `booking_*`/`service_*` (15), `press_*` (27), `flow_*` (12), `funnel_template_*` (4), the 3 section-override tools, docs-query (4) — and the `mac-128` slice (**95**) narrows it further and breaks doing so.
+
+**Calling a carved-out tool gives you a useful error, not a bare 404** — mcp-publish returns a hint naming the kitchen-sink package for `form_*`. Treat that as configuration guidance to relay to the user, never as a platform bug.
 
 If you want forms on a 128-tool host: install `@spideriq/mcp` and accept the host may not render every tool, OR install `@spideriq/mcp-publish` and call form endpoints directly via curl/CLI.
 
@@ -104,7 +157,9 @@ A recurring SpiderPublish pattern: there's a low-level "compose your own" tool A
 
 The choreography path is the historical record — most one-shots were added in 2026 after agent reports surfaced the choreography pain. When you find yourself reasoning through "OK first call A, then B, then C…" — pause and grep for a higher-level tool first.
 
-## Tool families (the 153-tool map at a glance)
+## Tool families — and which universe each reaches
+
+**`publish` = in mcp-publish (default). `sink` = kitchen sink only. `-mac128` = also dropped by the mac-128 slice.**
 
 Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.ts`.
 
@@ -113,9 +168,14 @@ Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.t
 | Content (pages, posts, docs, settings, domains, navigation, components) | `content.ts` (1927 LOC) | ~60 | Core CMS surface |
 | Forms (kind='form' booking_flows) | `forms.ts` (1848 LOC) | 27 | Conversational form authoring + templates + embed + validation |
 | Templates + deploy | `templates.ts` (630 LOC) | ~22 | Liquid CRUD, themes, deploy pipeline, readiness probe |
-| Section overrides | `section_overrides.ts` (360 LOC) | 3 | One-call sectional swaps (header, footer, layout presets) |
-| Marketplace (browse + insert + agent_meta) | `marketplace.ts` (615 LOC) | ~12 | Section inserts, bg-videos, agent-meta authoring |
-| Site templates | `site_templates.ts` (135 LOC) | 3 | Curated starter sites — `list_site_templates` + `get` + `apply` |
+| Section overrides ⚠️ **sink** | `section_overrides.ts` | 3 | One-call sectional swaps (header, footer, layout presets). On mcp-publish use `template_upsert('sections/header.liquid')` instead — same effect. |
+| Forms ⚠️ **sink** | `forms.ts` | 28 | `kind='form'` authoring + templates + embed + logic + validation |
+| Booking ⚠️ **sink** | `booking/*.ts` | 15 | booking flows, services, bookings, templates |
+| Press / Newsroom ⚠️ **sink** | `press.ts` | 27 | releases, contacts, boilerplates, kits, embargo |
+| Funnels (Flow graph) ⚠️ **sink** | `flows.ts` + `funnel_templates.ts` | 16 | multi-step journeys, splits, embeds, starters |
+| Docs query ⚠️ **sink** | `docs_query.ts` | 4 | `search_docs` / `semantic_search_docs` / `ask_docs` / `get_doc` |
+| Marketplace (browse + insert + agent_meta) ⚠️ **-mac128** | `marketplace.ts` | ~12 | Section inserts, bg-videos, agent-meta authoring. **The reuse path** — present by default, dropped by the mac-128 slice. |
+| Site templates ⚠️ **-mac128** (`apply` only) | `site_templates.ts` | 3 | Curated starter sites — `list` + `get` + `apply`. `content_apply_site_template` is dropped by the mac-128 slice. |
 | Directory (SEO category/listing) | `directory.ts` (299 LOC) | 10 | Programmatic SEO |
 | Duplicate (page/block/post/doc) | `duplicate.ts` (177 LOC) | 4 | Cheap deep-copies |
 | Component propagation | `component_propagation.ts` (210 LOC) | 2 | The two one-shots: `update_and_propagate`, `rollback` |
@@ -125,7 +185,9 @@ Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.t
 | Local upload | `local_upload.ts` (333 LOC) | 2 | `upload_local_file` / `upload_local_directory` to SpiderMedia R2 |
 | Media (SpiderMedia URL ops) | `media.ts` (166 LOC) | 6 | Import + list + delete + video status |
 
-Plus three more packages in the kitchen-sink `@spideriq/mcp` build: `mcp-mail` (~7), `mcp-gate` (~5), `mcp-leads` (~3), `mcp-admin` (~6).
+Plus the non-publish domains in the kitchen-sink `@spideriq/mcp` build: mail, gate, leads, admin, jobs, campaigns, IDAP, commerce.
+
+> Counts here track `packages/mcp-tools/src/`. If a count disagrees with your own tool list, **your tool list wins** — re-run Step 0.
 
 ## Discoverability rule — name your intent BEFORE you list
 
@@ -157,6 +219,6 @@ Both return top-3 candidate recipes by keyword overlap, each pointing at the too
 - [`deploy-protocol.md`](deploy-protocol.md) — gate flavours per tool (opt-in vs safe-default)
 - [`block-types.md`](block-types.md) — block_type + data.* map (referenced by every content tool)
 - [`booking-model.md`](booking-model.md) — `form_*` tool semantics + URL surface
-- [`../_shared/auth.md`](../_shared/auth.md) — PAT auth + tenant binding
-- [`../../../scripts/README.md`](../../../scripts/README.md) — `find-tool-for-intent.sh` + the rationale
+- [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md) — PAT auth + tenant binding
+- `scripts/` in the SpiderIQ repo (internal) — `find-tool-for-intent.sh` + the rationale
 - catalog/CLAUDE.md → "Tool surface" — internal canonical

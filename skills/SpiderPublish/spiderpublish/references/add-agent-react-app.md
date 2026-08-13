@@ -1,5 +1,12 @@
 # Add an agent to a foreign React / Vite / Next app (the npm SDK)
 
+> **REQUIRES — read before you plan.**
+> **Package:** n/a — no MCP tools of its own.
+> **Tools:** — npm SDK (`@spideriq/agent-react`), no MCP tools
+> You still need `agent_flow(op='publish')` (default+) to mint the flow the SDK points at.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The `agent-embed.md` recipe puts an agent on a **SpiderPublish-deployed** site (the loader
 `<script>` snippet). This recipe is the **BYOS** path: the client already has their **own** React /
 Vite / Next app and wants the **same** hired agent inside it, via npm — not a copy-paste script.

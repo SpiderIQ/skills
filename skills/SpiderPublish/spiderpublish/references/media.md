@@ -1,5 +1,12 @@
 # Media — bulk upload, import from URL, tighten the media budget
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `uploadMedia` `uploadMediaFromUrl` `listMedia` `deleteMedia` `media_ingest_url`
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 SpiderMedia stores assets on R2 and serves derivatives from `media.spideriq.ai`. URL-based
 media ops (import, list, delete, video status) and local uploads use the media tools; the
 dashboard surface is `/api/v1/dashboard/content/media/...` and the catalog

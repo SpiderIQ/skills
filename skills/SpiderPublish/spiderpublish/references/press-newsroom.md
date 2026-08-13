@@ -1,5 +1,13 @@
 # Run a newsroom — press releases, contacts, boilerplates, media kits
 
+> **REQUIRES — read before you plan.**
+> **Using THIS skill?** ✅ You can do all of it — ~40 `*Press*` methods (`createPressRelease` `publishPressRelease` `schedulePressRelease` `embargoPressRelease` `createPressContact` `createPressBoilerplate` `createPressKit` `attachPressKitAsset` …) call the HTTP API directly.
+> **On MCP instead?** ⚠️ The 27 `press_*` tools are `@spideriq/mcp` (kitchen sink) **ONLY** — kept out of the atomic slice by design (no headroom). HTTP fallback: `/api/v1/dashboard/content/press/*` with the Bearer PAT.
+> **⚠️ Irreversible side effects:** publishing **notifies subscribed journalists** and cannot be recalled; scheduling auto-publishes unattended at the set time; `embargoPressRelease` returns each recipient's token **once**.
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 A newsroom is not just "a blog for announcements." A real one carries three
 things around every release: **who journalists call**, **the About-us paragraph**,
 and **the assets they download**. All four are authorable end-to-end from an
@@ -8,7 +16,7 @@ write-capable API; the incumbents are read-only or have no public API at all.
 
 Reach for a **post** instead for ongoing editorial content, and the **changelog**
 (`references/changelog.md`) for version-stamped release notes. To **design the newsroom page itself** — which
-components to compose, the four archetypes, the `press` data source — see
+components to compose, the six `newsroom*` starters, the `press` data source — see
 `references/press-page-design.md`. This reference is the *content* half (the
 releases); that one is the *page* half.
 

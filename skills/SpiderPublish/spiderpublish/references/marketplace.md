@@ -1,5 +1,13 @@
 # Marketplace — browse + insert sections, author templates, background videos, agent-meta
 
+> **REQUIRES — read before you plan.**
+> **Package:** `@spideriq/mcp` **or** `@spideriq/mcp-publish` (default). ⚠️ **NOT** under the `mac-128` slice.
+> **Tools:** `listMarketplaceComponents` `marketplace_search` `insertSection` `listBgVideos` `listSiteTemplates` `applySiteTemplate`
+> **Entirely unavailable under the `mac-128` slice** — that slice drops every tool on this page. If your probe says mac-128, ask the user to remove `SPIDERIQ_MCP_SLICE` before planning any reuse work.
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The SpiderPublish marketplace serves curated sections, site templates, and background videos.
 Browsing is a public read (`/api/v1/content/...` and the `dashboard_site_templates` /
 `dashboard_bg_videos` listing endpoints); authoring a curated asset is an admin/dashboard write.

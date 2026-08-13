@@ -1,5 +1,12 @@
 # Custom Collections — define a content type, fill it, render it
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `createCollection` `updateCollection` `createCollectionRecord` `bulkCreateCollectionRecords` `listCollectionRecords`
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 Custom collections let you (the agent) define your OWN content types — case studies, team
 members, FAQs, products, testimonials — with a schema you declare, records you author, and a
 live render on the site. This is the differentiator vs a classic CMS: the agent authors the

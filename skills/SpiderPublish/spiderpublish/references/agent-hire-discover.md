@@ -1,5 +1,13 @@
 # Agent hire lifecycle — discover → hire → get the flow_id → embed (headless, NO dashboard)
 
+> **REQUIRES — read before you plan.**
+> **Package:** `@spideriq/mcp` **or** `@spideriq/mcp-publish` (default). ⚠️ **NOT** under the `mac-128` slice.
+> **Tools:** `agent_flow(op='list_catalog'|'hire'|'list_hired')` · kitchen sink adds `listAgentRoster` `listAgentCatalog` `hireAgent` `listHiredAgents`
+> Hiring **spends money** on the OPVS side — confirm with the user before `hire`.
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 **Read when:** the client says "switch my agent (e.g. Aisha → Zara)", "hire an agent", "which
 agents can I hire?", "what agents do I already have?", "add a different SDR", or needs the
 `flow_id` UUID to drop into `<SpiderAgent flowId=…>` / `agent_flow_get_embed_snippet` — and there

@@ -1,5 +1,13 @@
 # Templates & deploy — themes, two-phase deploy, rollback, preview
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `listThemes` `applyTheme` `getTemplate` `upsertTemplate` `previewTemplate` `deployPreview` `deployProduction` `deploySite` `deployReadiness` `listPageTemplates` `applyPageTemplate`
+> `applySiteTemplate` is dropped by the `mac-128` slice; `applyPageTemplate` survives it.
+> **Needs `deploySite`.** Templates, theme files and the deploy-time `_config.json` overlay live in per-tenant KV and only change on deploy — unlike content, which is live on publish.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 Theme/template operations go through `/api/v1/dashboard/templates/...` and the deploy pipeline
 through `/api/v1/dashboard/content/deploy...` (Bearer PAT). The full two-phase
 `dry_run → confirm_token` gate and the five-lock tenant defense are documented once in

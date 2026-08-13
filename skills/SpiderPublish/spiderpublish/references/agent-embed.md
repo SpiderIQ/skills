@@ -1,5 +1,13 @@
 # Agent Embed — put a live OPVS AI agent on a site (`kind='agent'`)
 
+> **REQUIRES — read before you plan.**
+> **Package:** `@spideriq/mcp` **or** `@spideriq/mcp-publish` (default). ⚠️ **NOT** under the `mac-128` slice.
+> **Tools:** `agent_flow` (consolidated: create · update · publish · preview_url · get_embed_snippet · list_catalog · hire · list_hired)
+> Under mcp-publish these are ops on the single `agent_flow` tool; the kitchen sink also exposes them as 9 granular `agent_flow_*` / `hire_agent` tools. Same backend.
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 An **agent flow** is a `booking_flows`/`funnels` row with `kind='agent'`. It renders a live AI
 agent (SDR / support / concierge / booking) on the tenant's deployed site, as a native flow served
 from `https://<tenant>/f/<flow_id>` (and inline / concierge / headless mounts). It is the **same

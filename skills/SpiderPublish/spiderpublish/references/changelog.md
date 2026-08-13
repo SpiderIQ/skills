@@ -1,5 +1,12 @@
 # Publish a changelog — version-stamped release notes
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `createChangelog` `publishChangelog` `updateChangelog` `listChangelog`
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The changelog is the **fourth first-class content type**, alongside pages, posts
 and docs. It is a flat, date-ordered feed of version-stamped entries rendered at
 `/changelog` with RSS + Atom feeds, and it is the right model whenever the thing

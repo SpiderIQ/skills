@@ -1,5 +1,12 @@
 # reference/booking-model
 
+> **REQUIRES — read before you plan.**
+> **Package:** reference only — the data model behind forms / booking / funnels.
+> **The callable surface:** `forms-booking.md` (forms + booking) and `funnels.md` (the Flow graph). **This skill can drive all of them over HTTP**; on MCP they are `@spideriq/mcp` (kitchen sink) only.
+> **Canonical URL for every `kind`:** `/f/<flow_id>`. Never compose `/book/<id>` by hand — that mistake put 8 broken iframes into production (the W13 incident).
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 The `booking_flows` data model — `kind` discriminator, `flow` JSONB shape, cal.com integration, calendar-OAuth-by-invite, the `kind='form'` vs `kind='booking'` URL collision, and the W13 incident that codified Rule 62. Cited by every `booking/` recipe.
 
 ## TL;DR
@@ -61,7 +68,7 @@ One row per form / booking / funnel / commerce flow. Key columns:
 | `hidden_fields[]` | Array of `{key, label, default_value?}` | URL-query-string capture (`?utm_source=twitter` → only declared keys are sourced; everything else is stripped). |
 | `welcome_screens[]` | 4-key max: `title, description?, button_text, attachment?` | Pre-form intro. |
 | `thankyou_screens[]` | 7-key strict (`extra=forbid` post-PR-#841): `id, title, description?, attachment?, button_mode, redirect_url?, is_default` | Post-submit screen. Exactly one MUST have `is_default=true` when the list is non-empty. **No `button_text` on ThankyouScreen** — CTA label is derived from `button_mode`. |
-| `theme` | `{preset?, tokens?}` | Visual identity — see [recipes/booking/build-form.md](../booking/build-form.md) for the 6 presets + token catalog. |
+| `theme` | `{preset?, tokens?}` | Visual identity — see [`forms-booking.md#build-form`](forms-booking.md#build-form) for the 6 presets + token catalog. |
 
 ## URL surface — the most-important table in this doc
 
@@ -120,7 +127,7 @@ The tenant doesn't ask each staff member to log into the dashboard and click "Co
 4. Staff clicks → goes to a hosted SpiderPublish page → OAuths into Google / Outlook / iCloud → done.
 5. Their calendar is now in the slot-resolver pool for that booking flow.
 
-Why the indirection: staff often aren't dashboard users (they're a delivery contractor, an estate agent, a salon stylist). Calendar-OAuth-by-invite skips the dashboard onboarding and gets them productive in one click. See [`../booking/invite-staff-calendar.md`](../booking/invite-staff-calendar.md) for the recipe.
+Why the indirection: staff often aren't dashboard users (they're a delivery contractor, an estate agent, a salon stylist). Calendar-OAuth-by-invite skips the dashboard onboarding and gets them productive in one click. See [`forms-booking.md#invite-staff-calendar`](forms-booking.md#invite-staff-calendar) for the recipe.
 
 ## Visual-check — the Rule 62 assertion
 
@@ -216,12 +223,12 @@ IDAP-anchored: url · country · region · postal_code · address · datetime ·
 
 ## See also
 
-- [`../booking/build-form.md`](../booking/build-form.md) — gold-standard form-design recipe (theme presets, tokens, per-question media)
-- [`../booking/build-lead-gen-form.md`](../booking/build-lead-gen-form.md) — end-to-end 6-call lead-gen pipeline
-- [`../booking/clone-form-template.md`](../booking/clone-form-template.md) — one-shot template clone
-- [`../booking/clone-booking-template.md`](../booking/clone-booking-template.md) — booking equivalent (cal.com-backed)
-- [`../booking/invite-staff-calendar.md`](../booking/invite-staff-calendar.md) — calendar-OAuth-by-invite
-- [`../booking/embed-form.md`](../booking/embed-form.md) — inline / popup / standalone embed
+- [`forms-booking.md#build-form`](forms-booking.md#build-form) — gold-standard form-design recipe (theme presets, tokens, per-question media)
+- [`forms-booking.md#build-lead-gen-form`](forms-booking.md#build-lead-gen-form) — end-to-end 6-call lead-gen pipeline
+- [`forms-booking.md#clone-form-template`](forms-booking.md#clone-form-template) — one-shot template clone
+- [`forms-booking.md#clone-booking-template`](forms-booking.md#clone-booking-template) — booking equivalent (cal.com-backed)
+- [`forms-booking.md#invite-staff-calendar`](forms-booking.md#invite-staff-calendar) — calendar-OAuth-by-invite
+- [`forms-booking.md#embed-form`](forms-booking.md#embed-form) — inline / popup / standalone embed
 - [`deploy-protocol.md`](deploy-protocol.md) — `form_publish` and `form_delete` gate flavour
 - [`tool-surface.md`](tool-surface.md) — `form_*` tool family map
 - catalog/LEARNINGS.md Rules 62 / 65 / 67 — source incidents

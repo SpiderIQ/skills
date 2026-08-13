@@ -1,5 +1,12 @@
 # Design an agent component — author a mountable `<opvs-agent>` marketplace block
 
+> **REQUIRES — read before you plan.**
+> **Package:** `@spideriq/mcp` **or** `@spideriq/mcp-publish` (default). ⚠️ **NOT** under the `mac-128` slice.
+> **Tools:** `content_create_agent_component` · or `createComponent` + `insertSection`
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 A **marketplace agent component** is a `content_components` row with
 `marketplace_category='agent'` that mounts the in-DOM `<opvs-agent>` web component bound to a
 `kind='agent'` flow. It is the reusable, brand-skinned BLOCK an agent drops onto a page — distinct

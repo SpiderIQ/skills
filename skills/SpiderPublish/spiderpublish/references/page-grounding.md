@@ -1,5 +1,11 @@
 # Page-grounding — let the embedded agent READ the page it's on
 
+> **REQUIRES — read before you plan.**
+> **Package:** n/a — no MCP tools of its own.
+> **Tools:** — a client-SDK property (`pageContext`), no MCP tool
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 An embedded `kind='agent'` flow can be made **page-aware**: it reads the actual content of the page
 a visitor is on and answers grounded in it ("what's on this page?", "summarize this", questions about
 the product/article in front of the visitor) instead of chatting blind. Off by default; **opt-in** with

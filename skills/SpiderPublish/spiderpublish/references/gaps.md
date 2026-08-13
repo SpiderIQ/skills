@@ -1,5 +1,11 @@
 # CLI / MCP / skill gaps — and the verified verdict on the 2026-06-10 agent report
 
+> **REQUIRES — read before you plan.**
+> **Package:** n/a — no MCP tools of its own.
+> **Tools:** — meta: known surface deltas and resolved bug-report verdicts
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 > This skill (the marketplace Tier-3 client) generates its methods directly from
 > `client/schema.yaml`, so it covers the full SpiderPublish PAT surface. This file
 > records (a) the verified verdict on the agent bug report that triggered the

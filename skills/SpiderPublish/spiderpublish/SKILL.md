@@ -7,13 +7,13 @@ description: >
   deploy to the Cloudflare edge. Trigger on: "add a page", "write a blog post",
   "edit the header", "create an author", "set up categories/tags", "apply a
   theme", "connect a custom domain", "publish the blog", "deploy the site", or a
-  tenant name (sms-chemicals.com, demo.spideriq.ai). Authoring lives in STORE
-  (PostgreSQL, tenant-isolated); nothing reaches end users until you DEPLOY.
+  tenant name (sms-chemicals.com, demo.spideriq.ai). Content is LIVE ON PUBLISH (~60s edge
+  cache); only templates / theme / chrome need a DEPLOY.
   SpiderPublish is a runtime, not a generic CMS — generic web knowledge gets the
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.7.0"
+version: "0.11.0"
 category: content
 ---
 
@@ -30,12 +30,18 @@ SpiderPublish is a **runtime**, not a generic CMS. Three layers:
 - **MANAGE** — this skill (over a PAT), plus the dashboard, MCP, CLI, and VSCode
   extension. All call the same STORE API.
 
-Your job: land changes in STORE correctly, then trigger SERVE via **deploy**.
+Your job: land changes in STORE correctly — that is enough for CONTENT.
+Deploy only when you touched a **template, theme or section**.
 
 ```
-  AUTHOR (this skill, PAT) ──▶ STORE (Postgres, tenant rows) ──deploy──▶ SERVE (CF edge) ──▶ visitors
-   createPage/createPost        draft|published                          live site
-   publishPost flips a flag     (still not live)                         (only updates on deploy)
+  CONTENT  ── publish ──▶ STORE (Postgres) ──fetched at REQUEST time──▶ visitors
+   pages · posts · docs        status=published        ~60s edge cache
+   press · changelog                                   NO DEPLOY NEEDED
+   components · nav · settings
+
+  CHROME   ── deploy ───▶ per-tenant KV ──read by the Worker──▶ visitors
+   Liquid templates · theme    deploySite() writes KV
+   sections/*.liquid           THIS is what deploy is for
 ```
 
 ## Auth + two URL surfaces (one PAT)
@@ -62,12 +68,30 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
 
 **Two rules that bite every agent new to SpiderPublish:**
 
-1. **AUTHORING IS NOT LIVE.** Creating/editing a page or post only changes
-   STORE. `publishPost`/`publishPage` flips a row to *published* (visible to the
-   API) — the **live site does not change until you `deploySite`** (or
-   `deployPreview` → `deployProduction`). Publishing and deploying are two
-   separate steps; you usually need both. Telling the user "it's live" after a
-   create/publish, without a deploy, is a silent lie.
+1. **CONTENT IS LIVE ON PUBLISH. CHROME IS NOT.** These are two different
+   pipelines and confusing them wastes more agent time than anything else in
+   SpiderPublish — in both directions.
+
+   | You changed… | Live when? | Deploy needed? |
+   |---|---|---|
+   | page · post · doc · press · changelog · collection record · component · navigation · settings | **on publish**, within ~60s | **NO** |
+   | Liquid template · theme · `sections/*.liquid` · the config overlay | on deploy | **YES** |
+
+   **Why:** the renderer fetches content from STORE over HTTP **at request
+   time** (`ContentAPIClient` → `GET /content/*`, `X-Content-Domain`). Templates
+   and the config overlay come from per-tenant **KV**, which only `deploySite`
+   writes.
+
+   **The ~60s trap that makes this look backwards.** Rendered HTML ships
+   `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`. So you
+   publish, look immediately, still see the old page, run a deploy (which takes
+   about as long as the cache window), see the new page — and conclude the
+   deploy did it. It didn't. **If content looks stale, wait 60 seconds and
+   re-fetch before deploying.**
+
+   Telling the user "this needs a deploy" for a post, doc or changelog entry is
+   as wrong as telling them a template change is already live. Both are common;
+   the first invents a blocker that does not exist.
 
 2. **DESTRUCTIVE OPS ON A PRODUCTION TENANT ARE TWO-PHASE.** `deletePage`,
    `applyTheme`, `deployProduction`, `deletePage`, `updateSettings`, and the
@@ -77,26 +101,134 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
 
 **Why a hard gate, not a footnote:** the publish-vs-deploy confusion and
 "delete looked safe" are the two highest-frequency SpiderPublish mistakes.
-Confirm the deploy step happened before reporting a change as live.
+Before reporting anything, be sure which pipeline you touched — and verify by
+**fetching the live URL**, not by trusting a 200.
 
 </HARD-GATE>
 
-## Approach
+## STEP 0 — can you reach everything? (do this before anything else)
 
-1. **Orient** — `getHelp` (the full authoring reference) if you don't know the
-   site shape; `listPages` / `listPosts` / `listComponents` to see what exists
-   (including drafts).
-2. **Author** — `createPage` / `createPost` / `createDoc` (+ `createAuthor`,
-   `createTag`, `createCategory` to set up taxonomy first). Body is **Tiptap
-   JSON**, not HTML.
-3. **Assemble** — `insertSection` to drop components onto a page; `applyTheme`
-   for look; `updateNavigation` / `updateSettings` for chrome.
-4. **Publish** — `publishPost` / `publishPage` / `publishDoc` (draft →
-   published).
-5. **Deploy** — `deployPreview` → `deployProduction` (safe), or `deploySite`
+> **Driving this skill's own methods (`createPage`, `createFlow`, `createPressRelease`…)?
+> You have everything — skip to the next section.** These call the HTTP API directly,
+> so no MCP tool limit applies. Step 0 is only about **MCP tool** setups.
+
+**Look at your own tool list for `tool_search`.**
+
+**If `tool_search` is there — you are in facade mode. Everything is reachable. Skip the rest of this section.**
+You will see ~9 tools, not hundreds. That is deliberate, not truncation. Use:
+
+```
+tool_search({ intent: "<what you want to DO>" })   → ranked tool names + a literal `call` string
+tool_help({ name: "<exact name>" })                → the full input schema
+tool_call({ name: "<exact name>", arguments: {…} }) → runs it, with every gate intact
+```
+
+Three rules: **copy the name verbatim** from the result's `call` field (retyping or
+pluralising it is the top cause of a not-found); **a search returning nothing means
+search again with different words**, not that the capability is missing (431 tools sit
+behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
+
+**If `tool_search` is NOT there,** you are on a limited set. Which one:
+
+| Also present | You have | Reaches |
+|---|---|---|
+| `form_create` | kitchen sink, unfiltered (431) | everything — but see the warning below |
+| `marketplace_search`, no `form_create` | `@spideriq/mcp-publish` (163) | content, templates, deploy, marketplace. **No** forms/booking/press/funnels/section-overrides |
+| neither | mcp-publish + `mac-128` slice (95) | the above **minus the whole reuse path** |
+
+**Tell the user how to fix it** — this is a config change, not a platform limit:
+
+```json
+"env": { "SPIDERIQ_MCP_MODE": "facade" }     // on @spideriq/mcp
+```
+
+> ⚠️ **Do NOT suggest "just switch to `@spideriq/mcp`" without facade mode.** Measured
+> 2026-08-12: the unfiltered 431-tool list makes Antigravity **silently abort the
+> ingest and keep the previous package's cached tools** — no error, no warning. The
+> session then believes it switched and has not. 163 ingests; 431 does not. Facade
+> mode is what makes the full surface reachable on a size-limited client.
+>
+> ⚠️ **Never set `SPIDERIQ_MCP_SLICE=mac-128`.** 35 of its 130 names are ghosts (a
+> plain name intersection, so each is a silent no-op) and it drops
+> `marketplace_search`, `page_insert_section`, `content_apply_site_template` and
+> `content_get_playbook` — the entire adapt-don't-generate path.
+
+**When a capability is out of reach, say so plainly and stop** — *"forms need
+`@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade`; you have `@spideriq/mcp-publish`"*.
+Do not invent a workaround, and do not report the platform as broken. Every reference
+states its own requirement in a `REQUIRES:` block at the top.
+
+## Noun → where the tools are
+
+The user names ONE noun. That noun tells you which reference AND which package:
+
+| The user said… | Tools live in | Read |
+|---|---|---|
+| page, section, block, hero | any universe (`page_insert_section` needs default+) | `references/content.md` · `references/block-types.md` |
+| blog, post, author, tag, category | any universe | `references/content.md` · `references/blog-page-design.md` |
+| header, footer, nav, chrome | nav: any · **override: kitchen sink** (fallback `template_upsert`) | `references/content.md` |
+| component, marketplace, section library | default+ | `references/components.md` · `references/marketplace.md` |
+| theme, template, starter site, deploy | any universe | `references/templates-deploy.md` |
+| docs, API reference, OpenAPI | authoring: any · **ask/search: kitchen sink** | `references/content.md` · `references/docs-site-design.md` |
+| collection, case studies, products, custom type | any universe | `references/collections.md` |
+| changelog, release notes | any universe | `references/changelog.md` |
+| **form, lead capture, contact form** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/forms-booking.md` |
+| **booking, appointment, calendar** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/booking-model.md` |
+| **funnel, multi-step flow** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/funnels.md` |
+| **press, newsroom, media kit** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/press-newsroom.md` · `references/press-page-design.md` |
+| agent, chatbot, AI assistant | `agent_flow` in default+ | `references/agent-embed.md` |
+| domain, DNS, go live | any universe | `references/content.md` |
+
+## Approach — SHOP FIRST, then author
+
+**Reuse before generate is the default posture, not an option.** Authoring a
+component or page from scratch is the fallback for when the shelf has nothing —
+it is not the starting move. There are 363 marketplace components, 26 site
+templates and 8 page templates already built and tested.
+
+1. **SHOP** — before writing any HTML or block JSON:
+   - a whole site, or a landing / opt-in / thank-you / VSL page →
+     `listSiteTemplates` / `listPageTemplates` → `applySiteTemplate` /
+     `applyPageTemplate`, then adapt the copy.
+   - one section (hero, pricing, FAQ, footer, testimonials, CTA) →
+     `listMarketplaceComponents({ category })` → `insertSection`.
+   - **Search WIDER than the noun.** Category counts are uneven — `header` holds
+     1 component and `faq` holds 1, but `trust-authority` (17), `social-proof`
+     (16), `conversion`, `cta` and `content` hold sections that also serve as
+     chrome or hero. A single-category search returning 1 result means *search
+     again*, not *the shelf is empty*.
+2. **Orient** — `getHelp` if you don't know the site shape; `listPages` /
+   `listPosts` / `listComponents` to see what already exists (including drafts).
+3. **Author** — only what shopping didn't cover. `createPage` / `createPost` /
+   `createDoc` (+ `createAuthor`, `createTag`, `createCategory` for taxonomy
+   first). Body is **Tiptap JSON**, not HTML.
+4. **Assemble** — `insertSection` for components; `applyTheme` for look;
+   `updateNavigation` / `updateSettings` for chrome.
+5. **Publish** — `publishPost` / `publishPage` / `publishDoc` (draft → published).
+6. **Deploy** — `deployPreview` → `deployProduction` (safe), or `deploySite`
    (one-shot). THIS is the step that makes it live.
-6. **Verify** — `deployStatus`; on a published URL, a visual check asserting on
+7. **Verify** — `deployStatus`; on a published URL, a visual check asserting on
    `dom.shadow_hosts` (NOT `body_text_preview`) for embedded components/forms.
+
+## The job is NOT done until… (read before you report back)
+
+A one-word request implies more than one object. Finishing only the named noun is
+the most common way an agent reports success on an unfinished site.
+
+| Asked for… | Not done until you have also… |
+|---|---|
+| "the blog" | authors + tags/categories exist · at least one post **published** (live in ~60s, no deploy) · the `/blog` **listing page** designed — **deploy only if you changed `templates/blog.liquid`** |
+| "the header" / "the footer" | nav items point at pages that **exist and are published** (nav itself is live on save) · **template/section edits need `deploySite`** — this is genuinely chrome |
+| "a form" | the flow is **published** and reachable at `/f/<id>` (live immediately) · if embedded, the host page is published too · a **test submission accepted** — that is the real proof, not a 200 on publish |
+| "a landing page" | blocks composed · SEO fields set (`og_image`, `meta_description`) · slug is not `/` (use `home`) · **published** — live in ~60s, no deploy |
+| "docs" | doc pages **published** (live, no deploy) · the docs nav tree resolves · theme applied **after** any OpenAPI import — **the theme is the part that needs `deploySite`** |
+| "a press release" | contacts + boilerplate + kit attached · release **published** (live, no deploy — and it notifies journalists **irreversibly**) · a newsroom page exists |
+| "a new page" | it is reachable — **linked from navigation or another page**, else it is an orphan URL · **published** (live in ~60s) |
+
+**Note what changed here:** most rows do NOT end in a deploy. Only the chrome
+rows do. Running a deploy "to be safe" after a content change is a no-op that
+costs a minute and teaches you the wrong model — and *telling the user a deploy
+is pending* invents a blocker. See the hard gate above.
 
 ## Decision tree — pick a method (→ reference)
 
@@ -109,7 +241,7 @@ Confirm the deploy step happened before reporting a change as live.
 | **Backfill a changelog / blog / newsroom history with its REAL dates** — anything where "the order on the page is wrong" | pass `published_at` on `createChangelog` / `createPost` / `createPressRelease` (or on publish/update to correct) | `references/changelog.md` |
 | The changelog page renders in the wrong order (v2.10.0 below v2.2.0) | fix the DATES, or `listChangelog(sort="version")` / the `sort_semver` filter — NEVER Liquid's built-in `sort` | `references/changelog.md` |
 | Run a newsroom — publish a press release, with press contacts, a boilerplate and a downloadable media kit | `createPressContact`→`createPressBoilerplate`→`createPressKit`→`createPressRelease`→`publishPressRelease` (or `schedulePressRelease` / `embargoPressRelease`) | `references/press-newsroom.md` |
-| **Design the newsroom PAGE** — compose the press components, pick 1 of 4 archetypes (the release list self-binds to `press`) | `listSiteTemplates`→`applySiteTemplate`(`newsroom-minimal`\|`-startup-dark`\|`-startup-light`\|`-corporate`\|`-agency`) · or `createPage`→`insertSection`(`sys-press-releases`·`sys-press-kit`·`sys-press-marquee`) — a `featured`/`grid` release index needs `createPage(blocks=[{layout:…}])`, NOT `insertSection` | `references/press-page-design.md` |
+| **Design the newsroom PAGE** — compose the press components, pick 1 of 6 `newsroom*` starters (the release list self-binds to `press`) | `listSiteTemplates`→`applySiteTemplate`(`newsroom-minimal`\|`-startup-dark`\|`-startup-light`\|`-corporate`\|`-agency`) · or `createPage`→`insertSection`(`sys-press-releases`·`sys-press-kit`·`sys-press-marquee`) — a `featured`/`grid` release index needs `createPage(blocks=[{layout:…}])`, NOT `insertSection` | `references/press-page-design.md` |
 | Define a custom content type + fill it (case studies, team, FAQs, products) | `createCollection`→`bulkCreateCollectionRecords`→`updateCollectionRecord`(publish)→`updateCollection`(is_public) | `references/collections.md` |
 | Edit header/footer nav | `getNavigation` · `updateNavigation` | `references/content.md` |
 | Group pages under a folder + have a menu track it automatically | `createPage`(`is_folder`)→`updatePage`(`parent_id`)→`updateNavigation`(`source: {kind:"folder", folder_id}`) | `references/content.md` |
@@ -121,7 +253,11 @@ Confirm the deploy step happened before reporting a change as live.
 | **Personalise a landing page per prospect** (`/lp/{page}/{id}` — outreach, ABM, a page per account) | `createPage`(`template="dynamic_landing"`)→`publishPage`→`deploySite`; identifier via `?resolve_key=` | `references/dynamic-landing.md` |
 | Customise a Liquid template | `getTemplate` · `upsertTemplate` · `previewTemplate` | `references/templates-deploy.md` |
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
-| Build a form / booking flow | (forms surface) | `references/forms-booking.md` |
+| Build a form / lead capture / contact form | `form_create`→`form_add_field`→`form_publish`→`form_get_embed_snippet` — **kitchen sink only** | `references/forms-booking.md` |
+| Build a booking / appointment flow | `booking_template_clone`→`service_create`→`booking_flow_publish` — **kitchen sink only** | `references/forms-booking.md` · `references/booking-model.md` |
+| **Build a funnel** — multi-step journey with branching, A/B splits, upsells | `funnel_template_list`→`funnel_template_apply`, then `flow_add_node`/`flow_add_edge` — **kitchen sink only**. NOT the `sys-form-multistep-funnel` component | `references/funnels.md` |
+| **Design the BLOG pages** — the `/blog` index + post layout (not writing posts) | `createPage(slug='blog')` · or `template_upsert('templates/blog.liquid')` | `references/blog-page-design.md` |
+| **Design a DOCS site / API reference** — the `docs` theme, 3-column reference | `content_import_openapi` **then** `template_apply_theme('docs')` — order matters | `references/docs-site-design.md` |
 | Re-embed an agent I ALREADY hired on OPVS (free), or BUY + hire a new one, headlessly (NO dashboard), then get its flow_id to embed | `listAgentRoster`(mine, free)/`listAgentCatalog`(buy)→`hireAgent`→`listHiredAgents` (or CLI `spideriq agent roster\|catalog\|hire\|list`) → `agent_flow_get_embed_snippet` | `references/agent-hire-discover.md` |
 | Embed a live AI agent (SDR/support/concierge/booking) on the site | `agent_flow_create`→`agent_flow_publish`→`agent_flow_preview_url`/`agent_flow_get_embed_snippet` | `references/agent-embed.md` |
 | Add that agent to the client's OWN React/Vite/Next app (BYOS, npm SDK) | `agent_flow_create`→`agent_flow_publish` then `@spideriq/agent-react` (`<SpiderAgent>`/`useSpiderAgent`) | `references/add-agent-react-app.md` |
@@ -162,8 +298,13 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 
 ## Anti-patterns (always relevant)
 
-- **Reporting a change as "live" without a deploy.** Publish ≠ deploy. The live
-  site only updates on `deploySite` / `deployProduction`.
+- **Claiming a content change needs a deploy.** Posts, pages, docs, press and
+  changelog are live on publish (~60s edge cache). Inventing a deploy blocker is
+  the more common error of the two.
+- **Claiming a TEMPLATE change is live without a deploy.** Templates and theme
+  files live in per-tenant KV — only `deploySite` writes them.
+- **Deploying because the page "looks stale".** Wait 60s and re-fetch first;
+  `s-maxage=60` explains almost every one of these.
 - **POSTing to `/api/v1/content/*`.** Those are public READ paths (POST → 405).
   Writes go to `/api/v1/dashboard/content/*`.
 - **Using `/api/v1/spideriq/content/...`.** Dead prefix → 404. The base is
@@ -196,13 +337,23 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
   press write** — scheduling auto-publishes at the set time and embargo mints
   per-journalist preview tokens; publishing notifies journalists irreversibly.
 - `references/press-page-design.md` — **design the newsroom PAGE**: compose the
-  three press components, the four archetypes, the **self-binding** `press` data
+  three press components, the six `newsroom*` starters (1 Phase-1 original + 5 Phase-2 archetypes), the **self-binding** `press` data
   source, and the block-vs-props `layout` asymmetry (both wrong answers fail
   silently), theme-token discipline. **Read before building a newsroom.**
 - `references/components.md` — reusable components: create, the css-field rule,
   versions, rollback, update-and-propagate.
 - `references/templates-deploy.md` — themes, starter sites, Liquid template
   overrides, the two-phase deploy.
+- `references/blog-page-design.md` — **design the blog PAGES**: the three paths to a
+  custom `/blog` index + post layout, the "there is no blog component" trap, the
+  `/blog/tag/{x}` caveat, and colours-before-templates. **Read before restyling a blog.**
+- `references/docs-site-design.md` — **design a docs site**: the `docs` theme, the
+  structured API reference, and the one order that matters (import OpenAPI **before**
+  applying the theme — otherwise you silently get prose). Plus the four shipped
+  limitations to design around. **Read before building docs.**
+- `references/funnels.md` — **funnels**: the Flow graph (page/split/embed nodes,
+  event edges), clone-a-starter first, and the naming trap that sends agents to the
+  `sys-form-multistep-funnel` component instead. **Read before building a funnel.**
 - `references/forms-booking.md` — forms + booking flows (build, embed, logic,
   test, share, cal.com calendar invite).
 - `references/agent-embed.md` — embed a live OPVS AI agent as a `kind='agent'`

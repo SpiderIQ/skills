@@ -1,5 +1,12 @@
 # Dynamic landing pages — one page, personalised per prospect
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `createPage(template='dynamic_landing')` `publishPage` `deploySite` · `content_get_variables` for the merge-tag vocabulary
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 A page whose `template` is `dynamic_landing` gains two extra public routes on the deployed site:
 
 ```

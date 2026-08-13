@@ -1,5 +1,13 @@
 # Content — pages, posts, docs, navigation, domains, settings
 
+> **REQUIRES — read before you plan.**
+> **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
+> **Tools:** `createPage` `updatePage` `createPost` `createDoc` `getNavigation` `updateNavigation` `getSettings` `updateSettings` `addDomain` `insertSection`
+> **Partial:** the header/footer **section override** (`content_override_section`, `content_get_section_source`, `content_apply_layout_preset`) is **kitchen-sink only**. On mcp-publish use `template_get`/`template_upsert` with `path='sections/header.liquid'` — same effect, one extra step. `insertSection` needs default-or-kitchen-sink (not the `mac-128` slice).
+> **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
+> **Not sure which universe you are in?** SKILL.md → *Step 0*.
+
+
 > **Publish dates.** `createPost` / `updatePost` / `publishPost` all accept
 > `published_at` (ISO-8601, naive read as UTC). Set it when importing an archive
 > so the blog index and feeds read in true publication order — the index is
@@ -45,7 +53,7 @@ If you want to *insert one marketplace section into an existing page* → [`land
    curl -s https://spideriq.ai/api/v1/content/help/block-fields | jq 'keys'
    ```
    Or via MCP: `template_inspect_block_fields()` — see [`../reference/block-types.md`](block-types.md).
-3. **MCP server reachable.** `@spideriq/mcp-publish` (87 tools, atomic) OR `@spideriq/mcp` (134+ kitchen-sink) — see [`../reference/tool-surface.md`](tool-surface.md).
+3. **MCP server reachable.** `@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade` (9 listed, 431 reachable — recommended) OR `@spideriq/mcp-publish` (163, no forms/press/funnels) — see [`../reference/tool-surface.md`](tool-surface.md).
 
 ### The 5-call path
 
