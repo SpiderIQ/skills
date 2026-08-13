@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.11.0"
+version: "0.12.0"
 category: content
 ---
 
@@ -66,7 +66,31 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
 
 <HARD-GATE name="authoring-is-not-live--two-phase-on-prod">
 
-**Two rules that bite every agent new to SpiderPublish:**
+**Three rules that bite every agent new to SpiderPublish:**
+
+0. **YOU MAY NOT BE ON THE TENANT YOU THINK. CHECK BEFORE YOU WRITE.** A write
+   that lands on the wrong brand's site returns **200 and looks identical to a
+   correct one** — same envelope, same id, same "published". Nothing downstream
+   will tell you. Preflight once per session, before the first create/update/
+   delete/publish:
+
+   ```
+   get_auth_status({ topic: "tenancy" })
+   ```
+
+   Read four fields off it: `active_workspace` (the tenant your next call
+   touches), `resolved_via` (WHY it was chosen — `explicit` · `environment` ·
+   `binding` · `sole-credential`), `workspaces[]` (everything else you could
+   reach), and `conflicts` (a losing candidate — if this is non-empty, a
+   `spideriq.json` or `$SPIDERIQ_WORKSPACE` names a DIFFERENT tenant than the
+   one that will actually be used).
+
+   **If more than one workspace is authenticated, stop resolving implicitly and
+   pass `workspace: "cli_…"` on every call.** It is rung 1 and always wins. An
+   agency session working three clients should never rely on a binding file.
+
+   *(Driving this skill's own HTTP methods with a single `SPIDERIQ_PAT`? The
+   token IS the tenant — one credential, no resolution, nothing to check.)*
 
 1. **CONTENT IS LIVE ON PUBLISH. CHROME IS NOT.** These are two different
    pipelines and confusing them wastes more agent time than anything else in
@@ -100,17 +124,33 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
    ALWAYS preview first. (Envelopes: 410 expired · 409 consumed · 403 mismatch.)
 
 **Why a hard gate, not a footnote:** the publish-vs-deploy confusion and
-"delete looked safe" are the two highest-frequency SpiderPublish mistakes.
-Before reporting anything, be sure which pipeline you touched — and verify by
-**fetching the live URL**, not by trusting a 200.
+"delete looked safe" are the two highest-frequency SpiderPublish mistakes, and
+the wrong-tenant write is the one with no symptom at all. Before reporting
+anything, be sure **which tenant** you wrote to and **which pipeline** you
+touched — and verify by **fetching the live URL**, not by trusting a 200.
 
 </HARD-GATE>
 
-## STEP 0 — can you reach everything? (do this before anything else)
+## STEP 0 — two questions, before anything else
+
+**0A. WHO am I about to write to?** — `get_auth_status({ topic: "tenancy" })`.
+It is in the facade's always-on set, in the unfiltered kitchen sink, in
+`@spideriq/mcp-publish`, and in the CLI as `spideriq auth whoami`. See HARD-GATE
+rule 0 above for what to read off it. Do this **once per session, before the
+first write** — a wrong-tenant write is a 200 with no other symptom.
+
+> ⚠️ **The one place it is missing is `SPIDERIQ_MCP_SLICE=mac-128`** — that
+> keep-list names `auth_whoami` / `auth_request_access` / `auth_get_workspaces`
+> / `system_health_check` and five more that **do not exist under those names**,
+> so all 8 shared auth+system tools are dropped. On that slice you cannot check
+> who you are, enrol, or health-check. It is one more reason the answer to
+> mac-128 is *never set it* (see 0B).
+
+**0B. Can I reach everything?**
 
 > **Driving this skill's own methods (`createPage`, `createFlow`, `createPressRelease`…)?
 > You have everything — skip to the next section.** These call the HTTP API directly,
-> so no MCP tool limit applies. Step 0 is only about **MCP tool** setups.
+> so no MCP tool limit applies. 0B is only about **MCP tool** setups.
 
 **Look at your own tool list for `tool_search`.**
 
@@ -134,13 +174,25 @@ behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 |---|---|---|
 | `form_create` | kitchen sink, unfiltered (431) | everything — but see the warning below |
 | `marketplace_search`, no `form_create` | `@spideriq/mcp-publish` (163) | content, templates, deploy, marketplace. **No** forms/booking/press/funnels/section-overrides |
-| neither | mcp-publish + `mac-128` slice (95) | the above **minus the whole reuse path** |
+| neither — and **no `get_auth_status`/`health_check` either** | mcp-publish + `mac-128` slice (95) | the above **minus the whole reuse path, and minus all 8 auth+system tools** |
 
 **Tell the user how to fix it** — this is a config change, not a platform limit:
 
 ```json
-"env": { "SPIDERIQ_MCP_MODE": "facade" }     // on @spideriq/mcp
+"spideriq": {
+  "command": "npx",
+  "args": ["-y", "@spideriq/mcp@latest"],
+  "lazy": true,
+  "env": { "SPIDERIQ_MCP_MODE": "facade", "SPIDERIQ_FORMAT": "yaml" }
+}
 ```
+
+> `"lazy": true` is an **Antigravity-specific** key, reported by Antigravity
+> sessions (2026-08-13) to avoid an IDE bug where natively-injected (eager)
+> tools throw `unknown tool` on call. We have not been able to reproduce or
+> disprove it — we cannot run that IDE. Other clients ignore the key, so it is
+> safe to leave in. If `tool_search` is listed but calling it says the tool is
+> unknown, that is the bug this key is for.
 
 > ⚠️ **Do NOT suggest "just switch to `@spideriq/mcp`" without facade mode.** Measured
 > 2026-08-12: the unfiltered 431-tool list makes Antigravity **silently abort the
@@ -151,7 +203,12 @@ behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 > ⚠️ **Never set `SPIDERIQ_MCP_SLICE=mac-128`.** 35 of its 130 names are ghosts (a
 > plain name intersection, so each is a silent no-op) and it drops
 > `marketplace_search`, `page_insert_section`, `content_apply_site_template` and
-> `content_get_playbook` — the entire adapt-don't-generate path.
+> `content_get_playbook` — the entire adapt-don't-generate path. **All 8 of its
+> "shared auth + system" entries are among the ghosts** (`auth_whoami`,
+> `auth_request_access`, `auth_get_workspaces`, `auth_logout`,
+> `auth_check_access_status`, `system_health_check`, `system_get_queue_stats`,
+> `system_get_api_info` — the real names carry no prefix), so that slice cannot
+> check its own tenant, enrol, or health-check.
 
 **When a capability is out of reach, say so plainly and stop** — *"forms need
 `@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade`; you have `@spideriq/mcp-publish`"*.
@@ -186,6 +243,10 @@ component or page from scratch is the fallback for when the shelf has nothing �
 it is not the starting move. There are 363 marketplace components, 26 site
 templates and 8 page templates already built and tested.
 
+0. **CONFIRM THE TENANT** — `get_auth_status({ topic: "tenancy" })` once, before
+   the first write. Everything below mutates a specific brand's live site and a
+   wrong-tenant write returns 200. If `workspaces[]` holds more than one entry,
+   pass `workspace: "cli_…"` explicitly from here on.
 1. **SHOP** — before writing any HTML or block JSON:
    - a whole site, or a landing / opt-in / thank-you / VSL page →
      `listSiteTemplates` / `listPageTemplates` → `applySiteTemplate` /

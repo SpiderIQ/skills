@@ -29,6 +29,7 @@ CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the th
 "spideriq": {
   "command": "npx",
   "args": ["-y", "@spideriq/mcp@latest"],
+  "lazy": true,
   "env": { "SPIDERIQ_MCP_MODE": "facade", "SPIDERIQ_FORMAT": "yaml" }
 }
 ```
@@ -58,7 +59,28 @@ CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the th
 > (`content_get_help` vs the real `template_get_help`; `content_insert_section` vs
 > `page_insert_section`; `content_marketplace_search` vs `marketplace_search`; six
 > `form_*` names not in mcp-publish at all). The filter is a plain name intersection,
-> so every ghost is a silent no-op: it serves **95**, not 130. Worse, it drops six
+> so every ghost is a silent no-op: it serves **95**, not 130.
+>
+> **Its entire "Shared (auth + system) — 8 tools" block is ghosts.** Every one is
+> written with a prefix the real tool does not carry:
+>
+> | keep-list name | real name |
+> |---|---|
+> | `auth_request_access` | `request_access` |
+> | `auth_check_access_status` | `check_access_status` |
+> | `auth_get_workspaces` | `list_workspaces` |
+> | `auth_logout` | `logout` |
+> | `auth_whoami` | `get_auth_status` |
+> | `system_health_check` | `health_check` |
+> | `system_get_queue_stats` | `get_queue_stats` |
+> | `system_get_api_info` | `get_api_info` |
+>
+> So a `mac-128` session cannot check which tenant it is on, cannot enrol, and
+> cannot health-check — the block that was supposed to guarantee those is the one
+> block where nothing matched. **A tool list with no `get_auth_status` and no
+> `health_check` in it is how you recognise this slice.**
+>
+> Worse still, it drops six
 > tools that ARE present by default — `page_insert_section`, `marketplace_search`,
 > `content_list_marketplace_components`, `content_apply_site_template`,
 > `content_get_playbook`, `content_list_marketplace_bg_videos` — the entire
@@ -83,14 +105,31 @@ Both pull from `https://npm.spideriq.ai` (Verdaccio mirror). Auth: configure `.m
   "mcpServers": {
     "spideriq": {
       "command": "npx",
-      "args": ["@spideriq/mcp"],
-      "env": { "SPIDERIQ_FORMAT": "yaml" }
+      "args": ["-y", "@spideriq/mcp@latest"],
+      "lazy": true,
+      "env": { "SPIDERIQ_MCP_MODE": "facade", "SPIDERIQ_FORMAT": "yaml" }
     }
   }
 }
 ```
 
-After install, run `request_access` → `check_access_status` (PAT flow) before any tenant-scoped call. See [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md).
+> **Do not add `--registry=…` to `args` for an `@spideriq/*` package.** A scoped
+> rule in `.npmrc` (`@spideriq:registry=https://npm.spideriq.ai`) **beats the
+> `--registry` flag**, so a wrong registry in `args` is silently ignored on a
+> machine that already has the scope configured — and resolves nothing on a clean
+> one. Put the registry in `.npmrc`, not in the server entry.
+
+> **`"lazy": true` is Antigravity-specific.** Antigravity sessions report
+> (2026-08-13) that it avoids an IDE bug where natively-injected (eager) tools
+> throw `unknown tool` when called, and that lazily-loaded tools are invokable
+> through their `call_mcp_tool` abstraction. **We have not verified this** — we
+> cannot run that IDE, and the facade's own protocol test there was done with a
+> standalone JSON-RPC client that bypasses the IDE's tool-calling entirely.
+> Every other client ignores the key, so it is safe to carry.
+
+After install, run `request_access` → `check_access_status` (PAT flow), then
+`get_auth_status({ topic: "tenancy" })` to confirm **which** tenant resolved,
+before any tenant-scoped write. See [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md).
 
 ## The 128-tool ceiling story (why the split exists)
 
