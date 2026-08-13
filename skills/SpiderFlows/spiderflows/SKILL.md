@@ -33,7 +33,7 @@ description: >
   split one downstream job per lead through the same Site → Verify → VayaPin chain.
   Trigger bulk on: "bulk lead sourcing", "buy a lead list", "source leads in bulk",
   "leads across many cities at once", "one big scrape instead of a campaign",
-  "outscraper", "bulk import leads", "a few thousand leads in <region>". Use it instead of
+  "outscraper", "apify", "bulk import leads", "a few thousand leads in <region>". Use it instead of
   a campaign when the user wants breadth in a SINGLE purchase; it dedups across the whole
   result set but has NO per-location retry. More flows are added here as recipes.
 ---

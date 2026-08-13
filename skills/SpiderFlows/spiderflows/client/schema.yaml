@@ -206,7 +206,7 @@ methods:
         required: true
         description: 'The provider-neutral buy order: { provider, source_kind, queries[], geo[], limits{}, filters{}, language }.'
         properties:
-          provider: { type: string, description: "Registered lead-source adapter, e.g. 'outscraper'." }
+          provider: { type: string, description: "Registered lead-source adapter. Provider jobs that BUY records: 'outscraper' (no unit price configured, so estimated_cost_usd comes back null — that is NOT free, the record ceiling is then the only guard) and 'apify' (priced per record, returns a real estimated_cost_usd). Upload sources 'csv' and 'json' exist but are NOT reachable from this surface: they need a multipart file upload first, which is dashboard-only today." }
           source_kind: { type: string, values: [google_maps, linkedin_company], description: 'Shape of source to buy. Bounds downstream stage eligibility.' }
           queries:
             type: array
