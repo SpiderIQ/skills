@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.12.0"
+version: "0.13.0"
 category: content
 ---
 
@@ -139,12 +139,17 @@ It is in the facade's always-on set, in the unfiltered kitchen sink, in
 rule 0 above for what to read off it. Do this **once per session, before the
 first write** — a wrong-tenant write is a 200 with no other symptom.
 
-> ⚠️ **The one place it is missing is `SPIDERIQ_MCP_SLICE=mac-128`** — that
-> keep-list names `auth_whoami` / `auth_request_access` / `auth_get_workspaces`
-> / `system_health_check` and five more that **do not exist under those names**,
-> so all 8 shared auth+system tools are dropped. On that slice you cannot check
-> who you are, enrol, or health-check. It is one more reason the answer to
-> mac-128 is *never set it* (see 0B).
+> ⚠️ **The one place it can be missing is a PRE-1.80.0 `SPIDERIQ_MCP_SLICE=mac-128`.**
+> That keep-list named `auth_whoami` / `auth_request_access` /
+> `auth_get_workspaces` / `system_health_check` and four more that **do not
+> exist under those names**, so all 8 shared auth+system tools were dropped —
+> you could not check who you were, enrol, or health-check.
+>
+> **The slice is RETIRED** in `@spideriq/mcp` ≥ 1.80.0 and
+> `@spideriq/mcp-publish` ≥ 1.39.0: the env var now switches you to facade mode
+> instead, and `get_auth_status` comes back with it. On an older install it
+> still serves the broken 95. Either way the fix is identical — **remove
+> `SPIDERIQ_MCP_SLICE`, set `SPIDERIQ_MCP_MODE=facade`.**
 
 **0B. Can I reach everything?**
 
@@ -174,7 +179,7 @@ behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 |---|---|---|
 | `form_create` | kitchen sink, unfiltered (431) | everything — but see the warning below |
 | `marketplace_search`, no `form_create` | `@spideriq/mcp-publish` (163) | content, templates, deploy, marketplace. **No** forms/booking/press/funnels/section-overrides |
-| neither — and **no `get_auth_status`/`health_check` either** | mcp-publish + `mac-128` slice (95) | the above **minus the whole reuse path, and minus all 8 auth+system tools** |
+| neither — and **no `get_auth_status`/`health_check` either** | a PRE-1.80.0 mcp-publish + `mac-128` slice (95) | the above **minus the whole reuse path, and minus all 8 auth+system tools**. The slice is retired — **update the package**, then drop the env var |
 
 **Tell the user how to fix it** — this is a config change, not a platform limit:
 
@@ -200,15 +205,21 @@ behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 > session then believes it switched and has not. 163 ingests; 431 does not. Facade
 > mode is what makes the full surface reachable on a size-limited client.
 >
-> ⚠️ **Never set `SPIDERIQ_MCP_SLICE=mac-128`.** 35 of its 130 names are ghosts (a
-> plain name intersection, so each is a silent no-op) and it drops
-> `marketplace_search`, `page_insert_section`, `content_apply_site_template` and
-> `content_get_playbook` — the entire adapt-don't-generate path. **All 8 of its
-> "shared auth + system" entries are among the ghosts** (`auth_whoami`,
-> `auth_request_access`, `auth_get_workspaces`, `auth_logout`,
-> `auth_check_access_status`, `system_health_check`, `system_get_queue_stats`,
-> `system_get_api_info` — the real names carry no prefix), so that slice cannot
-> check its own tenant, enrol, or health-check.
+> ⚠️ **`SPIDERIQ_MCP_SLICE=mac-128` is RETIRED — remove it from your config.**
+> On `@spideriq/mcp` ≥ 1.80.0 / `@spideriq/mcp-publish` ≥ 1.39.0 the var is
+> harmless: it enables facade mode and prints why. On anything older it still
+> serves a broken 95.
+>
+> What was wrong with it, since you may meet an old install: 35 of its 130 names
+> were ghosts (the filter was a plain name intersection, so each was a silent
+> no-op). It dropped `marketplace_search`, `page_insert_section`,
+> `content_apply_site_template` and `content_get_playbook` — the entire
+> adapt-don't-generate path — and **all 8 of its "shared auth + system" entries
+> were ghosts too** (`auth_whoami`, `auth_request_access`,
+> `auth_get_workspaces`, `auth_logout`, `auth_check_access_status`,
+> `system_health_check`, `system_get_queue_stats`, `system_get_api_info` — the
+> real names carry no prefix), so it could not check its own tenant, enrol, or
+> health-check.
 
 **When a capability is out of reach, say so plainly and stop** — *"forms need
 `@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade`; you have `@spideriq/mcp-publish`"*.

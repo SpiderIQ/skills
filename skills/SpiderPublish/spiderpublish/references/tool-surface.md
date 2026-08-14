@@ -23,7 +23,7 @@ CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the th
 | `@spideriq/mcp` + `SPIDERIQ_MCP_MODE=facade` | **9** | **all 431** via `tool_search` | ✅ **use this** |
 | `@spideriq/mcp` (unfiltered) | 431 | all 431 — **if the client accepts the list** | ⚠️ Antigravity **silently aborts** at this size |
 | `@spideriq/mcp-publish` | 163 | content · templates · deploy · marketplace. **No** forms/booking/press/funnels/section-overrides | loads everywhere; incomplete |
-| `@spideriq/mcp-publish` + `SPIDERIQ_MCP_SLICE=mac-128` | 95 | the above **minus the reuse path** | ⛔ never |
+| `@spideriq/mcp-publish` + `SPIDERIQ_MCP_SLICE=mac-128` | 95 on a **pre-1.39.0** install · **retired since** | that, **minus the reuse path and all 8 auth/system tools** | ⛔ remove the env var |
 
 ```json
 "spideriq": {
@@ -53,15 +53,24 @@ CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the th
 > The silent abort is the dangerous half: it fails by *succeeding wrongly*. If your
 > tool list looks like a package you did not configure, that is what happened.
 
-> ### ⛔ Never set `SPIDERIQ_MCP_SLICE=mac-128`
+> ### ⛔ `SPIDERIQ_MCP_SLICE=mac-128` is RETIRED — take it out of your config
 >
-> Its keep-list declares 130 names but **35 are ghosts** — renamed or never present
+> **On `@spideriq/mcp` ≥ 1.80.0 / `@spideriq/mcp-publish` ≥ 1.39.0 the var is
+> harmless**: it enables facade mode and prints a line on stderr saying so. It
+> deliberately does NOT fall through to the unfiltered list — on the kitchen
+> sink that is 431 tools and a silent abort, i.e. *worse* than the broken slice.
+> On an older install it still serves the broken 95 described below. Either way:
+> delete the var, set `SPIDERIQ_MCP_MODE=facade`.
+>
+> The rest of this block is why it went, and how to recognise an old install.
+>
+> Its keep-list declared 130 names but **35 were ghosts** — renamed or never present
 > (`content_get_help` vs the real `template_get_help`; `content_insert_section` vs
 > `page_insert_section`; `content_marketplace_search` vs `marketplace_search`; six
 > `form_*` names not in mcp-publish at all). The filter is a plain name intersection,
 > so every ghost is a silent no-op: it serves **95**, not 130.
 >
-> **Its entire "Shared (auth + system) — 8 tools" block is ghosts.** Every one is
+> **Its entire "Shared (auth + system) — 8 tools" block was ghosts.** Every one was
 > written with a prefix the real tool does not carry:
 >
 > | keep-list name | real name |
@@ -135,7 +144,7 @@ before any tenant-scoped write. See [`SKILL.md` → *Auth + two URL surfaces*](.
 
 The full SpiderIQ surface is **431** tools (publish + forms + booking + press + funnels + mail + gate + leads + admin). Size-limited clients cannot take that list — Antigravity silently aborts on it (see the measurement above).
 
-Two historical answers, both now superseded by facade mode: `@spideriq/mcp-publish` (**163**) carves out the families a content-authoring agent needs least often — `form_*` (28), `booking_*`/`service_*` (15), `press_*` (27), `flow_*` (12), `funnel_template_*` (4), the 3 section-override tools, docs-query (4) — and the `mac-128` slice (**95**) narrows it further and breaks doing so.
+Two historical answers, both now superseded by facade mode: `@spideriq/mcp-publish` (**163**) carves out the families a content-authoring agent needs least often — `form_*` (28), `booking_*`/`service_*` (15), `press_*` (27), `flow_*` (12), `funnel_template_*` (4), the 3 section-override tools, docs-query (4) — and the `mac-128` slice (**95**) narrowed it further and broke doing so. **mac-128 is retired**; mcp-publish remains, unsliced.
 
 **Calling a carved-out tool gives you a useful error, not a bare 404** — mcp-publish returns a hint naming the kitchen-sink package for `form_*`. Treat that as configuration guidance to relay to the user, never as a platform bug.
 
@@ -198,7 +207,10 @@ The choreography path is the historical record — most one-shots were added in 
 
 ## Tool families — and which universe each reaches
 
-**`publish` = in mcp-publish (default). `sink` = kitchen sink only. `-mac128` = also dropped by the mac-128 slice.**
+**`publish` = in mcp-publish (default). `sink` = kitchen sink only.**
+
+> The `-mac128` markers below are HISTORY, kept so an old install is diagnosable: they name what the retired
+> slice dropped. On any current package nothing is dropped — see the retirement note above.
 
 Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.ts`.
 
@@ -213,8 +225,8 @@ Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.t
 | Press / Newsroom ⚠️ **sink** | `press.ts` | 27 | releases, contacts, boilerplates, kits, embargo |
 | Funnels (Flow graph) ⚠️ **sink** | `flows.ts` + `funnel_templates.ts` | 16 | multi-step journeys, splits, embeds, starters |
 | Docs query ⚠️ **sink** | `docs_query.ts` | 4 | `search_docs` / `semantic_search_docs` / `ask_docs` / `get_doc` |
-| Marketplace (browse + insert + agent_meta) ⚠️ **-mac128** | `marketplace.ts` | ~12 | Section inserts, bg-videos, agent-meta authoring. **The reuse path** — present by default, dropped by the mac-128 slice. |
-| Site templates ⚠️ **-mac128** (`apply` only) | `site_templates.ts` | 3 | Curated starter sites — `list` + `get` + `apply`. `content_apply_site_template` is dropped by the mac-128 slice. |
+| Marketplace (browse + insert + agent_meta) ⚠️ **was -mac128** | `marketplace.ts` | ~12 | Section inserts, bg-videos, agent-meta authoring. **The reuse path** — present by default; the retired slice dropped it, which is what made that slice unusable. |
+| Site templates ⚠️ **was -mac128** (`apply` only) | `site_templates.ts` | 3 | Curated starter sites — `list` + `get` + `apply`. The retired slice dropped `content_apply_site_template`. |
 | Directory (SEO category/listing) | `directory.ts` (299 LOC) | 10 | Programmatic SEO |
 | Duplicate (page/block/post/doc) | `duplicate.ts` (177 LOC) | 4 | Cheap deep-copies |
 | Component propagation | `component_propagation.ts` (210 LOC) | 2 | The two one-shots: `update_and_propagate`, `rollback` |
