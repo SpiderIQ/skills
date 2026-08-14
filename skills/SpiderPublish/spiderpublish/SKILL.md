@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.13.0"
+version: "0.14.0"
 category: content
 ---
 
@@ -85,9 +85,12 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
    `spideriq.json` or `$SPIDERIQ_WORKSPACE` names a DIFFERENT tenant than the
    one that will actually be used).
 
-   **If more than one workspace is authenticated, stop resolving implicitly and
-   pass `workspace: "cli_…"` on every call.** It is rung 1 and always wins. An
-   agency session working three clients should never rely on a binding file.
+   **If more than one workspace is authenticated, stop resolving implicitly.**
+   Best is one IDE workspace per client with `SPIDERIQ_WORKSPACE` pinned in its
+   config — then the question cannot be got wrong. Where that is not possible,
+   pass `workspace: "cli_…"` on every call (rung 1, always wins). **Agencies:
+   `references/multi-workspace-setup.md`** — it also carries the three host bugs
+   that make a correct multi-workspace config look broken.
 
    *(Driving this skill's own HTTP methods with a single `SPIDERIQ_PAT`? The
    token IS the tenant — one credential, no resolution, nothing to check.)*
@@ -192,12 +195,27 @@ behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 }
 ```
 
-> `"lazy": true` is an **Antigravity-specific** key, reported by Antigravity
-> sessions (2026-08-13) to avoid an IDE bug where natively-injected (eager)
-> tools throw `unknown tool` on call. We have not been able to reproduce or
-> disprove it — we cannot run that IDE. Other clients ignore the key, so it is
-> safe to leave in. If `tool_search` is listed but calling it says the tool is
-> unknown, that is the bug this key is for.
+> `"lazy": true` is an **Antigravity-specific** key — other clients ignore it,
+> so it is safe to carry, and harmless to omit outside that IDE. Lazily-loaded
+> servers are invoked through the IDE's injected `call_mcp_tool` rather than by
+> tool name.
+>
+> ⚠️ **Two different failures both say "unknown tool", and the fixes are
+> opposite.** Read the exact string:
+>
+> ```
+>   unknown tool <name>              431 tools blew the host's payload limit and
+>                                    the list was silently truncated
+>                                    ->  turn on FACADE MODE
+>
+>   unknown tool name: call_mcp_tool  a SIBLING server in the same .mcp.json
+>                                    crashed and took the loader down with it
+>                                    ->  fix or remove the sibling
+> ```
+>
+> Facade mode will not fix the second, and fixing a sibling will not fix the
+> first. Details + the other two host bugs:
+> `references/multi-workspace-setup.md`.
 
 > ⚠️ **Do NOT suggest "just switch to `@spideriq/mcp`" without facade mode.** Measured
 > 2026-08-12: the unfiltered 431-tool list makes Antigravity **silently abort the
@@ -246,6 +264,8 @@ The user names ONE noun. That noun tells you which reference AND which package:
 | **press, newsroom, media kit** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/press-newsroom.md` · `references/press-page-design.md` |
 | agent, chatbot, AI assistant | `agent_flow` in default+ | `references/agent-embed.md` |
 | domain, DNS, go live | any universe | `references/content.md` |
+| **workspace, client, agency, multi-tenant, "wrong site"** | config, not tools | `references/multi-workspace-setup.md` |
+| **`AMBIGUOUS_TENANT`, `unknown tool`, server won't boot** | config, not tools | `references/multi-workspace-setup.md` |
 
 ## Approach — SHOP FIRST, then author
 

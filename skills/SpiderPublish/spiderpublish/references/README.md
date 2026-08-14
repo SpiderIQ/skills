@@ -1,15 +1,21 @@
 # References — the SpiderPublish procedure + reference layer
 
 The router lives in [`../SKILL.md`](../SKILL.md); the API surface + intent envelope in
-`../client/schema.yaml`. These thirteen files are the **procedures** (nine domain files) and the
-**cross-cutting reference** (four docs every domain cites). Each fact has exactly one home — no
+`../client/schema.yaml`. These files are the **procedures** (the domain files) and the
+**cross-cutting reference** (the docs every domain cites). Each fact has exactly one home — no
 domain file re-explains deploy, the block schema, the booking model, or the tool surface.
 
-## The four cross-cutting reference docs (read once per session)
+> The tables below are the **curated entry points, not an inventory.** The directory holds 27
+> files; this line claimed "thirteen" long after that stopped being true (corrected 2026-08-14).
+> Design pages, per-noun guides and the legacy set are reached from the domain files that cite
+> them.
+
+## The five cross-cutting reference docs (read once per session)
 
 | File | Read when… |
 |---|---|
 | [`tool-surface.md`](tool-surface.md) | First call in any SpiderPublish session — which MCP configuration to use (facade mode: 9 listed / 431 reachable — and why the unfiltered 431-tool list makes some clients silently abort), the three discovery endpoints (`/content/help`, `/content/help/block-fields`, `/dashboard/idap/merge-tags`), CLI-vs-MCP-vs-HTTP, and the "prefer one-shot tools" rule. |
+| [`multi-workspace-setup.md`](multi-workspace-setup.md) | The brand owns MORE THAN ONE client (agency, reseller), or you hit `AMBIGUOUS_TENANT` — the 5-rung resolution order, one-workspace-per-client vs pass-`workspace`-every-call, the `spideriq.json` keys that are actually read (and the ones silently ignored), and the three HOST bugs that make a correct config look broken: the global/local name collision (`client is closing: EOF`), the sibling crash that disables every server in the file (`unknown tool name: call_mcp_tool` — NOT the same bug as a truncated tool list), and the concurrent-`npx` cache race (`ECOMPROMISED`). |
 | [`block-types.md`](block-types.md) | Before composing any non-component block — the 15 default block types + the exact `data.*` keys the default theme reads (wrong names render BLANK, not 422), the `css`-field-not-`<style>` Shadow-DOM rule, and the canonical 6 anti-patterns. |
 | [`deploy-protocol.md`](deploy-protocol.md) | Before any production mutation/deploy — the two-phase `?dry_run=true` → `?confirm_token=cft_…` gate (opt-in vs safe-default), the five-lock tenant defense, the `ConfirmTokenError` 403/409/410 map, and "verify the 200 with a visual check." |
 | [`booking-model.md`](booking-model.md) | Before any form/booking work — the `booking_flows` `kind` discriminator, the `flow` JSONB shape, cal.com as slot-resolver, calendar-OAuth-by-invite, the `/f/<id>` URL surface (never compose `/book/<id>` by hand — the W13 incident), the 25 field types, and the Rule 62 visual-check assertion. |
