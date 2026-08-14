@@ -1249,6 +1249,52 @@ methods:
       brand_id:        { type: integer, required: false, description: 'Recorded for admin surfaces. NOT the isolation key — that is always the tenant.' }
     response: { format: json }
 
+  # ── arming a sending identity ──────────────────────────────────
+  sendPromoteSource:
+    description: >
+      Promote a WARMING sending source to `active` — the one call that arms a
+      sending identity for real mail.
+
+      Until a source reaches `active` it is never claimed by the send loop, and
+      every broadcast queued against the pool refuses with `no_sources`. This
+      is the transition that ends that, and there is no other route to it.
+
+      Promotion also RE-STAMPS the ramp: `warmup_started_on` is set to today in
+      the source's own timezone, so a graduated source starts at day 1 of its
+      warm-up curve rather than resuming at whatever rate a months-old anchor
+      would imply. Read `effective_daily_cap` (what it may send TODAY, normally
+      8 on the default curve) and never `daily_cap` (the ceiling it reaches at
+      the END of the ramp).
+
+      A source that does not exist and a source owned by another tenant return
+      the SAME 404 — deliberately indistinguishable, so this route cannot be
+      used as an oracle for which mailbox ids exist in someone else's pool.
+    guidance:
+      use: "arm a warmed-up sending source so broadcasts can actually claim it"
+      next: "sendListSources to read the source's new state and its day-1 effective_daily_cap before you size any audience"
+      warn: >
+        NEVER retry a 409. `promoted: false` is an ANSWER, not a transport
+        error: the refusal codes `warmup_not_matured` and
+        `reputation_input_required` mean the ramp has not run long enough or the
+        source has no reputation samples yet, and calling again changes neither.
+        Report the `detail` sentence to the human and stop. The other refusals
+        are `source_not_found`, `source_not_warming`, `source_expired`,
+        `promote_returned_false` and `send_db_unconfigured`.
+
+        This tenant route CANNOT waive the reputation gate — the request model
+        does not carry the field at all. Waiving it is an operator act on a
+        separate admin route, by design: an agent proposes, a human approves.
+
+        Requires the `admin` role (a member-role PAT is refused) because this
+        arms an identity that sends real mail. `notified: false` alongside
+        `promoted: true` is NOT a failed promotion — the source is live and only
+        the announcement was lost.
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/sources/{mailbox_id}/promote
+    params:
+      mailbox_id: { type: integer, required: true, description: 'The warming source to arm. Must already have a capacity row in this tenant''s pool; a foreign or absent id returns 404 identically.' }
+    response: { format: json }
+
   # ── the pool and its reputation ────────────────────────────────
   sendListSources:
     description: >

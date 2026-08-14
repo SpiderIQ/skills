@@ -61,9 +61,30 @@ sendListSources
 ```
 
 Read three fields per source and stop: `state`, `effective_daily_cap`,
-`min_gap_seconds`. A `warming` source's real ceiling is the ramp value, **not**
-`daily_cap`. See `references/pool-and-reputation.md` for what each state means
-and which of them are un-claimable.
+`min_gap_seconds`. See `references/pool-and-reputation.md` for what each state
+means and which of them are un-claimable.
+
+### 3b. 🔴 ARM the source — the step whose absence looks like a broadcast bug
+
+**If every source reads `warming`, stop here.** `warming` is not claimable: the
+send loop only ever claims `state = 'active'`, so a perfectly-formed broadcast
+queued against a warming pool refuses with **422 `no_sources`** at step 6 —
+several steps away from the actual cause.
+
+```
+sendPromoteSource { mailbox_id: 42 }
+  → promoted: true, state: "active", effective_daily_cap: 8   ← day 1 of the ramp
+```
+
+Promotion **re-stamps the ramp to today**, so a freshly-armed source starts at
+day 1 (normally 8/day) whatever its history. Size step 5 against
+`effective_daily_cap`, never `daily_cap`.
+
+A **409** here is an answer, not an error to retry: `warmup_not_matured` and
+`reputation_input_required` mean the ramp or the reputation samples are not there
+yet, and calling again cannot change either. Report `detail` and stop. Needs the
+`admin` role, and this route cannot waive the reputation gate — that is an
+operator act on a different route, by design.
 
 ### 4. Compose
 
@@ -149,7 +170,7 @@ sendQueueBroadcast { broadcast_id: "…" }
 | Status | Code | Means |
 |---|---|---|
 | 422 | `no_audience` | the query resolved to zero deliverable recipients |
-| 422 | `no_sources` | no active sending source for this broadcast |
+| 422 | `no_sources` | no **active** sending source. Usually the pool is all `warming` — go back to step 3b and `sendPromoteSource`. Nothing is wrong with the broadcast. |
 | 503 | suppression unavailable | the suppression list could not be read — it **fails CLOSED** |
 
 ⚠️ **Do not retry the 503.** It means nobody checked the suppression list. A

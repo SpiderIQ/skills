@@ -3,13 +3,17 @@
 *Steps 3 and 7 of `references/run-a-broadcast.md`.* Read before promising a
 send rate, and before answering "is our sending healthy?".
 
-Four reads, no writes. This surface **reports**; it does not act.
+Four reads and **one write**. Everything here reports, except `sendPromoteSource`
+— which arms a sending identity for real mail.
 
 ```
   sendListSources                  pacing state + caps + identity, per source
   sendGetDeliverability            the funnel and its rates, for a window
   sendGetDeliverabilityTimeseries  the same rates, day by day
   sendListUndeliverable            the individual bounces/complaints/failures
+  ─────────────────────────────────────────────────────────────────────────────
+  sendPromoteSource         ⚡ WRITE — warming → active. The only way a source
+                              becomes claimable. Admin role; 409s are answers.
 ```
 
 ## The pool
@@ -31,8 +35,8 @@ empty pool — that is a correct, honest answer, not a failure.
 
 | `state` | Claimable | Means |
 |---|---|---|
-| `warming` | yes, at the ramp | new source ramping up. `effective_daily_cap` < `daily_cap`. |
-| `active` | yes | at full cap |
+| `warming` | **NO** | provisioned but not yet armed. See below — this is the one that surprises people. |
+| `active` | yes | the only claimable state. Ramped or at full cap. |
 | `paused` | no | reputation breaker fired |
 | `blocked` | no | stopped hard |
 | `auth_failed` | no | the provider rejected the credentials |
@@ -43,6 +47,51 @@ empty pool — that is a correct, honest answer, not a failure.
 reputation pause, clearing `auth_failed`, un-retiring — none of it is offerable
 from this surface. If a user asks you to un-pause a source, say it needs an
 operator; do not hunt for a method that would do it.
+
+### 🔴 `warming` is NOT claimable — and this is why a correct broadcast sends nothing
+
+The claim path filters `state = 'active'` and nothing else. Admitting `warming`
+to it was considered and **rejected** when the ramp was designed, so:
+
+```
+  enrol a domain  →  state = 'warming'  →  queue a broadcast  →  no_sources
+                                            (nothing is wrong with the broadcast)
+```
+
+`sendPromoteSource { mailbox_id }` is the only call that moves `warming → active`.
+Skipping it is the single most common reason a well-formed broadcast delivers zero
+messages, and the failure surfaces at queue time — far from its cause.
+
+**A warming source's `effective_daily_cap` is inert.** The ramp is computed for
+`warming` rows, but nothing ever claims them, so the number describes a send that
+cannot happen. Do not quote it as capacity until the source is `active`.
+
+**Promotion re-stamps the ramp.** `warmup_started_on` is reset to today in the
+source's own timezone — a graduated source starts at **day 1** of its curve
+(normally `effective_daily_cap: 8`), it does not resume where a months-old anchor
+would put it. Size the first day's audience against that 8, not against `daily_cap`.
+
+#### The refusals are answers. Never retry one.
+
+`promoted: false` comes back as **409**, which most clients throw. Branch on
+`refusal`, report `detail` to the human, and stop:
+
+| `refusal` | What it means | Retrying |
+|---|---|---|
+| `warmup_not_matured` | the ramp has not run long enough yet | changes nothing — it is a date |
+| `reputation_input_required` | no reputation samples exist for this source | changes nothing — needs real sends |
+| `source_not_warming` | already `active`, or in a non-promotable state | read `sendListSources` first |
+| `source_not_found` | absent **or owned by another tenant** — deliberately the same 404 | — |
+| `source_expired` | past its `retire_after` | — |
+| `promote_returned_false` · `send_db_unconfigured` | infrastructure | an operator's problem |
+
+**This route cannot waive the reputation precondition.** The tenant request model
+does not carry the field at all; waiving it is a separate operator-only route. An
+agent proposes, a human approves — do not look for a flag that opens the gate.
+
+Requires the **`admin`** role. A member-role PAT is refused, because this arms an
+identity that sends real mail. And `notified: false` next to `promoted: true` is
+not a failed promotion — the source is live, only the announcement was lost.
 
 ### Reading capacity honestly
 

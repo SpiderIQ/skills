@@ -46,8 +46,9 @@ underneath: the tenant's own sending pool, for one message to many.
    getThread  ─ whole conversation        ↳ returns a job_id (QUEUED)
    searchMail ─ FTS + filters             ↳ poll the job → delivered|failed
   ┌──── SEND TIER — the same mailboxes acting as a paced sending POOL ────────────────────┐
-  │  sendCheckDomain → sendEnrollDomain → sendListSources → sendCreateBroadcast (DRAFT)    │
-  │  → sendQueueBroadcast 🚨 the only call that sends → sendGetDeliverability              │
+  │  sendCheckDomain → sendEnrollDomain → sendPromoteSource ⚡arms it → sendListSources     │
+  │  → sendCreateBroadcast (DRAFT) → sendQueueBroadcast 🚨 the only call that sends        │
+  │  → sendGetDeliverability                                                              │
   └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,6 +138,8 @@ the recipient "looked right" from a search result. When developing or unsure, se
 | Send one message to a whole list | the flow below, start to finish | **`references/run-a-broadcast.md`** |
 | Use their own sending domain | `sendCheckDomain` → `sendEnrollDomain` | `references/byo-sending-domain.md` |
 | Know why a domain won't verify | `sendCheckDomain` → read each check's `expected` | `references/byo-sending-domain.md` |
+| **Arm a warmed source so broadcasts can use it** | `sendPromoteSource` ⚡ | `references/pool-and-reputation.md` |
+| Fix "my broadcast says `no_sources`" | `sendListSources` → any `warming`? → `sendPromoteSource` | `references/pool-and-reputation.md` |
 | See what they can send from, and how fast | `sendListSources` · `sendGetCapacity` | `references/pool-and-reputation.md` |
 | Size a list before composing | `sendPreviewAudience` | `references/run-a-broadcast.md` |
 | See the message as a recipient will | `sendPreviewBroadcast` | `references/run-a-broadcast.md` |
@@ -154,12 +157,18 @@ above are the layer under it — the tenant's **sending pool**, paced by a
 warm-up-aware engine, under a domain they own.
 
 ```
-  add domain ─→ verify ─→ joins pool ─→ compose ─→ PACED SEND ─→ watch reputation
-  sendCheckDomain  sendEnrollDomain   sendPreviewAudience  sendQueueBroadcast
-                   sendListSources    sendPreviewBroadcast     🚨 irreversible
-                   sendGetCapacity    sendCreateBroadcast  sendGetBroadcast
-                                        (a DRAFT)          sendGetDeliverability
+  add domain ─→ verify ─→ joins pool ─→ ARM IT ──→ compose ─→ PACED SEND ─→ watch reputation
+  sendCheckDomain  sendEnrollDomain   sendPromoteSource  sendPreviewAudience  sendQueueBroadcast
+                   sendListSources      ⚡ warming        sendPreviewBroadcast    🚨 irreversible
+                   sendGetCapacity        → active       sendCreateBroadcast  sendGetBroadcast
+                                                           (a DRAFT)          sendGetDeliverability
 ```
+
+⚠️ **A source joining the pool is not a source that can send.** Enrolment leaves
+it `warming`, and the send loop never claims a warming source — so a broadcast
+queued against a pool of them refuses with `no_sources`. `sendPromoteSource` is
+the only call that closes that gap, and skipping it is the most common reason a
+correctly-built broadcast sends nothing.
 
 <HARD-GATE name="confirm-before-queueing-a-broadcast">
 `sendQueueBroadcast` puts REAL MAIL on the wire to REAL PEOPLE, and rows already
