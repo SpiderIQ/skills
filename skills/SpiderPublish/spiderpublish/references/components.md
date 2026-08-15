@@ -32,6 +32,64 @@ Author a new library component — Tier 1 static, Tier 2 interactive (vanilla JS
 
 Pick the right Tier based on what the component does — see "The four tiers" below.
 
+### 🔴 HARD GATE — a global component may not carry a bare colour
+
+**Applies to every `is_global: true` component. The API returns 422, not a warning.**
+
+A marketplace component is installed by tenants who never saw its CSS. A colour it hardcodes
+is a colour `template_apply_theme` cannot change — and a page mixing two such components shows
+two palettes at once. So:
+
+> **Every colour resolves through a theme token: `var(--token, <the colour you had>)`.**
+
+```css
+/* ✅ */  color: var(--body-text, #0a0a0a);
+/* ✅ */  background: var(--primary, #eebf01);
+/* ✅ */  color: var(--primary-fg, #ffffff);   /* text on a --primary background */
+/* ✅ */  border: 1px solid currentColor;
+/* ✅ */  background: transparent;
+
+/* ❌ */  color: #ffffff;
+/* ❌ */  background: rgba(0,0,0,0.4);
+/* ❌ */  color: var(--brand-primary, #1a1a2e);   /* nothing emits --brand-primary */
+```
+
+**The third is the worst.** A bare colour looks wrong. A `var()` naming a token nothing emits
+looks *right*, passes review, and renders its fallback on every tenant forever.
+
+**The tokens — this list is complete. A name not on it is not emitted.**
+
+| Group | Tokens |
+|---|---|
+| Palette (per tenant) | `--primary` `--primary-fg` `--surface`\|`--bg` `--surface-elevated`\|`--bg-elevated` `--subtle`\|`--border-subtle` `--body-text`\|`--text` `--heading` |
+| Fixed (same everywhere, by design) | `--overlay` `--overlay-fg` `--success` `--warning` `--danger` (+ each `-fg`) |
+| Typography | `--font-body` `--font-heading` `--font-mono` |
+
+Three rules cover most mistakes:
+
+1. **Text on a `--primary` background uses `--primary-fg`.** Never `#fff`. The default primary
+   is `#eebf01` — bright yellow — so white-on-primary is unreadable, and it shipped that way in
+   24 components.
+2. **Text on a media scrim uses `--overlay-fg`.** That is the only sanctioned "always light".
+3. **A border that should follow its text is `currentColor`**, not a repeat of the text token.
+
+Retired names you may see in older components — the API rejects them:
+`--secondary`→`--surface-elevated` · `--accent`→`--primary` · `--muted`→`--subtle` ·
+`--text-muted`/`--fg-muted`→`--body-text` · `--border`/`--line`→`--border-subtle` ·
+`--gold`→`--primary` · `--warn`→`--warning` · `--error`→`--danger`
+
+Exempt: `box-shadow` / `text-shadow` / `filter` / `backdrop-filter` may carry a bare colour
+(depth, not palette). A layout constant is **not** exempt — write `1200px`, not
+`var(--container-max, 1200px)`; nothing emits that, so the variable only pretends to be
+configurable.
+
+**Per-tenant components (`is_global` absent/false) are NOT gated** — a client styling their own
+site may hardcode whatever they like.
+
+The 422 body lists every violation, the full allowed-token list, and the substitution to make.
+Fix from the error rather than guessing. Full reference:
+[`docs/services/catalog/COMPONENT-TOKEN-CONTRACT.md`](https://github.com/SpiderIQ/SpiderIQ/blob/master/docs/services/catalog/COMPONENT-TOKEN-CONTRACT.md).
+
 ### Prerequisites
 
 1. **Tenant scope verified.** Run `./scripts/verify-tenant-scope.sh` (exit 0 = safe).
