@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.14.0"
+version: "0.16.0"
 category: content
 ---
 
@@ -66,7 +66,7 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
 
 <HARD-GATE name="authoring-is-not-live--two-phase-on-prod">
 
-**Three rules that bite every agent new to SpiderPublish:**
+**Four rules that bite every agent new to SpiderPublish:**
 
 0. **YOU MAY NOT BE ON THE TENANT YOU THINK. CHECK BEFORE YOU WRITE.** A write
    that lands on the wrong brand's site returns **200 and looks identical to a
@@ -126,11 +126,37 @@ Add `?format=yaml` (or `md`) to any read — or set `SPIDERIQ_FORMAT=yaml` — f
    (`cft_…`)**; pass that token back to actually mutate. On a production tenant,
    ALWAYS preview first. (Envelopes: 410 expired · 409 consumed · 403 mismatch.)
 
+3. **A 200 IS NOT A PAGE. LOOK AT IT BEFORE YOU REPORT.** After any page build
+   — `publishPage`, `publishPost`, `applyPageTemplate`, `applySiteTemplate`,
+   `insertSection`, `deploySite` — call:
+
+   ```
+   content_visual_check({ url: "<the live URL>" })
+   ```
+
+   and **show the screenshot to the user**. A 200 means a row was written. It
+   does not mean the page renders, that the blocks bound to data, that the
+   theme applied, or that it looks like anything. Those failures are invisible
+   from the API response and obvious in one screenshot.
+
+   **Two ways this check lies, both of which produce a confident FALSE
+   NEGATIVE — worse than not checking:**
+
+   | Trap | What happens | Do instead |
+   |---|---|---|
+   | Asserting `expected_text` on content in **Shadow DOM or below the fold** | The check cannot see either. It reports "not found" for text that is on the page. | For an embedded form assert `dom.shadow_hosts.includes("spideriq-form")` — **never** `body_text_preview`; the iframe body is opaque to the parent page |
+   | Checking a tenant's **custom domain** | The host allowlist may refuse the URL | Check the platform URL, or expect a refusal that is about the allowlist and NOT about the page |
+
+   If the check refuses or cannot see the thing you asked about, say so — do
+   not silently downgrade to "published successfully".
+
 **Why a hard gate, not a footnote:** the publish-vs-deploy confusion and
-"delete looked safe" are the two highest-frequency SpiderPublish mistakes, and
-the wrong-tenant write is the one with no symptom at all. Before reporting
-anything, be sure **which tenant** you wrote to and **which pipeline** you
-touched — and verify by **fetching the live URL**, not by trusting a 200.
+"delete looked safe" are the two highest-frequency SpiderPublish mistakes, the
+wrong-tenant write is the one with no symptom at all, and "it returned 200" is
+how every one of them gets reported as a success. Before reporting anything, be
+sure **which tenant** you wrote to, **which pipeline** you touched, and **what
+the page actually looks like** — verify by fetching the live URL, not by
+trusting a status code.
 
 </HARD-GATE>
 
@@ -171,8 +197,28 @@ tool_help({ name: "<exact name>" })                → the full input schema
 tool_call({ name: "<exact name>", arguments: {…} }) → runs it, with every gate intact
 ```
 
-Three rules: **copy the name verbatim** from the result's `call` field (retyping or
-pluralising it is the top cause of a not-found); **a search returning nothing means
+> 🔴 **The mistake that makes the facade look broken.** A tool `tool_search`
+> returns is **NOT in your own tool list** — that is the entire design. Invoke
+> the bare name and your HOST answers **`Unknown tool`**, and it is very easy to
+> read that as *"the facade removed this capability"*. **It did not.** All 431
+> are reachable, and only through `tool_call`.
+>
+> ```
+>   ✗  content_create_post({ title: "…" })
+>          -> Unknown tool          (your host, refusing a name it never had)
+>
+>   ✓  tool_call({ name: "content_create_post", arguments: { title: "…" } })
+>          -> runs, with every gate intact
+> ```
+>
+> Every `tool_search` row hands you that second line ready-made in its `call`
+> field. **Use the whole string.** (A real retest, 2026-08-14, hit exactly this:
+> the agent used `tool_call` correctly for `form_create`, then invoked
+> `content_create_post` directly, got `Unknown tool`, and reported that blog
+> authoring had been stripped out. It had not.)
+
+Three rules: **paste the whole `call` string** from the result — don't extract
+the name and don't retype or pluralise it; **a search returning nothing means
 search again with different words**, not that the capability is missing (431 tools sit
 behind it); and pass `include_schemas: true` to skip the `tool_help` hop.
 

@@ -12,6 +12,7 @@ CLI vs MCP map, which MCP package to install, the 128-tool ceiling story, the th
 ## TL;DR
 
 - **Use facade mode.** `@spideriq/mcp` with `SPIDERIQ_MCP_MODE=facade` lists **9** tools and makes all **431** reachable through `tool_search` → `tool_help` → `tool_call`. It is the only configuration that puts the full surface in front of a size-limited client.
+- 🔴 **Facade mode hides nothing — but the 431 are reachable ONLY via `tool_call`.** A searched tool is not in your own tool list, so invoking its bare name gets `Unknown tool` **from your host**. That is a calling error, not a removed capability. `tool_call({ name: "content_create_post", arguments: {…} })` works; `content_create_post({…})` cannot and never could. A 2026-08-14 retest read the first as *"the facade stripped out blog authoring"* and pivoted away from the task — it hadn't.
 - **Everything else trades away capability.** See the picker below — and note that the unfiltered kitchen sink does not merely truncate, it makes some clients **silently abort the ingest**.
 - **Three discovery endpoints** for live capability scan. Call once per session, cache.
 - **Prefer one-shot tools** (`content_get_component_by_slug` over paginating `list_components`; `form_create_from_template({ auto_create: true })` over `form_create` + N×`form_add_field`) — saves tokens AND avoids partial-state bugs.
