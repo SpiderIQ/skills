@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.17.0"
+version: "0.18.0"
 category: content
 ---
 
@@ -313,28 +313,62 @@ The user names ONE noun. That noun tells you which reference AND which package:
 | **workspace, client, agency, multi-tenant, "wrong site"** | config, not tools | `references/multi-workspace-setup.md` |
 | **`AMBIGUOUS_TENANT`, `unknown tool`, server won't boot** | config, not tools | `references/multi-workspace-setup.md` |
 
-## Approach — SHOP FIRST, then author
+## Approach — TEMPLATE FIRST, then sections, then author
 
-**Reuse before generate is the default posture, not an option.** Authoring a
-component or page from scratch is the fallback for when the shelf has nothing —
-it is not the starting move. There are 363 marketplace components, 26 site
-templates and 8 page templates already built and tested.
+### 🔴 The ladder. Start at 1. Only descend when the rung above genuinely does not fit.
+
+```
+  1  a whole site, or a common page type   applySiteTemplate / applyPageTemplate
+     └ 0 design decisions ─────────────────────────────── works on ANY model
+
+  2  that template, one section replaced   + insertSection
+     └ 1 design decision
+
+  3  compose a page from N components      insertSection x N
+     └ N design decisions ─────────────── quality varies with the model
+
+  4  author HTML/blocks from scratch       createPage + hand-built blocks
+     └ unbounded ─────────────────── SAY SO OUT LOUD FIRST, AND WHY
+```
+
+**This is an ordering, not a menu.** Every rung down is another decision you have
+to get right, and a page is only as good as its worst one. A template is a whole
+page somebody already designed and tested; a component is one section that still
+needs five compatible siblings.
+
+**Rung 4 is an announced fallback, never a silent default.** Before authoring a
+page from scratch, tell the user you are doing it and name what you searched
+that came back empty. If you cannot name the search, you have not done it.
+
+### Which rung
+
+| the ask | rung | tools |
+|---|---|---|
+| "build me a site" | 1 | `listSiteTemplates` → `applySiteTemplate` |
+| "a landing / opt-in / thank-you / VSL / about / services / contact / pricing page" | 1 | `listPageTemplates` → `applyPageTemplate` |
+| "like that, but the pricing section should be a comparison table" | 2 | apply, then `insertSection` |
+| a page type no template covers | 3 | `listMarketplaceComponents({ category })` |
+| genuinely nothing on the shelf | 4 | announce it, then `createPage` |
 
 0. **CONFIRM THE TENANT** — `get_auth_status({ topic: "tenancy" })` once, before
    the first write. Everything below mutates a specific brand's live site and a
    wrong-tenant write returns 200. If `workspaces[]` holds more than one entry,
    pass `workspace: "cli_…"` explicitly from here on.
-1. **SHOP** — before writing any HTML or block JSON:
-   - a whole site, or a landing / opt-in / thank-you / VSL page →
-     `listSiteTemplates` / `listPageTemplates` → `applySiteTemplate` /
-     `applyPageTemplate`, then adapt the copy.
-   - one section (hero, pricing, FAQ, footer, testimonials, CTA) →
-     `listMarketplaceComponents({ category })` → `insertSection`.
-   - **Search WIDER than the noun.** Category counts are uneven — `header` holds
-     1 component and `faq` holds 1, but `trust-authority` (17), `social-proof`
-     (16), `conversion`, `cta` and `content` hold sections that also serve as
-     chrome or hero. A single-category search returning 1 result means *search
-     again*, not *the shelf is empty*.
+1. **SHOP the templates first** (rung 1–2) — `listPageTemplates` /
+   `listSiteTemplates` before writing any HTML or block JSON. Apply, then adapt
+   the copy. Adapting copy is cheap; composing a page is not.
+2. **Then sections** (rung 3) — `listMarketplaceComponents({ category })` →
+   `insertSection`. The eight page-composition categories — `header` `hero`
+   `features` `testimonials` `pricing` `faq` `cta` `footer` — are all stocked.
+   - **Do not trust a remembered count, including one from this file.** Call
+     `listMarketplaceComponents({ category })` and count what comes back. A
+     category that was thin last month may not be now, and a skill that states
+     inventory goes stale silently — this section previously said `header` held
+     1 component, which routed agents away from a category that holds 8.
+   - **If a category search genuinely returns little, search WIDER than the
+     noun** before concluding the shelf is empty: `trust-authority`,
+     `social-proof`, `conversion` and `content` hold sections that also serve as
+     chrome, hero or proof.
 2. **Orient** — `getHelp` if you don't know the site shape; `listPages` /
    `listPosts` / `listComponents` to see what already exists (including drafts).
 3. **Author** — only what shopping didn't cover. `createPage` / `createPost` /
@@ -372,7 +406,10 @@ is pending* invents a blocker. See the hard gate above.
 
 | The user wants to… | Method(s) | Read |
 |---|---|---|
-| Build/edit a page | `createPage` · `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
+| **Build a whole site** | `listSiteTemplates`→`applySiteTemplate`→adapt copy→`deploySite` — rung 1 | `references/templates-deploy.md` |
+| **Build a page** (landing · opt-in · thank-you · VSL · about · services · contact · pricing) | `listPageTemplates`→`applyPageTemplate`→adapt copy. **Not `createPage`** — see the ladder in *Approach* | `references/templates-deploy.md` |
+| Build a page no template covers | `listMarketplaceComponents`→`createPage`→`insertSection` ×N — rung 3, and say why rung 1 didn't fit | `references/content.md` |
+| Edit an existing page | `updatePage` · `insertSection` · `previewPage` | `references/content.md` |
 | Publish a blog post (author + tags + categories + cover) | `createAuthor`→`createCategory`→`createTag`→`createPost`→`publishPost` | `references/content.md` |
 | Add a docs page | `createDoc` · `publishDoc` · `getDocsTree` | `references/content.md` |
 | **Publish a changelog entry** (version-stamped release notes at `/changelog` + RSS/Atom) | `createChangelog`→`publishChangelog` (`updateChangelog` to correct one) | `references/changelog.md` |
@@ -436,6 +473,15 @@ report. See `learnings/2026-06-11-post-field-names-silently-dropped/`.
 
 ## Anti-patterns (always relevant)
 
+- **Building a page from scratch without checking the templates.** `createPage`
+  plus hand-built blocks is rung 4 of the ladder in *Approach* — the most
+  decisions and the worst average result. If you take it, say so and name the
+  search that came back empty. An unannounced rung 4 is the single biggest
+  cause of a page that technically works and looks wrong.
+- **Reporting a category as empty from one search.** Counts move — this file
+  itself once said `header` held 1 component when it holds 8. Call
+  `listMarketplaceComponents({ category })` rather than trusting a remembered
+  number, including one you read here.
 - **Claiming a content change needs a deploy.** Posts, pages, docs, press and
   changelog are live on publish (~60s edge cache). Inventing a deploy blocker is
   the more common error of the two.
