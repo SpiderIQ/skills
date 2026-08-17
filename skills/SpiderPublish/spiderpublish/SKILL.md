@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.18.0"
+version: "0.19.0"
 category: content
 ---
 
@@ -315,21 +315,41 @@ The user names ONE noun. That noun tells you which reference AND which package:
 
 ## Approach — TEMPLATE FIRST, then sections, then author
 
+### 🔴 Two surfaces, two sets of names — check which one you are on
+
+This skill is driven two ways, and **they use different tool names for the same
+capability**. Reading a name from the wrong column is the fastest way to conclude
+a capability is missing when it is not:
+
+| you are… | names look like | example |
+|---|---|---|
+| an **MCP** agent (Claude Code, Cursor, Antigravity) | `snake_case` | `content_list_page_templates` |
+| calling this skill's own HTTP methods | `camelCase` | `listPageTemplates` |
+
+**Both columns are given for every routing tool below.** If a name does not
+resolve, try the other column *before* reporting the tool as absent — this cost a
+retest session in Aug 2026, where an MCP agent read `listPageTemplates`, got
+nothing, and correctly reported it missing. The capability was there under
+`content_list_page_templates`.
+
 ### 🔴 The ladder. Start at 1. Only descend when the rung above genuinely does not fit.
 
 ```
-  1  a whole site, or a common page type   applySiteTemplate / applyPageTemplate
-     └ 0 design decisions ─────────────────────────────── works on ANY model
+  1  a whole site, or a common page type   content_apply_site_template
+     └ 0 design decisions ──── ANY model    content_apply_page_template
 
-  2  that template, one section replaced   + insertSection
+  2  that template, one section replaced   page_insert_section
      └ 1 design decision
 
-  3  compose a page from N components      insertSection x N
-     └ N design decisions ─────────────── quality varies with the model
+  3  compose a page from N components      page_insert_section x N
+     └ N design decisions ── varies by model
 
-  4  author HTML/blocks from scratch       createPage + hand-built blocks
-     └ unbounded ─────────────────── SAY SO OUT LOUD FIRST, AND WHY
+  4  author HTML/blocks from scratch       content_create_page + hand-built
+     └ unbounded ──── SAY SO OUT LOUD FIRST, AND WHY
 ```
+
+*(skill-method names for the same rungs: `applySiteTemplate` /
+`applyPageTemplate` · `insertSection` · `createPage`.)*
 
 **This is an ordering, not a menu.** Every rung down is another decision you have
 to get right, and a page is only as good as its worst one. A template is a whole
@@ -342,23 +362,24 @@ that came back empty. If you cannot name the search, you have not done it.
 
 ### Which rung
 
-| the ask | rung | tools |
-|---|---|---|
-| "build me a site" | 1 | `listSiteTemplates` → `applySiteTemplate` |
-| "a landing / opt-in / thank-you / VSL / about / services / contact / pricing page" | 1 | `listPageTemplates` → `applyPageTemplate` |
-| "like that, but the pricing section should be a comparison table" | 2 | apply, then `insertSection` |
-| a page type no template covers | 3 | `listMarketplaceComponents({ category })` |
-| genuinely nothing on the shelf | 4 | announce it, then `createPage` |
+| the ask | rung | MCP tool | skill method |
+|---|---|---|---|
+| "build me a site" | 1 | `content_list_site_templates` → `content_apply_site_template` | `listSiteTemplates` → `applySiteTemplate` |
+| "a landing / opt-in / thank-you / VSL / about / services / contact / pricing page" | 1 | `content_list_page_templates` → `content_apply_page_template` | `listPageTemplates` → `applyPageTemplate` |
+| "like that, but the pricing section should be a comparison table" | 2 | apply, then `page_insert_section` | `insertSection` |
+| a page type no template covers | 3 | `content_list_marketplace_components` | `listMarketplaceComponents` |
+| genuinely nothing on the shelf | 4 | announce it, then `content_create_page` | `createPage` |
 
 0. **CONFIRM THE TENANT** — `get_auth_status({ topic: "tenancy" })` once, before
    the first write. Everything below mutates a specific brand's live site and a
    wrong-tenant write returns 200. If `workspaces[]` holds more than one entry,
    pass `workspace: "cli_…"` explicitly from here on.
-1. **SHOP the templates first** (rung 1–2) — `listPageTemplates` /
-   `listSiteTemplates` before writing any HTML or block JSON. Apply, then adapt
+1. **SHOP the templates first** (rung 1–2) — `content_list_page_templates` /
+   `content_list_site_templates` (skill: `listPageTemplates` /
+   `listSiteTemplates`) before writing any HTML or block JSON. Apply, then adapt
    the copy. Adapting copy is cheap; composing a page is not.
-2. **Then sections** (rung 3) — `listMarketplaceComponents({ category })` →
-   `insertSection`. The eight page-composition categories — `header` `hero`
+2. **Then sections** (rung 3) — `content_list_marketplace_components({ category })`
+   → `page_insert_section` (skill: `listMarketplaceComponents` → `insertSection`). The eight page-composition categories — `header` `hero`
    `features` `testimonials` `pricing` `faq` `cta` `footer` — are all stocked.
    - **Do not trust a remembered count, including one from this file.** Call
      `listMarketplaceComponents({ category })` and count what comes back. A
