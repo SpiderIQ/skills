@@ -13,7 +13,7 @@ description: >
   five-lock tenant defense and the publish-vs-deploy split wrong. Per-tenant,
   PAT-scoped. NOT for sending email (use SpiderMail) or finding prospects (use
   spiderflows / lead-search).
-version: "0.19.0"
+version: "0.20.0"
 category: content
 ---
 
@@ -332,6 +332,22 @@ retest session in Aug 2026, where an MCP agent read `listPageTemplates`, got
 nothing, and correctly reported it missing. The capability was there under
 `content_list_page_templates`.
 
+### 🔴 BEFORE the ladder: does the page already exist?
+
+The ladder below is for a page that **does not exist yet**. Reaching for it when the
+page already exists sends you to list templates for a site the user is already
+running.
+
+```
+  user names an EXISTING page AND a section on it
+  ("the pricing section on my homepage", "swap the hero on /about")
+      -> you are NOT at rung 1. Go straight to page_insert_section.
+      -> do NOT list templates. do NOT create a page.
+
+  anything else (the page does not exist yet)
+      -> start at rung 1 below.
+```
+
 ### 🔴 The ladder. Start at 1. Only descend when the rung above genuinely does not fit.
 
 ```
@@ -360,13 +376,29 @@ needs five compatible siblings.
 page from scratch, tell the user you are doing it and name what you searched
 that came back empty. If you cannot name the search, you have not done it.
 
+🔴 **If the user says nothing you have will fit — list the templates anyway.**
+
+```
+  user says "it's very specific" / "I doubt anything will fit"
+  / "nothing standard" / "custom"
+      -> STILL call content_list_page_templates FIRST.
+      -> the user has not seen the list. Neither have you.
+      -> only after looking may you say nothing fits.
+```
+
+Customers describe every page as unique; most are a landing, opt-in, pricing,
+about, services, contact, thank-you or VSL page wearing different words. Treating
+"it's specific" as permission to hand-author is the single most common way a page
+ends up worse than the template it skipped.
+
 ### Which rung
 
 | the ask | rung | MCP tool | skill method |
 |---|---|---|---|
 | "build me a site" | 1 | `content_list_site_templates` → `content_apply_site_template` | `listSiteTemplates` → `applySiteTemplate` |
 | "a landing / opt-in / thank-you / VSL / about / services / contact / pricing page" | 1 | `content_list_page_templates` → `content_apply_page_template` | `listPageTemplates` → `applyPageTemplate` |
-| "like that, but the pricing section should be a comparison table" | 2 | apply, then `page_insert_section` | `insertSection` |
+| "like that, but the pricing section should be a comparison table" (page you just applied) | 2 | apply, then `page_insert_section` | `insertSection` |
+| "the pricing section on my homepage should be a comparison table" (page ALREADY exists) | 2 | `page_insert_section` **directly** — do NOT list templates first | `insertSection` |
 | a page type no template covers | 3 | `content_list_marketplace_components` | `listMarketplaceComponents` |
 | genuinely nothing on the shelf | 4 | announce it, then `content_create_page` | `createPage` |
 
