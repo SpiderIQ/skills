@@ -1,0 +1,13 @@
+{
+  "title": "A Sortlist slug outside the catalogue is accepted at submit, then kills the run in the worker",
+  "summary": "Sortlist has no free-text search: every `queries` entry and every `geo[].label` must be a slug from its published catalogue. The submit endpoint does NOT validate membership — an off-catalogue slug returns an ordinary 202 with a bulk_job_id and a job_id, and the run fails ~5 seconds later inside the worker with a SortlistSelect ValidationError. Nothing is contacted and nothing is spent, so the cost of the mistake is zero dollars and one dead run — but the 202 gives no warning at all, and an agent that treats 202 as 'the request was well-formed' will report a submitted run to the user that is already doomed. Measured live 2026-08-19, not inferred: job 78cfd334 was accepted and failed on 'service is not in Sortlist's catalogue'.",
+  "created_at": "2026-08-19",
+  "updated_at": "2026-08-19",
+  "tags": ["bulk", "sortlist", "validation", "false-green", "202-is-not-success"],
+  "references": [
+    "app/services/lead_sourcing/sortlist_adapter.py — SortlistSelect.from_spec validates membership; it runs in the WORKER, not in prepare_submission",
+    "app/services/bulk_lead_sourcing_service.py:198-420 — prepare_submission validates provider, source_kind and stage eligibility; catalogue membership is not among them",
+    "app/services/lead_sourcing/sortlist_catalog.py — KNOWN_SERVICES (109) / KNOWN_INDUSTRIES (26) / KNOWN_COUNTRIES (21)",
+    "recipes/sortlist-agencies.md"
+  ]
+}

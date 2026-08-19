@@ -35,7 +35,12 @@ description: >
   "leads across many cities at once", "one big scrape instead of a campaign",
   "outscraper", "apify", "bulk import leads", "a few thousand leads in <region>". Use it instead of
   a campaign when the user wants breadth in a SINGLE purchase; it dedups across the whole
-  result set but has NO per-location retry. More flows are added here as recipes.
+  result set but has NO per-location retry.
+  Bulk is also the ONLY way to source marketing/design/dev AGENCIES rather than local
+  businesses — source "sortlist" reads a public B2B directory by service x country, free
+  at the source. Trigger it on: "find SEO agencies", "marketing agencies in <country>",
+  "branding studios", "list of design agencies", "agencies by service", "sortlist".
+  More flows are added here as recipes.
 ---
 
 # SpiderFlows
@@ -117,8 +122,11 @@ downstream stages, different way of getting breadth.
 
 ```
 flow:bulkLeadSourcing   (one PURCHASE, not one search per location)
-provider job  →  one flat result set  →  exact-key dedup  →  fan out PER LEAD
-(queries x geo)   (bought once)          (place_id)          Site → Verify → VayaPin
+source job    →  one flat result set  →  exact-key dedup  →  fan out PER LEAD
+(queries x geo)   (fetched once)         (place_id)          Site → Verify → VayaPin
+
+sources:  outscraper · apify     PAID    search terms x places   → local businesses
+          sortlist               FREE    service   x country     → agencies
 ```
 
 A **campaign** runs one Maps search per location and can be stopped, inspected
@@ -152,10 +160,14 @@ only. ([flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-ve
 </HARD-GATE>
 
 <HARD-GATE name="bulk-is-one-irreversible-purchase">
-A **bulk** run (`sourceLeadsBulk`) buys records from a third-party provider in
-**one call that cannot be stopped halfway or unbought** — unlike a campaign,
-which spends incrementally and can be stopped mid-flight. Two things routinely
-go wrong, both silently:
+A **bulk** run (`sourceLeadsBulk`) sources records in **one call that cannot be
+stopped halfway** — unlike a campaign, which spends incrementally and can be
+stopped mid-flight. On a **paid** source (`outscraper`, `apify`) the records are
+bought and cannot be unbought. On a **free** source (`sortlist`) nothing is
+purchased to start, but the run still commits you to the downstream spend of
+`N records x every stage you enabled` — so this gate applies to both, and
+`estimated_cost_usd: null` never means "free" (an unpriced *paid* provider
+returns it too). Two things routinely go wrong, both silently:
 (1) **Omitting `limits.max_records_per_query` buys 500 records per search.** Two
 queries x three cities reads as "6 searches" and is a **3,000-record** purchase.
 Quote the user **records**, never searches.
@@ -218,6 +230,7 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 | run a US campaign deep by ZIP code (one state at a time — "state = country") | [flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md](flows/maps-site-verify-vayapin/recipes/state-zip-campaign.md) |
 | decide between a CAMPAIGN and a BULK purchase (read before either, if unsure) | [flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md) |
 | buy a large lead set across many terms x many places in ONE purchase | [flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md) |
+| source marketing / design / dev AGENCIES by service x country (Sortlist, free at the source) | [flows/bulkLeadSourcing/recipes/sortlist-agencies.md](flows/bulkLeadSourcing/recipes/sortlist-agencies.md) |
 | know what a bulk run will cost and what refuses it, BEFORE submitting | [flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md) |
 | read a bulk run's leads (same envelope as a campaign) | [flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
@@ -302,6 +315,7 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md)** — which of the two to use, and the three differences that bite. **Read first.**
 - **[flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md)** — submit; every field, and why `country_code` does not place a search.
 - **[flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md)** — the estimate arithmetic, the two refusal arms, the 1,000-query expansion ceiling. **Read before composing any bulk body.**
+- **[flows/bulkLeadSourcing/recipes/sortlist-agencies.md](flows/bulkLeadSourcing/recipes/sortlist-agencies.md)** — the Sortlist source: agencies by service x country, the catalogue slugs (an off-catalogue one is accepted then kills the run), free-at-the-source vs the downstream spend, and why VayaPin is refused.
 - **[flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md)** — reading results (identical envelope to a campaign; `metadata` differs by design).
 
 **flow:perplexity-site-companydata-people (Company Intel):**

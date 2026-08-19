@@ -194,10 +194,10 @@ methods:
       downstream job per lead. Returns bulk_job_id + job_id immediately (202);
       the provider is NOT called during the request.
     guidance:
-      use: "breadth in a single purchase — many queries x many locations at once, where createCampaign would run one Maps search per location"
+      use: "breadth in a single purchase — many queries x many locations at once, where createCampaign would run one Maps search per location. Also the only way to source AGENCIES rather than local businesses: provider 'sortlist' reads a public B2B directory by service x country."
       next: "getJobStatus on the returned job_id (there is NO bulk-specific status route), then getJobResults / readResources once the fan-out completes."
-      warn: "this SPENDS provider credits. The 202 carries estimated_records + estimated_cost_usd — that is what the budget guard was evaluated against, not a quote you can renegotiate. queries x geo labels multiply: 5 queries x 20 labels = 100 searches in one purchase. country_code/region are LOCALE hints and never place a search — only geo.label or an explicit lat/lng does. vayapin publishes PERMANENT public profiles; set workflow.vayapin.enabled explicitly."
-      scope: "source_kind BOUNDS which stages are eligible: google_maps feeds every stage; linkedin_company can never feed vayapin (no address / no place_id) and enabling it is a 422, never a silent skip."
+      warn: "a PAID source (outscraper/apify) SPENDS provider credits on submit and cannot be unbought; a FREE source (sortlist) buys nothing to start but still spends downstream as N records x enabled stages — quote the user the enrichment figure either way, and never read a null estimated_cost_usd as free. The 202 carries estimated_records + estimated_cost_usd — that is what the budget guard was evaluated against, not a quote you can renegotiate. queries x geo labels multiply: 5 queries x 20 labels = 100 searches in one purchase. country_code/region are LOCALE hints and never place a search — only geo.label or an explicit lat/lng does. vayapin publishes PERMANENT public profiles; set workflow.vayapin.enabled explicitly."
+      scope: "source_kind BOUNDS which stages are eligible: google_maps feeds every stage; linkedin_company can never feed vayapin (no address / no place_id) and sortlist_agency can never feed vayapin (republication — the agencies DO have addresses). Enabling an ineligible stage is a 422, never a silent skip."
       telemetry_signal_default: "cold"
     http: POST /bulk-lead-sourcing/submit
     params:
@@ -206,19 +206,19 @@ methods:
         required: true
         description: 'The provider-neutral buy order: { provider, source_kind, queries[], geo[], limits{}, filters{}, language }.'
         properties:
-          provider: { type: string, description: "Registered lead-source adapter. Provider jobs that BUY records: 'outscraper' (no unit price configured, so estimated_cost_usd comes back null — that is NOT free, the record ceiling is then the only guard) and 'apify' (priced per record, returns a real estimated_cost_usd). Upload sources 'csv' and 'json' exist but are NOT reachable from this surface: they need a multipart file upload first, which is dashboard-only today." }
-          source_kind: { type: string, values: [google_maps, linkedin_company], description: 'Shape of source to buy. Bounds downstream stage eligibility.' }
+          provider: { type: string, description: "Registered lead-source adapter. PAID provider jobs that BUY records: 'outscraper' (no unit price configured, so estimated_cost_usd comes back null — that is NOT free, the record ceiling is then the only guard) and 'apify' (priced per record, returns a real estimated_cost_usd). FREE at the source: 'sortlist' — a public B2B directory of marketing/design/dev agencies, selected from ITS catalogue rather than searched (see the sortlist_agency notes on source_kind and queries). Also registered but not covered here: 'internal' (re-enrich leads the tenant already owns). Upload sources 'csv' and 'json' exist but are NOT reachable from this surface: they need a multipart file upload first, which is dashboard-only today. FREE AT THE SOURCE IS NOT A FREE RUN — the spend is downstream (N records x enabled stages); branch on the source being free, never on estimated_cost_usd being null, which an unpriced PAID provider also returns." }
+          source_kind: { type: string, values: [google_maps, linkedin_company, sortlist_agency], description: "Shape of source to buy. Bounds downstream stage eligibility. 'sortlist_agency' (provider 'sortlist') feeds spidersite / spiderverify / social_media_enrichment / smartlead — enabling vayapin on it is a 422, because VayaPin mints permanent public profile pages and that would republish a third party's directory (NOT because agencies lack an address — they have one)." }
           queries:
             type: array
             items: { type: string }
-            description: 'BARE search terms (e.g. ["restaurants","cafes"]), 1-1000 entries. The effective search list is queries x geo labels.'
+            description: 'BARE search terms (e.g. ["restaurants","cafes"]), 1-1000 entries. The effective search list is queries x geo labels. EXCEPTION — provider "sortlist" has NO free-text search: each entry must be a slug from its catalogue (109 services as bare slugs, 26 industries with an "i/" prefix, 135 options in this one array; several slugs such as branding/content-marketing/design exist on BOTH axes, so the prefix is what disambiguates). An off-catalogue slug is NOT refused here — it returns a normal 202 and the run fails seconds later in the worker, so poll the job status once before reporting a Sortlist run as started.'
           geo:
             type: array
             description: 'Geographic targets, 0-1000 entries. A LABELLED entry multiplies the query list; a coordinate-only entry steers the search centre.'
             items:
               type: object
               properties:
-                label: { type: string, description: "Place appended to each query, e.g. 'Atlanta, Georgia, USA'. THIS is what places the search." }
+                label: { type: string, description: "Place appended to each query, e.g. 'Atlanta, Georgia, USA'. THIS is what places the search. For provider 'sortlist' it is instead one of 21 country slugs carrying its own ISO code ('united-states-us', 'germany-de') — country is the smallest unit, there is no city or radius targeting." }
                 latitude: { type: number, description: 'Search-centre latitude, -90..90.' }
                 longitude: { type: number, description: 'Search-centre longitude, -180..180.' }
                 country_code: { type: string, description: 'ISO-2. LOCALE hint only — does NOT steer the search centre.' }
