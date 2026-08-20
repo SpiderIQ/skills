@@ -10,6 +10,8 @@ description: >
   multi-page crawling with configurable depth.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -34,13 +36,8 @@ methods:
       Submit a website scraping job. Crawls the target URL and
       linked pages up to max_pages, extracting emails, phone
       numbers, and social media links from each page.
-    http: POST /jobs
+    http: POST /jobs/spiderSite/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderSites
-        description: Job type — must be "spiderSites"
       payload:
         type: object
         required: true

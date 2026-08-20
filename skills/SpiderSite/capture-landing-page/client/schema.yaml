@@ -9,6 +9,8 @@ description: >
   content for analysis, archival, or design reference.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -30,13 +32,8 @@ methods:
     description: >
       Submit a landing page capture job. Captures a screenshot
       and extracts page content from the given URL.
-    http: POST /jobs
+    http: POST /jobs/spiderLanding/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderLanding
-        description: Job type — must be "spiderLanding"
       payload:
         type: object
         required: true

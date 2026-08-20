@@ -37,17 +37,32 @@ Use **find-people-extract-linkedin-profile** when the user wants to research a s
 
 | Type | What It Does |
 |------|--------------|
-| `spiderPeople` | Searches for people by name, role, company, or freeform query. Returns matching profiles with name, title, company, location, and LinkedIn URL |
+| `spiderPeople` | One endpoint, three modes chosen by the required `mode` field. `profile` fetches one LinkedIn profile by URL; `search` finds people from a natural-language query; `company` extracts a company's employees |
 | `spiderPublicLinkedin` | Extracts structured data from a specific public LinkedIn profile URL: full name, headline, work experience history, education, skills, connections count, and location |
+
+### `mode` is required — pick it before you submit
+
+| mode | Required field | Returns | Cost |
+|------|----------------|---------|------|
+| `profile` | `linkedin_url` | one full profile (name, city, education, current company) | ~$0.003 |
+| `search` | `search_query` | a list of matching profiles (name + headline + URL) | ~$0.01 |
+| `company` | `company_url` | that company's employees with titles + locations | $4-12 per 1,000, set by `profile_mode` |
+
+Omitting `mode` is a **422**, not a default. Sending the wrong mode's field is also a 422 —
+`search_query` with `mode=profile` fails with `'linkedin_url' is required for profile mode`.
 
 ## Expected Processing Times
 
-- **spiderPeople (search):** 10-30 seconds
+- **spiderPeople (search / profile):** 10-30 seconds
+- **spiderPeople (company):** 20-60 seconds, longer as `max_employees` rises
 - **spiderPublicLinkedin (profile extraction):** 10-20 seconds
 
 ## What Results Contain
 
-**spiderPeople** returns a list of matching profiles, each with: full name, professional headline, current job title, current company, geographic location, and LinkedIn profile URL.
+**spiderPeople** returns a shape that depends on `mode`:
+- `search` -> `profiles[]`, each with name, headline, and LinkedIn URL.
+- `profile` -> one profile object: `full_name`, `city`, `about`, `current_company`, `education[]`, `experience[]`. Sparse fields are normal — Bright Data returns `headline: null` and `experience: []` for some public profiles, and that is the source data, not a failure.
+- `company` -> `employees[]`, each with `full_name`, `title`, `location`, `linkedin_url`.
 
 **spiderPublicLinkedin** returns detailed profile data: full name, headline, current and past work experience with dates, education history, connection count, location, and profile URL.
 
@@ -56,6 +71,8 @@ Use **find-people-extract-linkedin-profile** when the user wants to research a s
 - Do NOT use vague search queries like just a first name -- always include company, role, or location for better results
 - Do NOT submit LinkedIn extraction jobs for private profiles -- only public profiles can be scraped
 - Do NOT run more than 5 people search jobs in rapid succession -- space them out to avoid rate limiting
+- Do NOT submit `company` mode without `max_employees` -- it defaults to 100 and every employee is billed
+- Do NOT read a job still at `status: queued` as "still working" indefinitely. A SpiderPeople job whose worker failed does NOT surface the error on the job row; it stays `queued` until a 24h watchdog cancels it. If a job sits `queued` for more than a few minutes, treat it as failed and resubmit rather than polling on.
 - Do NOT assume the first search result is the correct person -- present multiple matches and let the user confirm
 
 ## Response Guidelines
@@ -68,8 +85,8 @@ Use **find-people-extract-linkedin-profile** when the user wants to research a s
 
 ## Available Methods
 
-- `submitSearchJob` -- Submit a people search job by name/role/company
-- `submitLinkedinJob` -- Submit a LinkedIn profile extraction job by URL
+- `submitPeopleJob` -- Submit a SpiderPeople job in `profile`, `search`, or `company` mode
+- `submitLinkedinJob` -- Submit a public-LinkedIn extraction job by URL
 - `getJobStatus` -- Check the current status of a submitted job
 - `getJobResults` -- Retrieve the results of a completed job
 - `cancelJob` -- Cancel a running or queued job

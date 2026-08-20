@@ -10,6 +10,8 @@ description: >
   Supports batch verification of multiple emails.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -33,13 +35,8 @@ methods:
       Submit an email verification job. Validates one or more
       email addresses for deliverability by checking DNS MX
       records, SMTP mailbox existence, and catch-all status.
-    http: POST /jobs
+    http: POST /jobs/spiderVerify/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderVerify
-        description: Job type — must be "spiderVerify"
       payload:
         type: object
         required: true

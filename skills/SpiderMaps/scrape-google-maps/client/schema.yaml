@@ -10,6 +10,8 @@ description: >
   Supports single searches and place enrichment.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -33,13 +35,8 @@ methods:
       Submit a Google Maps search job. Searches for businesses
       matching the query and returns up to max_results entries
       with name, address, phone, website, ratings, and more.
-    http: POST /jobs
+    http: POST /jobs/spiderMaps/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderMaps
-        description: Job type — must be "spiderMaps"
       payload:
         type: object
         required: true
@@ -62,13 +59,8 @@ methods:
       Submit a Maps enrichment job for a specific place. Takes a
       Google Maps place_id and returns full business details
       including hours, reviews, photos, and owner responses.
-    http: POST /jobs
+    http: POST /jobs/spiderMapsEnrich/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderMapsEnrich
-        description: Job type — must be "spiderMapsEnrich"
       payload:
         type: object
         required: true

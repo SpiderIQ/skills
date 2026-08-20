@@ -10,6 +10,8 @@ description: >
   and deduplicate records.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -162,7 +164,7 @@ methods:
     guidance:
       next: "getCampaignStatus (poll every 10s). SMARTLEAD EXPORT: to auto-send the campaign's verified leads to a SmartLead outreach campaign at completion, set workflow.smartlead={enabled:true,connection_id,remote_campaign_id,only_with_vayapin_seo?} — discover the ids via the SpiderMail skill (listOutreachConnections → listOutreachCampaigns) FIRST; recipe in the @spideriq/spiderflows skill (smartlead-export)."
       warn: "start with max_results 50-100 for first run. At the plan's concurrent-campaign cap this returns 429 MAX_CAMPAIGNS_PER_CLIENT with an envelope CTA (suggested_url=/dashboard/plans) — finish/stop a running campaign or upgrade; no queue, no Retry-After. workflow.smartlead SENDS real email — only enable once the user confirms the target campaign."
-    http: POST /campaigns
+    http: POST /jobs/spiderMaps/campaigns/submit
     params:
       search_query:
         type: string
@@ -269,7 +271,7 @@ methods:
     description: >
       List all enrichment campaigns, optionally filtered by
       status with pagination.
-    http: GET /campaigns
+    http: GET /jobs/spiderMaps/campaigns
     params:
       status:
         type: string
@@ -291,7 +293,7 @@ methods:
     description: >
       Get the current status and progress of a specific
       enrichment campaign.
-    http: GET /campaigns/{campaign_id}
+    http: GET /jobs/spiderMaps/campaigns/{campaign_id}/status
     params:
       campaign_id:
         type: string
@@ -305,7 +307,7 @@ methods:
     description: >
       Retrieve the enriched results from a completed or
       running campaign.
-    http: GET /campaigns/{campaign_id}/results
+    http: GET /jobs/spiderMaps/campaigns/{campaign_id}/workflow-results
     params:
       campaign_id:
         type: string
@@ -321,7 +323,7 @@ methods:
       results are preserved.
     guidance:
       warn: "stopped campaigns can be resumed with continueCampaign"
-    http: POST /campaigns/{campaign_id}/stop
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/stop
     params:
       campaign_id:
         type: string
@@ -338,7 +340,7 @@ methods:
     guidance:
       use: "resume a stopped/paused campaign"
       next: "getCampaignStatus (poll every 10s)"
-    http: POST /campaigns/{campaign_id}/continue
+    http: POST /jobs/spiderMaps/campaigns/{campaign_id}/continue
     params:
       campaign_id:
         type: string
@@ -350,22 +352,46 @@ methods:
   # ── Deduplicate ───────────────────────────────────────────
   deduplicate:
     description: >
-      Fuzzy-match deduplicate a set of records based on
-      specified fields. Returns unique records with
-      similarity scores.
+      Check a batch of records for duplicates against the tenant's canonical
+      set (fuzzy + ML matching) and, by default, add the unique ones to it.
+      Use to strip duplicate leads out of campaign results before importing
+      them to a board.
     guidance:
       use: "remove duplicate leads from campaign results before board import"
-    http: POST /fuzziq/deduplicate
+      warn: >
+        There is no `match_fields` argument — matching is driven by
+        `record_type` plus the typed record fields, tuned with `threshold`.
+        `add_to_canonical` defaults to TRUE, so a plain call MUTATES the
+        canonical set; send false for a read-only check. Max 100 records per
+        call. Pass `idempotency_key` on any retry.
+      telemetry_signal_default: "cold"
+    http: POST /fuzziq/check-batch
     params:
       records:
         type: array
         items: object
         required: true
-        description: Array of record objects to deduplicate
-      match_fields:
-        type: array
-        items: string
+        description: >
+          Records to check (1-100). Each may carry email, full_name,
+          first_name, last_name, linkedin_url, position, company_name,
+          company_domain, google_place_id, website, phone, city, country,
+          extra_fields.
+      record_type:
+        type: string
         required: true
-        description: Field names to use for fuzzy matching
+        enum: [business, contact, email, profile]
+        description: Which record type is being checked.
+      add_to_canonical:
+        type: boolean
+        description: Add the unique records to the canonical set. Default TRUE.
+      campaign_id:
+        type: string
+        description: Scope the dedup to one campaign.
+      threshold:
+        type: number
+        description: Confidence threshold for ML matching (0.0-1.0, default 0.5).
+      idempotency_key:
+        type: string
+        description: Retry-safety key (max 100 chars).
     response:
       format: json

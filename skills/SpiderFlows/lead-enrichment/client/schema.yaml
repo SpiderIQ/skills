@@ -10,6 +10,8 @@ description: >
   and export enriched data.
 category: board
 base_url: /api/v1/board
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization

@@ -10,6 +10,8 @@ description: >
   into a structured VayaPin business card.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -38,13 +40,8 @@ methods:
       Create a VayaPin business profile from enriched data.
       Requires business name, country code, and coordinates.
       Optionally include crawled markdown, contact info, and social links.
-    http: POST /vayapin/submit
+    http: POST /jobs/spiderVayapin/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderVayapin
-        description: Job type — must be "spiderVayapin"
       payload:
         type: object
         required: true

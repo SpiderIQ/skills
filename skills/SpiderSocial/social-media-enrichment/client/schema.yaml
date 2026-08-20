@@ -17,6 +17,8 @@ description: >
   capability.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -67,7 +69,7 @@ methods:
       next: "getJobStatus, then getJobResults for the recovered fields (or the typed skip reason)"
       warn: "returns job_id + status:queued, NOT the recovered contact — the recovery runs in a worker; poll getJobResults. Pass place_id (no idempotency key → a re-submit is charged again)."
       telemetry_signal_default: "cold"
-    http: POST /spiderSocial/submit
+    http: POST /jobs/spiderSocial/submit
     params:
       payload:
         type: object

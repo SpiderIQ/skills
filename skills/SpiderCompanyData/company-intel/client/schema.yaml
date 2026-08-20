@@ -10,6 +10,8 @@ description: >
   people/LinkedIn extraction. Single or batch (up to 50).
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization

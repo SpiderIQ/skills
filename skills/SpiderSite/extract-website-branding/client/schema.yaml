@@ -10,6 +10,8 @@ description: >
   patterns using Firecrawl.
 category: design
 base_url: https://api.firecrawl.dev/v2
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: bearer
   header: Authorization

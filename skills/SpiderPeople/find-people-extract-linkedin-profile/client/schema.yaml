@@ -10,6 +10,8 @@ description: >
   LinkedIn URL extraction.
 category: data-collection
 base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # Option C direct (cut-over)
 auth:
   type: pat
   header: Authorization
@@ -28,42 +30,83 @@ triggers:
 
 methods:
   # -- Submit Jobs -----------------------------------------------
-  submitSearchJob:
+  submitPeopleJob:
     description: >
-      Submit a people search job. Finds people matching the
-      query by name, role, company, or combination. Returns
-      names, titles, companies, and LinkedIn profile URLs.
-    http: POST /jobs
+      Submit a SpiderPeople LinkedIn job. ONE endpoint, three modes,
+      selected by the required payload field `mode`:
+        profile  — fetch one LinkedIn profile by URL   (requires linkedin_url)
+        search   — natural-language profile search     (requires search_query)
+        company  — extract employees from a company    (requires company_url)
+      Returns a job_id; poll getJobStatus then getJobResults.
+    guidance:
+      use: "find people on LinkedIn — one profile, a search, or a company's employees"
+      next: "getJobStatus, then getJobResults once status=completed"
+      warn: >
+        `mode` is REQUIRED and has no server-side default you can rely on —
+        omitting it is a 422. Each mode requires its own field; sending
+        search_query with mode=profile fails validation. `company` mode spends
+        Apify credit per employee (short $4/1k, full $8/1k, full_email $12/1k) —
+        always set max_employees.
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderPeople/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderPeople
-        description: Job type — must be "spiderPeople"
       payload:
         type: object
         required: true
-        description: Job payload
+        description: Job payload — `mode` selects which other fields apply.
         properties:
-          search_query:
+          mode:
             type: string
             required: true
-            description: People search query (e.g. "CTO at fintech startups in London")
+            enum: [profile, search, company]
+            description: Which SpiderPeople mode to run. REQUIRED.
+          linkedin_url:
+            type: string
+            description: Public LinkedIn profile URL. REQUIRED when mode=profile.
+          search_query:
+            type: string
+            description: >
+              Natural-language people query, e.g. "CTO fintech Denmark".
+              REQUIRED when mode=search.
+          search_limit:
+            type: integer
+            description: Max profiles to return in search mode (1-50, default 10).
+          country_code:
+            type: string
+            description: ISO 3166-1 alpha-2 locale hint for search mode.
+          company_url:
+            type: string
+            description: >
+              LinkedIn company URL or slug. REQUIRED when mode=company.
+          max_employees:
+            type: integer
+            description: >
+              Max employees to extract in company mode (1-2000, default 100).
+              Each employee is billed — always set this.
+          profile_mode:
+            type: string
+            enum: [short, full, full_email]
+            description: >
+              Employee detail level for company mode. short $4/1k,
+              full $8/1k, full_email $12/1k. Default short.
+      priority:
+        type: string
+        description: Optional queue priority.
     response:
       format: json
 
   submitLinkedinJob:
     description: >
-      Submit a LinkedIn profile extraction job. Takes a public
-      LinkedIn profile URL and extracts structured data including
-      name, headline, experience, education, skills, and more.
-    http: POST /jobs
+      Submit a public-LinkedIn extraction job (spiderPublicLinkedin) for one
+      profile URL. Distinct from submitPeopleJob mode=profile, which is the
+      Bright Data-backed SpiderPeople path.
+    guidance:
+      use: "extract one public LinkedIn profile via the spiderPublicLinkedin worker"
+      next: "getJobStatus, then getJobResults"
+      warn: "only PUBLIC profiles resolve; a private profile returns status=unavailable, not an error"
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderPublicLinkedin/submit
     params:
-      type:
-        type: string
-        required: true
-        default: spiderPublicLinkedin
-        description: Job type — must be "spiderPublicLinkedin"
       payload:
         type: object
         required: true
@@ -73,6 +116,9 @@ methods:
             type: string
             required: true
             description: Public LinkedIn profile URL (e.g. "https://linkedin.com/in/username")
+      priority:
+        type: string
+        description: Optional queue priority.
     response:
       format: json
 
