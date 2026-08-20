@@ -30,7 +30,7 @@
 # id would be a cross-tenant lever.
 
 name: spidermail
-version: "0.9.0"
+version: "0.10.0"
 description: >
   Agent-driven email over SpiderMail — read a mailbox (inbox, single message,
   conversation thread, full-text search, one-call session bootstrap), send/reply/
@@ -41,7 +41,7 @@ description: >
   warm-up state and reputation, then draft, preview, size and fan out a paced
   broadcast. Inbound HTML is delivered as clean structured data (~37x fewer
   tokens); outbound bodies are written in markdown and auto-converted to
-  professional HTML. Per-tenant, PAT-scoped. Agent-friendly ?format=yaml|md on
+  professional HTML. Per-tenant, PAT-scoped. Agent-friendly ?format=yaml on
   every read.
 category: communication
 base_url: /api/v1
@@ -138,7 +138,7 @@ methods:
       include_body: { type: boolean, required: false, description: 'Include each message full resolved body + envelope (default FALSE). Requires format=yaml to appear.' }
       limit:        { type: integer, required: false, description: 'Page size (default 20, max 100)' }
       offset:       { type: integer, required: false, description: 'Pagination offset (default 0)' }
-      format:       { type: string,  required: false, description: 'json (default) | yaml | md' }
+      format:       { type: string,  required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   getSession:
@@ -196,7 +196,7 @@ methods:
     params:
       message_id:          { type: string,  required: true,  description: 'Numeric message id (the `id` from getInbox/searchMail)' }
       include_attachments: { type: boolean, required: false, description: 'Include attachment summaries + text previews (default true)' }
-      format:              { type: string,  required: false, description: 'json (default) | yaml | md' }
+      format:              { type: string,  required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   getThread:
@@ -216,7 +216,7 @@ methods:
     http: GET /mail/threads/{thread_id}
     params:
       thread_id: { type: string, required: true,  description: 'Thread id (the `thread_id` field on any message in the thread)' }
-      format:    { type: string, required: false, description: 'json (default) | yaml | md' }
+      format:    { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   searchMail:
@@ -238,7 +238,7 @@ methods:
       since:     { type: string, required: false, description: 'Only messages on/after this ISO-8601 date' }
       before:    { type: string, required: false, description: 'Only messages before this ISO-8601 date' }
       limit:     { type: integer, required: false, description: 'Max results (default 20)' }
-      format:    { type: string, required: false, description: 'json (default) | yaml | md' }
+      format:    { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   # ── Mailboxes ─────────────────────────────────────────────────
@@ -294,7 +294,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/mailboxes
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   getMailboxStats:
@@ -306,7 +306,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/mailboxes/stats
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   listMailProviders:
@@ -546,7 +546,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/templates
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   getTemplate:
@@ -558,7 +558,7 @@ methods:
     http: GET /mail/templates/{template_id}
     params:
       template_id: { type: string, required: true,  description: 'Integer template id' }
-      format:      { type: string, required: false, description: 'json (default) | yaml | md' }
+      format:      { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   createTemplate:
@@ -660,7 +660,7 @@ methods:
     http: GET /mail/security/events
     params:
       limit:  { type: integer, required: false, description: 'Max events (default 50)' }
-      format: { type: string,  required: false, description: 'json (default) | yaml | md' }
+      format: { type: string,  required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   listQuarantine:
@@ -672,7 +672,7 @@ methods:
       telemetry_signal_default: "cold"
     http: GET /mail/quarantine
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   releaseMessage:
@@ -696,7 +696,7 @@ methods:
     http: GET /mail/folders
     params:
       email:  { type: string, required: true,  description: 'Mailbox email address (required)' }
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   bulkUpdateMessages:
@@ -746,7 +746,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/snoozed
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   listLabels:
@@ -760,7 +760,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/labels
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   createLabel:
@@ -808,7 +808,7 @@ methods:
       telemetry_signal_default: "warm"
     http: GET /mail/views
     params:
-      format: { type: string, required: false, description: 'json (default) | yaml | md' }
+      format: { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   createView:
@@ -846,6 +846,7 @@ methods:
     http: GET /mail/views/{view_id}
     params:
       view_id: { type: string, required: true, description: 'Saved view id' }
+      format:  { type: string, required: false, description: 'json (default) | yaml' }
     response: { format: json }
 
   updateView:
@@ -1607,4 +1608,476 @@ methods:
     http: POST /dashboard/send/broadcasts/{broadcast_id}/queue
     params:
       broadcast_id: { type: string, required: true, description: 'The draft to fan out' }
+    response: { format: json }
+
+  # ── Class-B CAMPAIGNS — multi-step SEQUENCES (card 4.A) ──────────────────
+  #
+  # A campaign is NOT a broadcast. A broadcast is ONE message fanned out to a
+  # resolved audience once; a campaign is an ordered SEQUENCE of messages sent
+  # 1:1 to leads who enrol continuously over days, each lead carrying its own
+  # cursor. Separate objects, separate lifecycles, separate tables.
+  #
+  # ⛔ THERE IS NO `sendActivateCampaign` METHOD AND THERE MUST NEVER BE ONE.
+  # The activate route is cookie-only server-side (`allow_api_client=False`), so
+  # a PAT call is refused by design: arming a sequence that mails real people
+  # unattended for weeks is a human act. sendPauseCampaign / sendStopCampaign
+  # ARE here — an agent may always stop mail and never start it.
+  #
+  # Wraps dashboard_send_campaigns.py, verified 2026-08-18.
+
+  sendListCampaigns:
+    description: >
+      List this workspace's campaigns (sequences), newest first. Each row carries
+      step_count, span_days (the total wait across the whole sequence) and
+      source_count, so you can tell a finished sequence from a half-built one
+      without opening it.
+    guidance:
+      use: "see what sequences exist and which are running"
+      next: "sendGetCampaign to open one"
+      warn: "A campaign is not a broadcast — sendListBroadcasts is the other object. status filters to one lifecycle state: draft|active|paused|stopped|completed."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/campaigns
+    params:
+      status: { type: string, required: false, description: 'Filter to one state', values: ["draft", "active", "paused", "stopped", "completed"] }
+      limit:  { type: integer, required: false, description: 'Page size (1-200, default 50)' }
+      offset: { type: integer, required: false, description: 'Rows to skip (default 0)' }
+    response: { format: json }
+
+  sendGetCampaign:
+    description: >
+      One campaign in full — every step with its cumulative `day_offset`
+      (D+0 · D+3 · D+10 …), every A/B arm with its copy, and every attached
+      sending mailbox.
+
+      Read this before editing. `step_index` values are IDENTITIES, not
+      positions: deleting a step leaves a gap on purpose, because renumbering
+      would move every later step under a lead already on its way to one.
+    guidance:
+      use: "read the whole sequence before changing it, or to check it is ready to hand to a human"
+      next: "sendPreviewStep on each step; sendAttachSource if sources is empty"
+      warn: "A gap in step_index is deliberate, not corruption. An empty `sources` list means this campaign CANNOT be armed at all."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/send/campaigns/{campaign_id}
+    params:
+      campaign_id: { type: string, required: true, description: 'The campaign id' }
+    response: { format: json }
+
+  sendCreateCampaign:
+    description: >
+      Create a campaign DRAFT — the sequence SHELL only. It holds NO COPY: the
+      subject and body live on a VARIANT, added with sendAddStep / sendAddVariant.
+
+      Nothing here sends anything and nothing here arms it. A campaign becomes
+      able to mail anyone only when a human activates it in the dashboard, and
+      there is deliberately no method for that on this surface.
+
+      `stop_condition` admits reply|click only. 'open' is excluded BY NAME —
+      Apple MPP fires open pixels with no human involved, so a sequence that
+      stops on an open stops on noise.
+    guidance:
+      use: "start a new multi-step sequence"
+      next: "sendAddStep (with its variant) for each touch -> sendAttachSource -> sendPreviewStep -> hand activation to a human"
+      warn: "A DRAFT SENDS NOTHING, and you cannot arm it. Requires the admin role. active_days is the CAMPAIGN clock (ISO 1=Mon..7=Sun) and is NOT the mailbox's own send days — both must allow a day for mail to leave."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns
+    params:
+      name:                   { type: string,  required: true,  description: 'Internal name for the sequence' }
+      folder:                 { type: string,  required: false, description: 'Grouping label (free text)' }
+      timezone:               { type: string,  required: false, description: "IANA zone the campaign clock runs on (default 'UTC')" }
+      active_days:            { type: array,   required: false, items: { type: integer }, description: 'ISO weekdays, 1=Mon..7=Sun (default Mon-Fri). NOT the mailbox send-days mask.' }
+      starts_on:              { type: string,  required: false, description: 'YYYY-MM-DD — first day enrolment may begin' }
+      new_leads_per_day:      { type: integer, required: false, description: 'Enrolment throttle. Omit for no campaign-level cap (the mailbox still paces).' }
+      stop_condition:         { type: string,  required: false, description: "What ends a lead's sequence (default 'reply')", values: ["reply", "click"] }
+      variant_strategy:       { type: string,  required: false, description: 'How an arm is chosen at enrolment', values: ["round_robin", "random"] }
+      company_pause:          { type: boolean, required: false, description: 'Pause every lead at a company when one of them replies' }
+      track_opens:            { type: boolean, required: false, description: 'Default FALSE — open data is unreliable; do not score engagement on it' }
+      track_clicks:           { type: boolean, required: false, description: 'Default true' }
+      plain_text:             { type: boolean, required: false, description: 'Default true' }
+      include_unsubscribe:    { type: boolean, required: false, description: 'Default TRUE. Gates the visible unsubscribe FOOTER; the RFC-8058 headers are transport and ship regardless.' }
+      include_postal_address: { type: boolean, required: false, description: 'Default TRUE. With it on, the send REFUSES if this workspace has recorded no physical postal address.' }
+    response: { format: json }
+
+  sendUpdateCampaign:
+    description: >
+      Patch a campaign's SETTINGS — name, schedule, stop condition, compliance
+      toggles. True PATCH: only the fields you pass are written.
+
+      This works while the campaign is ACTIVE, unlike the sequence itself:
+      changing a send day does not re-aim a lead's cursor, whereas inserting a
+      step does. There is no `status` field — pausing and stopping are their own
+      methods, and arming is not on this surface at all.
+    guidance:
+      use: "rename a sequence, change its schedule, or flip a compliance toggle"
+      next: "sendGetCampaign to read the result back"
+      warn: "Cannot change status — that is a lifecycle act with preconditions. A stopped or completed campaign is terminal and returns 409. Requires the admin role."
+      telemetry_signal_default: "cold"
+    http: PATCH /dashboard/send/campaigns/{campaign_id}
+    params:
+      campaign_id:            { type: string,  required: true,  description: 'The campaign to patch' }
+      name:                   { type: string,  required: false, description: 'Internal name' }
+      folder:                 { type: string,  required: false, description: 'Grouping label' }
+      timezone:               { type: string,  required: false, description: 'IANA zone' }
+      active_days:            { type: array,   required: false, items: { type: integer }, description: 'ISO weekdays, 1=Mon..7=Sun' }
+      starts_on:              { type: string,  required: false, description: 'YYYY-MM-DD' }
+      new_leads_per_day:      { type: integer, required: false, description: 'Enrolment throttle' }
+      stop_condition:         { type: string,  required: false, description: 'reply | click', values: ["reply", "click"] }
+      variant_strategy:       { type: string,  required: false, description: 'round_robin | random', values: ["round_robin", "random"] }
+      company_pause:          { type: boolean, required: false, description: 'Pause a company on first reply' }
+      track_opens:            { type: boolean, required: false, description: 'Record opens' }
+      track_clicks:           { type: boolean, required: false, description: 'Record clicks' }
+      plain_text:             { type: boolean, required: false, description: 'Send plain text' }
+      include_unsubscribe:    { type: boolean, required: false, description: 'Visible unsubscribe footer' }
+      include_postal_address: { type: boolean, required: false, description: 'Postal address in the footer' }
+    response: { format: json }
+
+  sendDeleteCampaign:
+    description: >
+      Delete a DRAFT campaign and its steps. Drafts ONLY — a campaign that has
+      ever run returns 409, because deleting it would leave its leads' sessions
+      with no sequence to explain what they were sent. Stop it instead; a stopped
+      campaign keeps its history.
+    guidance:
+      use: "throw away a draft that was never armed"
+      next: "sendListCampaigns to confirm it is gone"
+      warn: "409 not_draft on anything that has run — use sendStopCampaign. Requires the admin role. Returns 204 with no body."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/campaigns/{campaign_id}
+    params:
+      campaign_id: { type: string, required: true, description: 'The draft to delete' }
+    response: { format: json }
+
+  sendAddStep:
+    description: >
+      Add a step to the sequence. `wait_days` is the gap BEFORE this step, so the
+      first touch is wait_days 0 and "3 days later" is wait_days 3 on the NEXT
+      step. Omit `step_index` to append.
+
+      Pass `variant` to write the copy in the same call — a step with no variant
+      cannot be armed at all.
+
+      Phase 4 sends EMAIL ONLY: kind 'call'/'manual' is refused with 422, because
+      such a step would sit in your sequence executing nothing.
+
+      Returns the WHOLE campaign, because inserting a step shifts every later
+      step's cumulative day_offset.
+    guidance:
+      use: "add each touch of the sequence, ideally with its copy in the same call"
+      next: "sendPreviewStep to see what it renders as"
+      warn: "wait_days is the gap BEFORE this step, not after it. LEAVE subject_template EMPTY on follow-ups — empty means CONTINUE THE THREAD, and inventing a subject silently breaks threading. Requires draft or paused: an active campaign returns 409 naming the fix."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/steps
+    params:
+      campaign_id: { type: string,  required: true,  description: 'The campaign' }
+      step_index:  { type: integer, required: false, description: 'Explicit position. Omit to append after the current last step.' }
+      kind:        { type: string,  required: false, description: "Default 'email'. call/manual are modelled but refused with 422.", values: ["email", "call", "manual"] }
+      wait_days:   { type: integer, required: false, description: 'Days to wait BEFORE this step (0-365)' }
+      variant:
+        type: object
+        required: false
+        description: "The step's copy, created in the same transaction."
+        properties:
+          label:            { type: string,  description: "Single uppercase letter (default 'A')" }
+          subject_template: { type: string,  description: "EMPTY = continue the thread (Subject header omitted). Non-empty = start a new thread. Do not invent one on a follow-up." }
+          body_md:          { type: string,  description: 'Body in markdown' }
+          weight:           { type: integer, description: "Share under variant_strategy 'random' (0-100)" }
+    response: { format: json }
+
+  sendUpdateStep:
+    description: >
+      Patch a step's wait or channel. True PATCH. `step_index` itself is not
+      patchable — reordering would re-aim a lead's cursor at copy it never saw.
+    guidance:
+      use: "change how long the sequence waits before a touch"
+      next: "sendGetCampaign to see the recomputed day offsets"
+      warn: "Requires draft or paused. A non-email kind is refused with 422 here too — the gate is on both doors."
+      telemetry_signal_default: "cold"
+    http: PATCH /dashboard/send/campaigns/{campaign_id}/steps/{step_index}
+    params:
+      campaign_id: { type: string,  required: true,  description: 'The campaign' }
+      step_index:  { type: integer, required: true,  description: 'Which step' }
+      kind:        { type: string,  required: false, description: 'email only (others 422)', values: ["email", "call", "manual"] }
+      wait_days:   { type: integer, required: false, description: 'Days to wait BEFORE this step (0-365)' }
+    response: { format: json }
+
+  sendDeleteStep:
+    description: >
+      Delete a step and its arms. The later steps KEEP their `step_index` — the
+      gap is deliberate, not a bug to tidy up.
+    guidance:
+      use: "remove a touch from the sequence"
+      next: "sendGetCampaign — the remaining indices are unchanged by design"
+      warn: "Do NOT try to 'fix' the resulting gap by renumbering: step_index is an identity, and the sequence reads by order, so a gap is invisible to the send path. Requires draft or paused."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/campaigns/{campaign_id}/steps/{step_index}
+    params:
+      campaign_id: { type: string,  required: true, description: 'The campaign' }
+      step_index:  { type: integer, required: true, description: 'Which step' }
+    response: { format: json }
+
+  sendAddVariant:
+    description: >
+      Add an A/B arm to a step. A lead is FIXED to one arm at enrolment and never
+      switches mid-thread, which is what makes the result readable.
+
+      An empty `subject_template` means CONTINUE THE THREAD — leave it empty on
+      follow-up steps rather than inventing one.
+    guidance:
+      use: "test a second subject line or opener on one step"
+      next: "sendPreviewStep with variant_label to see each arm"
+      warn: "label is a single uppercase letter and shares one vocabulary with the enrolment. {{unsub_url}} is BODY-ONLY — an unsubscribe URL in a subject line is a deliverability incident. Requires draft or paused."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/steps/{step_index}/variants
+    params:
+      campaign_id:      { type: string,  required: true,  description: 'The campaign' }
+      step_index:       { type: integer, required: true,  description: 'Which step' }
+      label:            { type: string,  required: false, description: "Single uppercase letter, e.g. 'B' (default 'A')" }
+      subject_template: { type: string,  required: false, description: 'EMPTY = stay in the thread. Non-empty = start a new one.' }
+      body_md:          { type: string,  required: false, description: 'Body in markdown' }
+      weight:           { type: integer, required: false, description: "Share under variant_strategy 'random' (0-100)" }
+    response: { format: json }
+
+  sendUpdateVariant:
+    description: >
+      Patch one arm's copy. True PATCH. `label` is not patchable — renaming an
+      arm would re-point every lead fixed to it at copy they never saw; add a new
+      arm instead.
+    guidance:
+      use: "rewrite the subject or body of one arm"
+      next: "sendPreviewStep to check the render"
+      warn: "Requires draft or paused: editing a live sequence changes what an already-enrolled lead receives without anyone choosing that. Do not fill in an empty subject_template to 'tidy up' a follow-up step."
+      telemetry_signal_default: "cold"
+    http: PATCH /dashboard/send/campaigns/{campaign_id}/steps/{step_index}/variants/{label}
+    params:
+      campaign_id:      { type: string,  required: true,  description: 'The campaign' }
+      step_index:       { type: integer, required: true,  description: 'Which step' }
+      label:            { type: string,  required: true,  description: 'Which arm' }
+      subject_template: { type: string,  required: false, description: 'EMPTY = continue the thread' }
+      body_md:          { type: string,  required: false, description: 'Body in markdown' }
+      weight:           { type: integer, required: false, description: 'Share under random strategy (0-100)' }
+    response: { format: json }
+
+  sendDeleteVariant:
+    description: >
+      Delete an A/B arm. The LAST arm of a step is refused (409): a step with no
+      copy resolves to nothing at send time. Delete the whole step instead.
+    guidance:
+      use: "drop a losing A/B arm"
+      next: "sendGetCampaign to confirm which arms remain"
+      warn: "409 last_variant if it is the only arm on that step. Requires draft or paused."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/campaigns/{campaign_id}/steps/{step_index}/variants/{label}
+    params:
+      campaign_id: { type: string,  required: true, description: 'The campaign' }
+      step_index:  { type: integer, required: true, description: 'Which step' }
+      label:       { type: string,  required: true, description: 'Which arm' }
+    response: { format: json }
+
+  sendAttachSource:
+    description: >
+      Attach one of this workspace's sending mailboxes to a campaign — which
+      mailboxes MAY carry it. Attaching sends nothing.
+
+      A campaign with no attached source cannot be armed at all, so this is a
+      required step before handing a sequence to a human. Allowed while the
+      campaign is active: adding capacity is the safe direction.
+    guidance:
+      use: "give a campaign a mailbox to send from"
+      next: "sendGetCampaign — `sources` must be non-empty before a human can arm it"
+      warn: "The mailbox must be in this workspace's pool (404 otherwise) AND `active`. Attaching a `warming` one SUCCEEDS and still leaves the campaign unarmable — activation refuses with no_active_sources, because the send loop claims active sources only. sendListSources shows the state; sendPromoteSource is what arms one."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/sources
+    params:
+      campaign_id: { type: string,  required: true, description: 'The campaign' }
+      mailbox_id:  { type: integer, required: true, description: 'From sendListSources' }
+    response: { format: json }
+
+  sendDetachSource:
+    description: >
+      Detach a sending mailbox from a campaign. Mail already queued is not
+      withdrawn — this stops the campaign claiming that mailbox for future turns.
+    guidance:
+      use: "take a mailbox out of a campaign's rotation"
+      next: "sendGetCampaign to see the remaining sources"
+      warn: "Detaching the LAST source does not stop the campaign — it leaves it running with nothing to send through. Use sendPauseCampaign if that is what you meant."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/campaigns/{campaign_id}/sources/{mailbox_id}
+    params:
+      campaign_id: { type: string,  required: true, description: 'The campaign' }
+      mailbox_id:  { type: integer, required: true, description: 'Which mailbox' }
+    response: { format: json }
+
+  sendAddBranch:
+    description: >
+      Author a BRANCH (SubSequence) on a campaign: when something happens to a
+      lead, either STOP their sequence or JUMP them to another step.
+
+      AUTHORING ONLY — nothing evaluates a branch yet. Adding one changes what
+      nothing does today; execution ships in a later slice. Say that when you
+      report, rather than describing the sequence as "now branching".
+
+      TRIGGERS, exactly four: `classification` (the AI verdict on an inbound
+      reply), `reply_text` (a literal string in the reply body), `unresponsive`
+      (no reply after N days), `bounced` (a bounce of a given severity).
+
+      There is no `click` trigger and no `open` trigger, for DIFFERENT reasons.
+      `open` is excluded permanently — Apple MPP fires opens with no human
+      involved, so it is noise. `click` is merely DEFERRED, and stop-on-click
+      already works at campaign level via `stop_condition` — so if a human asks
+      to "stop the sequence when they click", set that, do not report it
+      impossible.
+
+      `match` is a validated AST, NOT a string. Send a tree —
+      {"op":"eq","field":"verdict","value":"human"} — never "verdict == human"
+      and never a regex. Compose with {"op":"and"|"or","nodes":[...]} and
+      {"op":"not","node":{...}}. An unknown operator, field or extra key is
+      rejected with 422 rather than ignored.
+
+      An empty match {} is REFUSED because it means MATCHES NOTHING (it is the
+      column default, so a half-written row stays inert). To fire on every
+      occurrence send {"op":"always"}.
+
+      Fields by trigger — classification: `verdict` (eq|in; human,
+      outreach_reply, auto_reply, bounce — `warmup` is deliberately not
+      branchable). reply_text: `text` (contains|not_contains|starts_with|equals;
+      a case-insensitive literal, never a pattern). unresponsive: `days`
+      (gte, 1-365). bounced: `severity` (eq|in; permanent|temporary).
+    guidance:
+      use: "stop a lead's sequence on a reply, or re-aim them to another step"
+      next: "sendGetCampaign to read the branch back with its id"
+      warn: "NOTHING EXECUTES A BRANCH YET — report it as authored, not as active. `match` is a TREE, not a string; {} is refused (say {\"op\":\"always\"} for every occurrence). No click/open trigger — for stop-on-click set the campaign's stop_condition instead. A jump_to_step whose target step does not exist is refused with 422."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/branches
+    params:
+      campaign_id: { type: string,  required: true,  description: 'The campaign' }
+      trigger:     { type: string,  required: true,  description: 'What to watch. No click/open — see the description.', values: ["classification", "reply_text", "unresponsive", "bounced"] }
+      match:       { type: object,  required: true,  description: 'The condition as an AST tree, e.g. {"op":"gte","field":"days","value":7}. {} is refused; use {"op":"always"} for every occurrence.' }
+      action:      { type: string,  required: true,  description: "'stop' ends this lead's sequence; 'jump_to_step' re-aims it", values: ["stop", "jump_to_step"] }
+      action_arg:  { type: object,  required: false, description: '{} for stop; {"step_index": n} for jump_to_step. The step must already exist.' }
+      enabled:     { type: boolean, required: false, description: 'Default true. false authors the rule without arming it.' }
+    response: { format: json }
+
+  sendUpdateBranch:
+    description: >
+      Patch a branch, or disable it.
+
+      `trigger` and `match` are patched TOGETHER, and so are `action` and
+      `action_arg` — sending one without its partner is refused with 422. A
+      match names fields belonging to ONE trigger's grammar, so a half-pair
+      would store a match its trigger cannot read: accepted, stored, and dead.
+      Repeat the unchanged half.
+
+      `enabled: false` keeps the rule and its reasoning visible while stopping
+      it firing. Prefer it over deleting whenever a human may want the rule
+      back.
+
+      Branch ids come from sendGetCampaign -> `branches`, which lists disabled
+      branches too.
+    guidance:
+      use: "change what a branch watches or does, or turn it off"
+      next: "sendGetCampaign to confirm the stored branch"
+      warn: "trigger+match move together and action+action_arg move together — half a pair is a 422. Disabling is not deleting: a disabled branch is a deliberate, re-enableable state."
+      telemetry_signal_default: "cold"
+    http: PATCH /dashboard/send/campaigns/{campaign_id}/branches/{branch_id}
+    params:
+      campaign_id: { type: string,  required: true,  description: 'The campaign' }
+      branch_id:   { type: integer, required: true,  description: 'From sendGetCampaign -> branches[].id' }
+      trigger:     { type: string,  required: false, description: 'Send `match` with it', values: ["classification", "reply_text", "unresponsive", "bounced"] }
+      match:       { type: object,  required: false, description: 'Send `trigger` with it' }
+      action:      { type: string,  required: false, description: 'Send `action_arg` with it', values: ["stop", "jump_to_step"] }
+      action_arg:  { type: object,  required: false, description: 'Send `action` with it' }
+      enabled:     { type: boolean, required: false, description: 'Patchable on its own' }
+    response: { format: json }
+
+  sendDeleteBranch:
+    description: >
+      Delete a branch outright.
+
+      If a human may want the rule back, patch `enabled: false` instead — a
+      disabled branch stays visible with its reasoning, a deleted one does not.
+
+      The mirror rule: a STEP that a branch jumps to cannot be deleted while
+      that branch exists (409), because deleting it would leave the branch
+      pointing at nothing.
+    guidance:
+      use: "remove a branch you are certain is not wanted"
+      next: "sendGetCampaign to confirm the remaining branches"
+      warn: "Prefer sendUpdateBranch with enabled=false when the rule may be wanted again. Deleting loses the reasoning as well as the rule."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/send/campaigns/{campaign_id}/branches/{branch_id}
+    params:
+      campaign_id: { type: string,  required: true, description: 'The campaign' }
+      branch_id:   { type: integer, required: true, description: 'From sendGetCampaign -> branches[].id' }
+    response: { format: json }
+
+  sendPreviewStep:
+    description: >
+      Render one step's arm exactly as a recipient will receive it — server-side,
+      through the SAME renderer the send path uses, so the preview cannot drift
+      from the real message.
+
+      ALWAYS preview every step before telling a human a campaign is ready.
+
+      THREE FIELDS TO ACTUALLY READ:
+      (1) `unresolved_merge_tags` lists tags that render EMPTY on a live send.
+      Today every CRM tag except `email` is empty, so "Hi {{first_name}}" ships
+      as "Hi ,". Nothing errors — the placeholder is emitted, the provider
+      accepts the message, and the only symptom is a greeting addressed to
+      nobody.
+      (2) `continues_thread: true` with `subject: null` is the CORRECT state of a
+      follow-up step, not a missing subject.
+      (3) `postal_address` empty means this workspace has recorded none and the
+      send will be REFUSED — the fix is Settings -> Information, and it is a
+      human's to make.
+    guidance:
+      use: "check what a step actually renders as, including the compliance footer"
+      next: "fix the copy, or report the unresolved tags and any missing postal address to your human"
+      warn: "Persists nothing. A null subject is CORRECT on a follow-up. Never report a campaign as ready without previewing every step: unresolved merge tags and a missing postal address are both silent until mail is already out."
+      telemetry_signal_default: "warm"
+    http: POST /dashboard/send/campaigns/{campaign_id}/steps/{step_index}/preview
+    params:
+      campaign_id:   { type: string,  required: true,  description: 'The campaign' }
+      step_index:    { type: integer, required: true,  description: 'Which step' }
+      variant_label: { type: string,  required: false, description: "Which arm (default 'A')" }
+      sample:
+        type: object
+        required: false
+        description: 'A sample recipient to render the merge fields against.'
+        properties:
+          email:           { type: string, description: 'Sample recipient address' }
+          first_name:      { type: string, description: 'Sample first name' }
+          full_name:       { type: string, description: 'Sample full name' }
+          current_company: { type: string, description: 'Sample current company' }
+    response: { format: json }
+
+  sendPauseCampaign:
+    description: >
+      Pause a campaign: stop enrolling new leads and stop advancing the ones
+      already in it. Reversible — a human reactivates it and enrolled leads
+      resume from where they were.
+
+      This is also the prerequisite for editing a running sequence, and it is
+      deliberately available to you even though activation is not: you may always
+      stop mail, and never start it.
+    guidance:
+      use: "stop a running sequence — to fix it, or because something is wrong"
+      next: "edit the steps/variants, then tell your human to reactivate it"
+      warn: "You can pause but you CANNOT un-pause: reactivation is a human act (see the note at the top of this section). Say so when you pause something."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/pause
+    params:
+      campaign_id: { type: string, required: true, description: 'The campaign to pause' }
+    response: { format: json }
+
+  sendStopCampaign:
+    description: >
+      Stop a campaign permanently. Terminal — it cannot be reactivated or edited,
+      though its history is kept. Mail already in the queue is not withdrawn.
+    guidance:
+      use: "end a sequence for good"
+      next: "sendListCampaigns; create a new campaign if the work continues"
+      warn: "TERMINAL and not reversible by anyone, including a human. Use sendPauseCampaign if there is any chance it should run again. Rows already in the send queue are not retracted."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/send/campaigns/{campaign_id}/stop
+    params:
+      campaign_id: { type: string, required: true, description: 'The campaign to stop' }
     response: { format: json }

@@ -1,0 +1,19 @@
+{
+  "title": "There is no sendActivateCampaign, on any surface — and the absence is the enforcement, not an oversight",
+  "summary": "An agent can author every part of a Class-B campaign — shell, steps, A/B arms, attached sources, previews — and can never arm one. The activate route is require_tenant_scoped_access(min_role='admin', allow_api_client=False), so a PAT is refused at the door; the skill ships no method, the MCP surface ships no tool, and the CLI verb deliberately prints where the act belongs instead of calling an API that would 403. Shipping no tool alone would have been enforcement by omission, because the dashboard API is PAT-reachable and an agent holding one could simply POST the route itself — which is exactly the hole the paste-consent writes closed one file over. The asymmetry is the design: sendPauseCampaign and sendStopCampaign ARE on the agent surface, because an agent may always stop mail and never start it, and a safety verb an agent cannot reach is a safety verb nobody uses at 3am. The failure this prevents is not a bad send but a WRONG REPORT: an agent that composes a sequence and says 'the campaign is live' has described a draft that will never send, and the user finds out weeks later when nobody replied. Say 'ready to activate', name the three preconditions the route refuses by name (an email step, copy on every step, an attached source), and stop.",
+  "created_at": "2026-08-18",
+  "updated_at": "2026-08-18",
+  "tags": ["spidermail", "campaign", "sequence", "cookie-only", "human-gate", "agent-surface", "class-b"],
+  "references": [
+    "app/api/v1/dashboard_send_campaigns.py — _tenant_arm = require_tenant_scoped_access(min_role='admin', allow_api_client=False); the module header states why shipping no tool would be enforcement by omission",
+    "app/api/v1/dashboard_send_campaigns.py activate_campaign — 'THIS IS THE ONE ROUTE IN THE FILE THAT A PAT CANNOT CALL'",
+    "app/api/v1/dashboard_send_broadcasts.py — _tenant_declare, the paste-consent precedent this copies rather than invents",
+    "app/services/send_campaign_service.py activate() — the three preconditions refused BY NAME: no_steps, step_without_variant, no_sources",
+    "app/services/send_campaign_service.py pause() — 'Deliberately NOT cookie-only, unlike activate. An agent may always stop mail, and may never start it.'",
+    "packages/mcp/scripts/verify-tool-set.mjs EXPECTED_SEND_TOOLS — the campaign block carries a standing ⛔ against adding an activate tool",
+    "packages/mcp-tools/tests/mail/send.test.ts — 'ships NO activation tool, on any surface' + its positive control 'DOES ship pause and stop'",
+    "packages/cli/src/commands/send.ts — `campaign activate` prints the dashboard path and exits 1 without calling the API; a real 403 would read as broken auth",
+    "tests/unit/send/test_campaign_authoring.py test_activate_refuses_a_pat_and_pause_does_not — the differential, on the allow_api_client axis alone",
+    "docs/services/SpiderMail/broadcasting-research/P4-SEQUENCES-DESIGN.md §3.4 — 'shipping no tool is the enforcement, not a preference'"
+  ]
+}
