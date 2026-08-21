@@ -76,8 +76,11 @@ POST /bulk-lead-sourcing/submit  →  202 (manifest written, provider NOT called
    is what you poll. The manifest walks
    `pending → submitted → fanning_out → completed`.
 
-5. **Read.** See [read-results.md](read-results.md). Results come back in the
-   **same envelope as a campaign**, and the fan-out lands under a campaign named
+5. **Read — in TWO steps.** See [read-results.md](read-results.md). The parent
+   `job_id` returns a **funnel summary** (`screening` / `cost` / `children`) and
+   never carries `businesses`; the per-lead rows are in the jobs listed at
+   `data.children.job_ids`, each read through the same endpoint and each
+   carrying the campaign envelope. The fan-out lands under a campaign named
    `bulk_<bulk_job_id>`.
 
 ## Key fields
@@ -134,5 +137,10 @@ POST /bulk-lead-sourcing/submit  →  202 (manifest written, provider NOT called
   `"{query}, {label}"` and identical strings are collapsed, so overlapping
   query/label wording silently costs you less than the naive product.
 - `GET /jobs/{job_id}/status` reaches `completed` → fan-out done.
-- Results carry `data.businesses[]` in the campaign envelope → chain ran.
-- `scripts/verify-bulk-complete.sh <bulk_job_id>` → per-stage audit.
+- Parent results carry `data.screening` → the funnel. `kept: 0` with
+  `drop_reasons` is an **answer**, not a failure.
+- Each id in `data.children.job_ids` carries `data.businesses[]` in the campaign
+  envelope → chain ran.
+- `scripts/verify-bulk-complete.sh <job_id>` → per-stage audit. **Pass the
+  PARENT `job_id`, not the `bulk_job_id`** — the latter has no job route and the
+  script will tell you so.

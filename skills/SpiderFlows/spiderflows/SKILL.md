@@ -132,9 +132,13 @@ sources:  outscraper · apify     PAID    search terms x places   → local busi
 A **campaign** runs one Maps search per location and can be stopped, inspected
 and retried location-by-location. **Bulk** buys everything in one call, dedups
 across the whole set, and has **no per-location retry** — a thin result is
-re-bought, not retried. The result envelope is identical to a campaign's
-(24/24 business fields, verified live), so anything that reads campaign results
-reads bulk results unchanged. See
+re-bought, not retried. **Reading a bulk run takes TWO steps**: the parent
+job returns a FUNNEL SUMMARY (screening / cost / children) and never carries
+`businesses`; the per-lead rows live in the jobs listed at
+`data.children.job_ids`, and each of THOSE carries the campaign envelope
+unchanged (24/24 business fields, verified live). See
+[flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md)
+and
 [flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md).
 
 ## Approach
@@ -232,7 +236,7 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 | buy a large lead set across many terms x many places in ONE purchase | [flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md) |
 | source marketing / design / dev AGENCIES by service x country (Sortlist, free at the source) | [flows/bulkLeadSourcing/recipes/sortlist-agencies.md](flows/bulkLeadSourcing/recipes/sortlist-agencies.md) |
 | know what a bulk run will cost and what refuses it, BEFORE submitting | [flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md) |
-| read a bulk run's leads (same envelope as a campaign) | [flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md) |
+| read a bulk run's leads (parent = funnel; `children.job_ids` = the leads) | [flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | auto-export a campaign's verified leads into a SmartLead outreach campaign | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |

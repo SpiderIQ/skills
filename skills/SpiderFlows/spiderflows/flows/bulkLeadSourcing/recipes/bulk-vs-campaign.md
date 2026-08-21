@@ -1,7 +1,8 @@
 # Recipe: bulk or campaign? (read this first)
 
 Both produce the same thing — verified business leads in the tenant's account,
-in the **same result envelope**. They differ in *where the breadth comes from*
+in the **same per-lead result envelope** (bulk wraps it one level deeper; see
+[read-results.md](read-results.md)). They differ in *where the breadth comes from*
 and *what you pay for it*. Picking wrong is not a correctness bug; it is a cost
 and latency bug, and it is not cheap to undo.
 
@@ -49,13 +50,15 @@ See [cost-and-limits.md](cost-and-limits.md).
 
 - **The downstream chain.** Site → Verify → VayaPin, same workers, same
   `workflow` config shape (`WorkflowConfig` verbatim).
-- **The result envelope.** Verified live against two campaign runs: 10/10
-  identical top-level keys, 4/4 identical `data` keys
-  (`businesses`, `metadata`, `query`, `results_count`), and 24/24 identical
-  business field names. Anything that reads campaign results reads bulk results
-  unchanged. Only `metadata` differs, by design — it carries bulk provenance
-  instead of scrape knobs.
-- **How you read results.** Same `getJobResults` / IDAP by campaign id. See
+- **The PER-LEAD result envelope.** Verified live: 10/10 identical top-level
+  keys, 4/4 identical `data` keys (`businesses`, `metadata`, `query`,
+  `results_count`), and 24/24 identical business field names. Only `metadata`
+  differs, by design — it carries bulk provenance instead of scrape knobs.
+  ⚠️ **This describes a bulk CHILD job, not the bulk parent.** A campaign's
+  `job_id` gives you that envelope directly; a bulk run's parent `job_id` gives
+  you a funnel summary, and the envelope above is one level down at
+  `data.children.job_ids[]`.
+- **How you read results.** Same `getJobResults`, one extra hop. See
   [read-results.md](read-results.md).
 
 ## Verify you chose right
