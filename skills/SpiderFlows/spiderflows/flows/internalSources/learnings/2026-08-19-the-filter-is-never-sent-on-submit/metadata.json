@@ -1,0 +1,15 @@
+{
+  "title": "The filter is accepted at exactly one endpoint, and a foreign selection_id is 404 — never 403",
+  "summary": "A filter AST is accepted ONLY by POST /selections, where it is validated, canonicalised and stored. The submit carries the selection_id alone and there is no field through which a predicate could travel — which is the whole cross-tenant argument: a body that could carry a predicate could carry ANOTHER tenant's predicate, and the only thing between it and their rows would be application code remembering to check. An id resolved inside `WHERE client_id = <caller>` has no such seam. The status matters as much as the scoping: a foreign id must answer identically to a nonexistent one, because a 403 (or any answer that only fires for a REAL id owned by someone else) turns the submit route into an existence oracle over another tenant's selections. Three docstrings and the OpenAPI promised 404 from I.1 onward while the shipped code returned 422; corrected in I.4 (card BLS-42), with the error CODE left unchanged so clients branching on SELECTION_NOT_FOUND keep working.",
+  "created_at": "2026-08-19",
+  "updated_at": "2026-08-19",
+  "tags": ["internal-sources", "security", "multi-tenant", "contract"],
+  "references": [
+    "app/schemas/bulk_lead_sourcing.py — BulkSelectionReference docstring: 'The filter is NEVER sent on submit'; '404, never a 403'",
+    "app/services/lead_sourcing/corpus_selection.py — SelectionNotFoundError; load_selection ('404, never 403, because a 403 confirms the id exists')",
+    "app/services/bulk_lead_sourcing_service.py — SelectionNotFoundError deliberately NOT re-wrapped as BulkRequestError (card BLS-42)",
+    "app/api/v1/bulk_lead_sourcing.py + app/api/v1/dashboard_bulk_lead_sourcing.py — the three 404 handlers, one per door plus /estimate",
+    "docs/services/SpiderWorkflows/flows/bulk-internal-sources-DESIGN.md §2.2, §6.4",
+    "recipes/run-internal.md"
+  ]
+}

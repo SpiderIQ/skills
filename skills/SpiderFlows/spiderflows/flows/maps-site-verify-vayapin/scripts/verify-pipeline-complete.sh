@@ -26,7 +26,17 @@ fi
 auth=(-H "Authorization: Bearer $PAT")
 get() { curl -fsS "${auth[@]}" "$1" 2>/dev/null || { echo "ERR: request failed: $1" >&2; exit 2; }; }
 
-agg="$(get "$BASE/jobs/spiderMaps/campaigns/$CAMPAIGN_ID/workflow-results?format=json")"
+# 🔴 NO `?format=json` ON ANY URL BELOW, and do not "tidy" it back in.
+# Unlike its six sibling verify scripts, the two routes THIS script calls
+# (…/workflow-results and /idap/businesses) do not DECLARE a `format` param, so
+# FastAPI silently drops it and they answered 200 even while it was present —
+# which is exactly why the bug survived here unnoticed. It is removed anyway: the
+# param is one `Query(...)` declaration away from becoming the same 422
+# SCHEMA_VALIDATION_FAILED that killed the other six on their first request, and
+# `curl -fsS` would render that as a bare "request failed". Measured against
+# production 2026-08-22 (card SDS-27).
+
+agg="$(get "$BASE/jobs/spiderMaps/campaigns/$CAMPAIGN_ID/workflow-results")"
 
 field() { echo "$agg" | python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',0))"; }
 status="$(field status)"
@@ -35,7 +45,7 @@ emails="$(field total_emails_found)"
 verified="$(field total_emails_verified)"
 
 # pins via IDAP include (no standalone /idap/pins type)
-pins="$(get "$BASE/idap/businesses?campaign_id=$CAMPAIGN_ID&include=pins&limit=500&format=json" \
+pins="$(get "$BASE/idap/businesses?campaign_id=$CAMPAIGN_ID&include=pins&limit=500" \
   | python3 -c "import sys,json;d=json.load(sys.stdin);print(sum(len(b.get('pins',[]) or []) for b in d.get('data',d.get('items',[]))))")"
 
 gap=0

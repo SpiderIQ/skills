@@ -1,0 +1,14 @@
+{
+  "title": "An internal run's money fields all read zero, and the run is not free",
+  "summary": "The `internal` adapter registers with source_is_free=True, because nobody is paid for us to read our own corpus. Every money field on the estimate and the 202 therefore comes back 0 or null. That is a TRUE statement about the source and a FALSE summary of the run: the spend is downstream, and it is eligible_leads x enabled stages — a 9,000-lead selection with site+verify is 18,000 units of enrichment. The trap is that an UNPRICED PROVIDER is indistinguishable from a free source on every money field (outscraper has no unit price configured and also returns estimated_cost_usd: null), so `!has_cost` is not the discriminator. Branch confirmation copy on `source_is_free`, or on what is being enriched — never on whether the cost field is empty.",
+  "created_at": "2026-08-19",
+  "updated_at": "2026-08-19",
+  "tags": ["internal-sources", "cost", "confirmation", "money"],
+  "references": [
+    "app/services/lead_sourcing/internal_adapter.py:188-203 — register_adapter(..., source_is_free=True); the comment names the branch-on-source_is_free rule",
+    "app/services/lead_sourcing/registry.py — AdapterRegistration.source_is_free / admin_only",
+    "docs/services/SpiderWorkflows/flows/bulk-internal-sources-DESIGN.md §7 — money and ceilings",
+    "root CLAUDE.md → Bulk Lead Sourcing — 'Free at the SOURCE is not free'; the csv/json/internal/sortlist row",
+    "recipes/internal-vs-buying.md"
+  ]
+}

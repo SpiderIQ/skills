@@ -29,7 +29,16 @@ fi
 auth=(-H "Authorization: Bearer $PAT")
 get() { curl -fsS "${auth[@]}" "$1" 2>/dev/null || { echo "ERR: request failed: $1" >&2; exit 2; }; }
 
-res="$(get "$BASE/jobs/$JOB_ID/results?format=json")"
+# 🔴 NO `?format=json` ON ANY URL BELOW, and do not "tidy" it back in.
+# `format` on /jobs/{id}/status and /jobs/{id}/results is validated against
+# `^(yaml|md)$`. JSON is the DEFAULT and the ONLY way to ask for it is to NOT ask:
+# spelling it out is a 422 SCHEMA_VALIDATION_FAILED. `curl -fsS` renders that as a
+# generic "request failed", which reads as auth or an outage — so the real cause is
+# invisible. Up to 0.10.1 every URL here carried it and this script therefore died
+# on its FIRST request, having verified nothing. Measured against production
+# 2026-08-22 (card SDS-27; the same bug in the bulk script was SDS-23).
+
+res="$(get "$BASE/jobs/$JOB_ID/results")"
 
 # The aggregate shape varies (single vs batch); this parser is defensive — it
 # scans the JSON for the per-stage signals wherever they live.

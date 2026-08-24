@@ -1,0 +1,14 @@
+{
+  "title": "Quote eligible_leads, not matched_leads — and a count is only valid for the stages it was measured with",
+  "summary": "Every sizing call returns two counts. `matched_leads` is what the filter selects; `eligible_leads` is Gate 2 — leads still missing at least one REQUESTED stage. On a mature corpus most rows have already been crawled and verified, so 'select 5,000, enrich 200' is the ordinary reading, not an anomaly. eligible_leads is also the number the system itself acts on: the per-job record ceiling, the cost (eligible x stages) and the runtime are all decided by it, so quoting matched_leads quotes a figure nothing will act on. Second half of the trap: eligibility is SCOPED to the stage set, so the same filter yields different counts for different stages — a count carried from one stage set to another is simply wrong. That is why `stages` is required and never defaults on past-runs, count, leads and selections.",
+  "created_at": "2026-08-19",
+  "updated_at": "2026-08-19",
+  "tags": ["internal-sources", "counts", "gate-2", "sizing"],
+  "references": [
+    "docs/services/SpiderWorkflows/flows/bulk-internal-sources-DESIGN.md §3.3 — two gates; §6.5 — 'select 5,000, enrich 200'",
+    "app/api/v1/dashboard_bulk_lead_sourcing.py — create_bulk_corpus_selection docstring: 'The count returned is Gate 2's, not the filter's'",
+    "app/api/v1/dashboard_bulk_lead_sourcing.py — list_bulk_past_runs: stages is REQUIRED rather than defaulted, and why",
+    "app/services/lead_sourcing/corpus_selection.py — count_matched_and_eligible / build_dual_count_query",
+    "recipes/eligible-not-matched.md"
+  ]
+}

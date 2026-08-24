@@ -40,6 +40,14 @@ description: >
   businesses — source "sortlist" reads a public B2B directory by service x country, free
   at the source. Trigger it on: "find SEO agencies", "marketing agencies in <country>",
   "branding studios", "list of design agencies", "agencies by service", "sortlist".
+  And INTERNAL sources (flow:internalSources): enrich leads the tenant ALREADY OWNS instead
+  of buying more — re-run a past campaign that was never enriched, or select across the whole
+  corpus with a filter. Trigger internal on: "our leads", "the leads we already have",
+  "re-run/re-enrich the <X> campaign", "we never verified those emails", "crawl the sites for
+  leads that have no website record", "which of our leads have no email", "enrich my existing
+  leads", "don't buy more, use what we have". The tell is a POSSESSIVE — buying a second copy
+  of leads the tenant already owns is the failure this exists to prevent, and per-purchase
+  dedup will not catch it. The agent authors the filter itself (there is no NL box).
   More flows are added here as recipes.
 ---
 
@@ -141,6 +149,31 @@ unchanged (24/24 business fields, verified live). See
 and
 [flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md](flows/bulkLeadSourcing/recipes/bulk-vs-campaign.md).
 
+The sixth flow — **internalSources** — is the same downstream chain pointed at
+leads the tenant **already owns**, instead of at anything bought.
+
+```
+flow:internalSources    (no purchase at all — enrichment over your OWN corpus)
+selection  →  the leads it resolves  →  fan out PER LEAD
+(a past run, or a filter AST)          Site → Verify → VayaPin
+```
+
+Reach for it whenever the user's sentence has a **possessive** in it — *our*
+leads, *the* Berlin campaign, *last month's* list. Buying a second copy of leads
+the tenant already owns is the failure this flow exists to prevent, and nothing
+downstream catches it: dedup is per-purchase, so a re-buy looks like a perfectly
+healthy job.
+
+🔴 **The agent is the natural-language layer.** There is no NL filter box in the
+dashboard — it was dropped deliberately. You read the field catalogue, translate
+the user's sentence into a validated filter AST, size it, and only then spend.
+Start at
+[flows/internalSources/recipes/internal-vs-buying.md](flows/internalSources/recipes/internal-vs-buying.md).
+
+⚠️ **Free at the source is not free.** Every money field on an internal run reads
+zero, because nobody is paid for us to read our own database. The spend is
+`eligible_leads x enabled stages` and it is real.
+
 ## Approach
 
 - **Single location** — one city, one search. Fastest; use
@@ -237,6 +270,10 @@ smartlead. ([flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/m
 | source marketing / design / dev AGENCIES by service x country (Sortlist, free at the source) | [flows/bulkLeadSourcing/recipes/sortlist-agencies.md](flows/bulkLeadSourcing/recipes/sortlist-agencies.md) |
 | know what a bulk run will cost and what refuses it, BEFORE submitting | [flows/bulkLeadSourcing/recipes/cost-and-limits.md](flows/bulkLeadSourcing/recipes/cost-and-limits.md) |
 | read a bulk run's leads (parent = funnel; `children.job_ids` = the leads) | [flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md) |
+| enrich leads the tenant ALREADY OWNS instead of buying more ("our leads", "re-run that campaign") | [flows/internalSources/recipes/internal-vs-buying.md](flows/internalSources/recipes/internal-vs-buying.md) |
+| turn a user's sentence into a valid filter AST over the corpus | [flows/internalSources/recipes/build-a-filter.md](flows/internalSources/recipes/build-a-filter.md) |
+| know WHICH count to quote before anyone authorises an internal run | [flows/internalSources/recipes/eligible-not-matched.md](flows/internalSources/recipes/eligible-not-matched.md) |
+| actually run an internal enrichment (past run, or filter → selection → submit) | [flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md) |
 | check how big a campaign will be BEFORE submitting | [flows/maps-site-verify-vayapin/recipes/cost-check.md](flows/maps-site-verify-vayapin/recipes/cost-check.md) |
 | stop / resume / retry / delete a campaign | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | auto-export a campaign's verified leads into a SmartLead outreach campaign | [flows/maps-site-verify-vayapin/recipes/smartlead-export.md](flows/maps-site-verify-vayapin/recipes/smartlead-export.md) |
@@ -280,6 +317,13 @@ This skill ships as typed tool calls generated from `client/schema.yaml`:
 | `searchLeads` | run one location (single) | [flows/maps-site-verify-vayapin/recipes/run-single.md](flows/maps-site-verify-vayapin/recipes/run-single.md) |
 | `createCampaign` | run across many locations | [flows/maps-site-verify-vayapin/recipes/run-campaign.md](flows/maps-site-verify-vayapin/recipes/run-campaign.md) |
 | `sourceLeadsBulk` | buy many queries x locations in ONE provider job, dedup, fan out per lead | [flows/bulkLeadSourcing/recipes/run-bulk.md](flows/bulkLeadSourcing/recipes/run-bulk.md) |
+| `listCorpusFields` | the queryable field catalogue **+ the filter-AST grammar** — read before authoring any filter | [flows/internalSources/recipes/build-a-filter.md](flows/internalSources/recipes/build-a-filter.md) |
+| `listCorpusFieldValues` | the spellings a field actually uses in this corpus | [flows/internalSources/recipes/build-a-filter.md](flows/internalSources/recipes/build-a-filter.md) |
+| `countCorpusLeads` | size a filter free — matched vs **eligible** | [flows/internalSources/recipes/eligible-not-matched.md](flows/internalSources/recipes/eligible-not-matched.md) |
+| `browseCorpusLeads` | one page of the leads a filter selects (show the human) | [flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md) |
+| `listPastRuns` | past campaigns/jobs that could be re-enriched | [flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md) |
+| `createCorpusSelection` | validate + persist a selection, get its id (spends nothing) | [flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md) |
+| `sourceLeadsInternal` | enrich leads you already own, from a selection id — **spends** | [flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md) |
 | `listCampaigns` / `getCampaignStatus` / `getJobStatus` | list + poll progress | [references/run-modes-and-progress.md](references/run-modes-and-progress.md) |
 | `stopCampaign` / `continueCampaign` / `updateCampaign` | halt / resume / edit config | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
 | `retryLocation` / `retryFailedLocations` | recover failures | [flows/maps-site-verify-vayapin/recipes/manage-campaign.md](flows/maps-site-verify-vayapin/recipes/manage-campaign.md) |
@@ -322,6 +366,12 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - **[flows/bulkLeadSourcing/recipes/sortlist-agencies.md](flows/bulkLeadSourcing/recipes/sortlist-agencies.md)** — the Sortlist source: agencies by service x country, the catalogue slugs (an off-catalogue one is accepted then kills the run), free-at-the-source vs the downstream spend, and why VayaPin is refused.
 - **[flows/bulkLeadSourcing/recipes/read-results.md](flows/bulkLeadSourcing/recipes/read-results.md)** — reading results (identical envelope to a campaign; `metadata` differs by design).
 
+**flow:internalSources (enrich leads you ALREADY OWN):**
+- **[flows/internalSources/recipes/internal-vs-buying.md](flows/internalSources/recipes/internal-vs-buying.md)** — internal vs a provider purchase, and how to hear which one the user meant. **Read first.**
+- **[flows/internalSources/recipes/build-a-filter.md](flows/internalSources/recipes/build-a-filter.md)** — the catalogue, the presets, the AST shape, and what each of the 14 refusal codes means you did. **Read before composing any filter.**
+- **[flows/internalSources/recipes/eligible-not-matched.md](flows/internalSources/recipes/eligible-not-matched.md)** — which of the two counts to quote, and why the other one is a number nothing acts on. **Read before quoting a figure to a human.**
+- **[flows/internalSources/recipes/run-internal.md](flows/internalSources/recipes/run-internal.md)** — the five calls in order; both source_kinds; why the filter is never sent on submit.
+
 **flow:perplexity-site-companydata-people (Company Intel):**
 - **[flows/perplexity-site-companydata-people/recipes/run-single.md](flows/perplexity-site-companydata-people/recipes/run-single.md)** · **[flows/perplexity-site-companydata-people/recipes/run-batch.md](flows/perplexity-site-companydata-people/recipes/run-batch.md)** — submit (one company / a list of ≤50).
 - **[flows/perplexity-site-companydata-people/recipes/read-results.md](flows/perplexity-site-companydata-people/recipes/read-results.md)** — read the account brief (registry + LinkedIn are standalone IDAP types).
@@ -353,3 +403,4 @@ The envelope contract (`guidance:` per method — `use` / `next` / `warn` /
 - `flows/emailVerify/scripts/verify-emails-complete.sh` — audits a finished emailVerify run (per-status breakdown; flags high `unknown` / not-completed).
 - `flows/linkedinProfiles/scripts/verify-people-complete.sh` — audits a finished linkedinProfiles run against the mode it ran (profile / search / company).
 - `flows/bulkLeadSourcing/scripts/verify-bulk-complete.sh` — audits a finished bulk run **without trusting the status code**: it asserts on contact data, which the purchased seed provably cannot contain, so a false green (flow died, seed echoed) exits non-zero instead of reading as success.
+- `flows/internalSources/scripts/verify-internal-complete.sh` — audits a finished INTERNAL run, also without trusting the status code — but on a **different assertion, deliberately**. The bulk script's "contact data proves the chain ran" argument is FALSE here: an internal run's seed is the tenant's own rows and may already carry contacts. It asserts on a **delta** instead — re-counting eligibility for the same spec must return a SMALLER number than the selection was sized at. Copying the bulk logic would build a gate that passes on a run which did nothing.

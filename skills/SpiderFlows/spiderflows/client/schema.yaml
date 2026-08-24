@@ -267,6 +267,187 @@ methods:
       test:     { type: boolean, required: false, description: 'Route to test queues; no production side effects.' }
     response: { format: json }
 
+  # ── INTERNAL sources (board BLS, slice I.4) ────────────────────────────────
+  # Re-enrich leads the tenant ALREADY OWNS, instead of buying new ones. The
+  # agent is the natural-language layer: it reads the catalogue, authors a
+  # validated filter AST, sizes it, and only then spends.
+  #
+  # 🔴 These six sit under /dashboard/... — that door carries
+  # allow_api_client=True, so a client PAT reaches it exactly as it reaches
+  # /dashboard/send/*. There is no mirror on the Bearer-only door and there
+  # should not be: a second copy of a tenant-scoping argument is a second place
+  # for it to drift.
+
+  listCorpusFields:
+    description: >
+      The queryable field catalogue for this tenant's own lead corpus, PLUS the
+      filter-AST grammar. One call is the complete vocabulary: fields[] (each
+      with its own allowed operators), ast.operators_by_type,
+      ast.valueless_operators, ast.list_operators, ast.operator_aliases,
+      ast.error_codes, a worked ast.example, the structural limits, and four
+      server-authored presets.
+    guidance:
+      use: "ALWAYS before authoring any filter — this is the whole vocabulary and there is nothing outside it"
+      next: "prefer a preset if one matches the user's intent; otherwise build a tree from fields[] and ast, then countCorpusLeads."
+      warn: "a field `key` is a catalogue lookup, NOT a column name — an unlisted key is a 422 `unknown_field` and never reaches SQL. Do not guess keys, do not pass column names, do not reuse a key you remember from another tenant."
+      scope: "static per deployment (it describes the SHAPE of the corpus, not its contents) — read once per session and reuse."
+      telemetry_signal_default: "cold"
+    http: GET /dashboard/bulk-lead-sourcing/corpus/fields
+    params: {}
+    response: { format: json }
+
+  listCorpusFieldValues:
+    description: >
+      Distinct values ONE enumerable field actually holds in this tenant's
+      corpus, so a filter is built from the data's own spellings rather than a
+      guess.
+    guidance:
+      use: "when the user names a city, category or status and you need the exact spelling the corpus uses ('Restaurant' vs 'restaurants')"
+      next: "use the returned value verbatim in an is / is_any_of condition."
+      warn: "only fields the catalogue marks enumerable answer this (they carry a `values_endpoint`). A free-text field returns 422 `field_not_enumerable` BY DESIGN — that is not an outage and not an empty corpus."
+      telemetry_signal_default: "cold"
+    http: GET /dashboard/bulk-lead-sourcing/corpus/values
+    params:
+      field: { type: string, required: true, description: "Catalogue key, e.g. 'business.city'." }
+      q:     { type: string, required: false, description: 'Prefix filter, for narrowing a long value list.' }
+    response: { format: json }
+
+  countCorpusLeads:
+    description: >
+      Size a filter WITHOUT saving or spending anything. Returns matched_leads
+      (what the filter selects) and eligible_leads (how many would actually
+      GAIN from the requested stages), plus a filter_digest.
+    guidance:
+      use: "iterate here until the number is right — it writes nothing, queues nothing and costs nothing"
+      next: "createCorpusSelection with the SAME stages and filter."
+      warn: "🔴 REPORT eligible_leads, NEVER matched_leads. 'select 5,000, enrich 200' is the ORDINARY case on a mature corpus, and eligible_leads is what the record ceiling, the cost (eligible x stages) and the runtime are all decided by — matched_leads is a figure nothing in the system acts on."
+      scope: "eligibility is scoped to `stages`. Change the stage set and both counts change, so a count carried from one stage set to another is a wrong answer delivered confidently."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/bulk-lead-sourcing/corpus/count
+    params:
+      stages:
+        type: array
+        required: true
+        items: { type: string }
+        description: "Stages the NEW run would enable: spidersite | spiderverify | vayapin. Required, never defaulted."
+      filter:
+        type: object
+        required: false
+        description: 'The filter AST. A group is {op: and|or, conditions: [...]}; a condition is {field, operator, value}. Build it from listCorpusFields — see recipes/build-a-filter.md.'
+      source_kind:  { type: string,  required: false, description: "'corpus_query' (default) or 'unenriched_run'." }
+      campaign_id:  { type: string,  required: false, description: 'Narrow to one past campaign.' }
+      job_id:       { type: string,  required: false, description: 'Narrow to ONE job (one location) inside a campaign.' }
+      exclude_without_website: { type: boolean, required: false, description: 'Exclude leads with no website at all. Default true — a site crawl cannot help them.' }
+    response: { format: json }
+
+  browseCorpusLeads:
+    description: >
+      One keyset-paginated page of the leads a filter selects — the sample you
+      show a human before they authorise a run.
+    guidance:
+      use: "to answer 'WHICH leads is this?' — a count of 4,000 is not evidence the filter means what the user thinks; ten rows usually is"
+      next: "pass the returned next_cursor to advance; then createCorpusSelection when the filter is right."
+      warn: "there is no page NUMBER and no OFFSET. A forged or stale cursor is a 422, not silently page 1."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/bulk-lead-sourcing/corpus/leads
+    params:
+      stages: { type: array, required: true, items: { type: string }, description: 'Same stage set the count used.' }
+      filter: { type: object, required: false, description: 'The filter AST.' }
+      source_kind: { type: string, required: false, description: "'corpus_query' (default) or 'unenriched_run'." }
+      campaign_id: { type: string, required: false, description: 'Narrow to one past campaign.' }
+      job_id:      { type: string, required: false, description: 'Narrow to ONE job inside a campaign.' }
+      exclude_without_website: { type: boolean, required: false, description: 'Default true.' }
+      cursor: { type: string,  required: false, description: 'Opaque cursor from the previous page. Omit for page 1.' }
+      sort:   { type: string,  required: false, description: "Sort mode, e.g. 'recent'." }
+      limit:  { type: integer, required: false, description: 'Rows per page (default 50).' }
+    response: { format: json }
+
+  listPastRuns:
+    description: >
+      Past campaigns (or jobs) this tenant could RE-ENRICH, each with its label
+      and its total-vs-eligible counts. The no-filter half of internal
+      sourcing.
+    guidance:
+      use: "when the user points at work they already did — 'run verify over the Berlin campaign', 'we never crawled last month's leads' — rather than describing a filter. No AST needed."
+      next: "createCorpusSelection with source_kind='unenriched_run' and the chosen campaign_id (or job_id) and the SAME stages."
+      warn: "`stages` is REQUIRED and deliberately has no default: every eligible_leads is scoped to it, and a defaulted stage set would silently answer a question the user did not ask about a number they are about to size a purchase against."
+      scope: "kind='job' lists individual jobs (one location each) — the sanctioned split when a campaign's eligible count exceeds the per-job record ceiling. Reads only: picking a run is free."
+      telemetry_signal_default: "cold"
+    http: GET /dashboard/bulk-lead-sourcing/past-runs
+    params:
+      # ⚠️ `publish-skill.sh` reports a `required diff` here (schema=true, api=false) and the
+      # SCHEMA is the correct one. FastAPI declares `stages: str = ""`, so OpenAPI marks it
+      # optional — but the handler rejects an empty or unknown value with a 422 that lists the
+      # real stage names. The parameter is enforced, just not declared. Do NOT "fix" this to
+      # required:false to silence the advisory: that would teach agents a call that always 422s.
+      stages: { type: string, required: true, description: "Comma-separated stages the NEW run would enable, e.g. 'spidersite,spiderverify'." }
+      kind:   { type: string, required: false, values: [campaign, job], description: "'campaign' (default) or 'job'." }
+      campaign_id: { type: string, required: false, description: "With kind='job', list the jobs INSIDE this campaign." }
+      exclude_without_website: { type: boolean, required: false, description: 'Default true.' }
+      limit:  { type: integer, required: false, description: 'How many runs to list (default 50).' }
+    response: { format: json }
+
+  createCorpusSelection:
+    description: >
+      Validate and persist a selection over this tenant's own corpus, and size
+      it. Returns 201 with selection_id + eligible_leads. Spends nothing and
+      queues nothing.
+    guidance:
+      use: "the ONLY place a filter AST is accepted. Two shapes: source_kind='corpus_query' + filter, or source_kind='unenriched_run' + campaign_id/job_id."
+      next: "confirm eligible_leads x your stage count with the human, THEN sourceLeadsInternal with the returned selection_id."
+      warn: "🔴 the filter is NEVER sent on submit and there is no field for it there — a body that could carry a predicate could carry ANOTHER tenant's predicate. Refusals here are all client-fixable and name the offending field: unknown_field, operator_not_allowed, unexpected_value (a value on is_empty), missing_value, invalid_value, list_too_long, too_many_conditions, too_deep, too_many_groups, value_too_long."
+      scope: "eligible_leads is Gate 2's number — leads that would actually GAIN from the requested stages. That is the figure to confirm, because it is the one the run is sized and billed against."
+      telemetry_signal_default: "warm"
+    http: POST /dashboard/bulk-lead-sourcing/selections
+    params:
+      source_kind: { type: string, required: true, values: [corpus_query, unenriched_run], description: "'corpus_query' pairs with `filter`; 'unenriched_run' pairs with campaign_id or job_id." }
+      stages: { type: array, required: true, items: { type: string }, description: 'Stages the NEW run will enable. At least one must leave a trace in the corpus.' }
+      filter: { type: object, required: false, description: 'The validated filter AST (corpus_query only).' }
+      campaign_id: { type: string, required: false, description: "The past campaign to re-enrich. REQUIRED for 'unenriched_run' unless job_id is given." }
+      job_id: { type: string, required: false, description: 'ONE job (one location) inside a campaign — the natural split when a whole campaign exceeds the record ceiling.' }
+      exclude_without_website: { type: boolean, required: false, description: 'Default true.' }
+    response: { format: json }
+
+  sourceLeadsInternal:
+    description: >
+      Run enrichment over leads this tenant ALREADY OWNS, from a selection id.
+      Returns 202 with bulk_job_id + job_id; the fan-out is driven by the bulk
+      worker, not by this request.
+    guidance:
+      use: "after createCorpusSelection, once the human has confirmed the eligible count. THIS is the call that spends."
+      next: "getJobStatus on the returned job_id (there is NO bulk-specific status route), then getJobResults / readResources. The result envelope is byte-identical to a campaign's."
+      warn: "⚠️ FREE AT THE SOURCE IS NOT FREE. Every money field reads 0/null because nobody is paid for us to read our own corpus — the spend is downstream and is eligible_leads x enabled stages. Do NOT tell the user this run is free, and do NOT branch that copy on an empty cost field: an UNPRICED PROVIDER looks identical on every money field. ⚠️ vayapin publishes PERMANENT public profile pages and is off unless explicitly set. ⚠️ Enable only the stages the selection was sized against — an extra stage changes the bill without changing the number you quoted."
+      scope: "the filter is not accepted here; only selection_id. An id naming no selection this tenant owns is 404 — never 403, which would confirm the id exists."
+      telemetry_signal_default: "hot"
+    http: POST /bulk-lead-sourcing/submit
+    params:
+      source:
+        type: object
+        required: true
+        description: "{ provider: 'internal', source_kind, selection: { selection_id } }. Mutually exclusive with `queries` and `upload`."
+        properties:
+          provider:    { type: string, values: [internal], description: "Always 'internal' for this method." }
+          source_kind: { type: string, values: [corpus_query, unenriched_run], description: "Must match the selection's own kind." }
+          selection:
+            type: object
+            description: 'Points at the selection. An id and NOTHING else.'
+            properties:
+              selection_id: { type: string, description: 'From createCorpusSelection.' }
+      settings:
+        type: object
+        required: false
+        description: 'settings.workflow is the SAME WorkflowConfig a campaign uses.'
+        properties:
+          workflow:
+            type: object
+            properties:
+              spidersite:   { type: object, properties: { enabled: { type: boolean } } }
+              spiderverify: { type: object, properties: { enabled: { type: boolean } } }
+              vayapin:      { type: object, properties: { enabled: { type: boolean } } }
+      priority: { type: integer, required: false, description: 'Queue priority for the fanned-out leads, 0-10.' }
+      test:     { type: boolean, required: false, description: 'Route to test queues.' }
+    response: { format: json }
+
   listCampaigns:
     description: List campaigns with optional filters.
     guidance: { use: "see existing campaigns before creating a duplicate", telemetry_signal_default: "warm" }
