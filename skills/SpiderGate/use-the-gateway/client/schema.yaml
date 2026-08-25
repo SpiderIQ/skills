@@ -9,7 +9,7 @@
 # gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
-version: "0.2.0"
+version: "0.3.0"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
@@ -51,6 +51,15 @@ guidance:
     - "Per-call dollar cost is spidergate_metadata.cost_usd, NOT the usage block (which is tokens only)."
     - "max_cost_usd, cache_enabled, fallback_models and stream are HTTP-only — the gate_chat MCP tool drops them."
     - "The served model can differ from the alias slot-0 (a fallback fired) — read spidergate_metadata.provider_model, don't assume."
+    - "Reading spend: use from/to for a real calendar range. `days` is a DEPRECATED rolling lookback and is IGNORED when from/to are given — a lookback cannot express a month."
+    - "usage.turn_metrics: a TURN is one logical request; ATTEMPTS include retries and fallbacks. total_requests is an ATTEMPT count — quoting it as user demand overstates it by the amplification factor."
+    - "usage.outcome has FOUR states (delivered/hollow/failed/unknown), not three. `unknown` is not-classifiable (rows predating the measurement), NOT a success — folding it into delivered is a false all-clear. Read `measurable_from`; if window_predates_measurement is true, delivered_rate covers only the classifiable rows."
+    - "usage.outcome.truncated and .tool_call_turns are ANNOTATIONS overlapping the four states, not extra states — summing all six double-counts."
+    - "usage.by_provider is the litellm WIRE PREFIX, not the provider (~75k MiniMax rows read openai). For the real provider use the gate_flow tool, which resolves it through the integration behind the key."
+    - "usage.cost_avoided is a COUNTERFACTUAL against a reference list price, never an invoice — never present avoided_usd as billing or savings."
+    - "gate_capacity.key_pressure is traffic_scope=pool_wide (every tenant on that key), NOT your usage. Its verdict can REFUSE: on not_quota / account_capped, suggested_keys is deliberately null — rendering a number there turns a refusal into an upsell."
+    - "gate_capacity.subscription_windows: read gauge_available EACH TIME (it is live-changing). While false, window_percent/weekly_percent are PRESENT AND NULL — not absent, not 0%. Never render a null as an empty gauge."
+    - "gate_capacity / gate_flow need @spideriq/mcp-gate >= 1.10.0 (sink @spideriq/mcp >= 1.89.0) or @spideriq/cli >= 1.71.0. On an older client they do not exist."
     - "Embeddings (embed) are HTTP-only (no MCP/CLI tool yet) and need a brand OpenAI key with the vault supports_embeddings flag — else 503 no_embeddings_key; use the SpiderGate PAT as api_key, never a raw OPENAI_API_KEY."
 
 methods:
@@ -64,7 +73,7 @@ methods:
       provider that served, the actual model, and the dollar cost.
     guidance:
       use: "Route one LLM call through the gateway as a provider."
-      next: "listAliases (pick the right task), read spidergate_metadata.cost_usd, getUsage (aggregate spend)"
+      next: "listAliases (pick the right task), read spidergate_metadata.cost_usd, then the gate_usage MCP tool / `spideriq gate usage` for aggregate spend (there is no getUsage METHOD here — brand analytics resolve under a different root)"
       warn: "Never send client PII on a free-tier alias (spideriq/fast,/free,/extraction) — it can be used for training (HARD-GATE). For PII use spideriq/lead-analysis. A 422 with code no_qualifying_model is NOT retriable and costs nothing: every candidate model is measured to fail at your max_tokens. It carries no Retry-After and the same request fails identically forever \u2014 raise max_tokens or pick another model/alias, never loop."
       telemetry_signal_default: "warm"
     http: POST /chat/completions
@@ -80,8 +89,8 @@ methods:
         items:
           type: object
           properties:
-            role: { type: string, values: [system, user, assistant, tool], required: true }
-            content: { type: string, required: true }
+            role: { type: string, values: [system, user, assistant, tool], required: true, description: Who is speaking. }
+            content: { type: string, required: true, description: The message text. }
       temperature:
         type: number
         required: false
@@ -99,7 +108,7 @@ methods:
         required: false
         description: '{type: "json_object"} or {type: "json_schema", json_schema: {...}} for strict structured output.'
         properties:
-          type: { type: string, values: [text, json_object, json_schema], required: true }
+          type: { type: string, values: [text, json_object, json_schema], required: true, description: Response mode — plain text, any JSON object, or a strict JSON schema. }
           json_schema: { type: object, required: false }
       tools:
         type: array
@@ -108,12 +117,13 @@ methods:
         items:
           type: object
           properties:
-            type: { type: string, values: [function], required: true }
+            type: { type: string, values: [function], required: true, description: Tool kind; only "function" is supported. }
             function:
               type: object
               required: true
+              description: The callable function this tool exposes.
               properties:
-                name: { type: string, required: true }
+                name: { type: string, required: true, description: Function name the model emits in a tool call. }
                 description: { type: string, required: false }
                 parameters: { type: object, required: false }
                 strict: { type: boolean, required: false }

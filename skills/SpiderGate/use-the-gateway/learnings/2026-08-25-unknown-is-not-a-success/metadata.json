@@ -1,0 +1,15 @@
+{
+  "title": "The gateway's outcome split has FOUR states, and `unknown` is not a success",
+  "summary": "`usage.outcome` returns delivered / hollow / failed / unknown as four mutually exclusive states that sum to `total`. `unknown` means the row predates the `output_chars` column, so the split cannot be computed for it — it is 'we cannot tell', not 'it worked'. An agent that folds unknown into delivered produces a false all-clear, which is the exact class of confidently-wrong number this surface was rebuilt to remove: before the rebuild, `agent/chat` reported 0.1% errors while returning nothing at all on 62.2% of requests. Two further traps sit on the same block: `truncated` and `tool_call_turns` are ANNOTATIONS that overlap the four states rather than extra states, so summing all six double-counts; and a tool-call turn returns zero visible characters by construction and is DELIVERED, not hollow. Trustworthiness is dated — read `outcome.measurable_from` (2026-08-13 at time of writing) and check `window_predates_measurement` rather than hard-coding the date, because a window reaching back before it yields a `delivered_rate` computed over only the classifiable rows.",
+  "created_at": "2026-08-25",
+  "updated_at": "2026-08-25",
+  "tags": ["usage", "observability", "outcome", "measurement", "false-all-clear"],
+  "references": [
+    "app/services/gate/usage_aggregates.py:131 — _OUTCOME_KEYS = (failed, unknown, hollow, delivered, truncated, tool_call_turns): six keys, four states",
+    "app/services/gate/usage_aggregates.py:48 — OUTCOME_MEASURABLE_FROM = '2026-08-13'; :688 emitted as outcome.measurable_from (NOT 'outcome_measurable_from', a name that exists nowhere in the codebase)",
+    "app/services/gate/usage_aggregates.py:686 — window_predates_measurement, and delivered_rate computed over `classified`, not over `total`",
+    "packages/mcp-tools/src/gate/gate.ts:360 — the gate_usage tool description carries the same four-state warning",
+    "docs/services/SpiderGate/mockups/GATE-USAGE-REDESIGN-PLAN-2026-08-23.md — the redesign that added the fourth state (board GUR)",
+    "references/read-usage-and-traces.md — the agent-facing WRONG/RIGHT"
+  ]
+}
