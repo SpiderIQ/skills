@@ -83,6 +83,48 @@ A cache hit returns `spidergate_metadata.cache_hit: true` and `cost_usd: 0`. `ca
 is bounded `60 .. 86400`. Only cache when identical inputs SHOULD give identical outputs
 (classification/extraction — yes; creative generation — usually no).
 
+### When nothing can serve your budget — `422 no_qualifying_model`
+
+Before dispatching, the gateway checks each candidate model against what it has been **measured
+doing** at your completion budget. A model measured returning an empty completion at that budget is
+removed from the pool for this request, and another model behind the alias serves instead — you see
+an ordinary `200`.
+
+If **no** candidate qualifies you get a typed refusal, and **nothing is billed** because no provider
+was contacted:
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "no_qualifying_model",
+    "message": "No model behind 'MiniMax-M2.5' can serve a completion budget of 16 tokens. Every candidate is measured to fail at this budget — raise max_tokens or request a different model."
+  },
+  "spidergate_error": {
+    "requested_model": "MiniMax-M2.5",
+    "completion_budget": 16,
+    "candidates": [
+      { "model": "MiniMax-M2.5", "provider": "openai", "verdict": "known_empty_at_budget" }
+    ]
+  }
+}
+```
+
+❌ **WRONG** — retrying it. There is no `Retry-After`, the verdict is deterministic, and the same
+request fails the same way every time. A retry loop never terminates.
+
+✅ **RIGHT** — raise `max_tokens`, or send a different model/alias. Read
+`spidergate_error.candidates[]` to see what was ruled out and why:
+`known_empty_at_budget` (measured returning nothing at this budget) ·
+`exceeds_tier_ceiling` (budget above the model's measured ceiling on its tier).
+
+**Pinning one concrete model removes the reroute.** Rerouting works by narrowing a pool, so a single
+pinned model has no alternative to move to and a disqualification becomes a refusal immediately. Use
+a task alias if you want the reroute.
+
+**On the streaming path this is a real `422` with `content-type: application/json`** — not a `200`
+carrying an error frame in the SSE body. Assert the status code, not merely "did I get an error".
+
 ### Hand-rolling a fallback chain the alias already gives you
 
 ❌ **WRONG** — catching an error client-side and re-POSTing to a second model.

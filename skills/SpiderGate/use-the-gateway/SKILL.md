@@ -79,6 +79,8 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 
 **`max_cost_usd`, cache, JSON, and tools are first-class on CLI + MCP (≥ cli@1.25.0 / mcp@1.31.0).** The per-request budget cap, response cache, fallback chain, `response_format`, and `tools`/`tool_choice` are forwarded by `gate_chat` and `spideriq gate chat` (`--max-cost`/`--cache`/`--json`). **Only token-by-token streaming is still HTTP-only** — use the raw endpoint with `stream: true` (or the OpenAI SDK) for that. Older clients: use raw HTTP for all of the above. ([references/gaps.md](references/gaps.md))
 
+**A `422 no_qualifying_model` IS NOT RETRIABLE — never loop on it.** The gateway now qualifies candidate models BEFORE it contacts a provider: if a model is measured to return an empty completion at your `max_tokens`, it is dropped from the pool and another model behind the alias serves you. If nothing qualifies you get **HTTP 422**, `code: no_qualifying_model`, at **zero spend** — no tokens are billed. It carries **no `Retry-After`** because the same request fails identically every time; a retry loop spins forever. Raise `max_tokens`, or pick a different model or alias. The body's `spidergate_error.candidates[]` names each model, its provider, and the verdict (`known_empty_at_budget` | `exceeds_tier_ceiling`). Streaming returns the same real 422 with `content-type: application/json`, **not** a `200` carrying an error frame. ([references/cost-aware-completion.md](references/cost-aware-completion.md))
+
 **NEVER tight-loop a stream or a poll.** Streaming uses one long-lived SSE connection — consume it, don't reconnect per token. Don't re-`/models` on every turn; the catalog is stable (cache it).
 
 ## Decision tree — pick a reference

@@ -65,7 +65,7 @@ methods:
     guidance:
       use: "Route one LLM call through the gateway as a provider."
       next: "listAliases (pick the right task), read spidergate_metadata.cost_usd, getUsage (aggregate spend)"
-      warn: "Never send client PII on a free-tier alias (spideriq/fast,/free,/extraction) — it can be used for training (HARD-GATE). For PII use spideriq/lead-analysis."
+      warn: "Never send client PII on a free-tier alias (spideriq/fast,/free,/extraction) — it can be used for training (HARD-GATE). For PII use spideriq/lead-analysis. A 422 with code no_qualifying_model is NOT retriable and costs nothing: every candidate model is measured to fail at your max_tokens. It carries no Retry-After and the same request fails identically forever \u2014 raise max_tokens or pick another model/alias, never loop."
       telemetry_signal_default: "warm"
     http: POST /chat/completions
     params:
