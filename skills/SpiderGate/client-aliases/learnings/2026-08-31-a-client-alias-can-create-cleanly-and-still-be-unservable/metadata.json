@@ -1,0 +1,13 @@
+{
+  "title": "A client alias can create cleanly and still be unservable — creation validates shape, not the key",
+  "summary": "A 201 from createClientAlias proves the request body was well-formed. It does not prove any slot can serve: the key may be inactive, deleted, owned by another tenant, or inject-only (Anthropic / Gemini-CLI). The slot is then REFUSED at request time rather than re-routed, so the failure surfaces later and reads as a routing bug. Read the slot key state from getClientAlias before diagnosing routing.",
+  "created_at": "2026-08-31",
+  "updated_at": "2026-08-31",
+  "tags": ["gateway", "client-aliases", "byok", "fail-closed", "diagnosis"],
+  "references": [
+    "app/api/v1/dashboard_gate_client_aliases.py — the CRUD routes; validation is Pydantic shape only (SlotIn requires integration_id/provider/model)",
+    "app/services/gate/client_alias_binding.py — resolution-time ownership + key-type enforcement; where the refusal is actually raised",
+    "SpiderIQ card SQAR2-17 (P5.2) — enforcement that a client alias reaches only the tenant's own keys; live-verified 2026-08-30 with a per-arm negative control (own key -> servable; same row, foreign brands_id -> key_not_owned; owned anthropic/gemini_cli -> key_inject_only)",
+    "SpiderIQ card SQAR2-19 (P5.4) — the CLI/MCP/skill surface this learning ships with"
+  ]
+}

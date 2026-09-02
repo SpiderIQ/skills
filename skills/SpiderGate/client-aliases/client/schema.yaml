@@ -1,0 +1,223 @@
+# SpiderGate CLIENT-created routing aliases. API surface + envelope.
+#
+# ⚠ UPSTREAM: this skill rides the SpiderIQ REST base (https://spideriq.ai/api/v1),
+# NOT the SpiderGate LLM base that use-the-gateway / generate-media / model-catalog
+# use. The routes are mounted at /api/v1/dashboard/gate/client-aliases
+# (app/api/v1/dashboard_gate_client_aliases.py, router prefix
+# "/dashboard/gate/client-aliases"). A relative path declared under the LLM base
+# would resolve to https://spideriq.ai/api/gate/v1/dashboard/gate/client-aliases
+# and 404 at runtime — the phantom-backend shape that publishes HEALTHY.
+# `studio-prompts` and `events-stream` override for the same reason.
+#
+# Method `http:` paths stay SHORT/relative and must NOT start with /api/v1, or
+# the composed URL doubles the prefix.
+name: client-aliases
+version: "0.1.0"
+description: >
+  Create and manage your own named routing aliases on the SpiderGate gateway —
+  an ordered fallback chain of models, each slot funded by one of your own
+  provider keys, callable afterwards as the single model name
+  "client:<brand>/<leaf>".
+category: ai-gateway
+base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api/v1  # SpiderIQ REST base — NOT the LLM base
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - my own alias
+  - client alias
+  - routing alias
+  - fallback chain
+  - bring my own key
+  - BYOK
+  - use my own API key
+  - my model chain
+
+guidance:
+  use: >
+    Manage the routing aliases THIS tenant created — list, inspect, create,
+    update and delete "client:<brand>/<leaf>". Each alias is an ordered chain of
+    slots, and every slot names one of the tenant's own provider keys, which is
+    what funds it. Reach for this when someone wants their own stable model name,
+    their own fallback order, or wants their gateway calls billed to their own
+    provider key.
+  not:
+    - "use-the-gateway → SEND a completion (including one that names a client alias). This skill only manages the aliases."
+    - "model-catalog → compare, rank or discover models before putting one in a slot; also the SpiderIQ task aliases (spideriq/*, agent/*), which are NOT managed here."
+    - "spidergate-manager → read usage, spend, capacity and traces once the alias is serving."
+  intent_aliases: [name, alias, leaf]
+  pitfalls:
+    - "`integration_id` is REQUIRED on every slot and has no default — it is one of YOUR OWN provider keys, and it funds the slot. There is no fallback to the SpiderIQ pool, by design."
+    - "Creating PUBLISHES the alias — it is live the moment the call returns. Send `enabled: false` to author one without arming it."
+    - "On update, `slots` REPLACES the whole ordered chain. It is not a merge and not an append: read the alias first and send back the full list."
+    - "`name` is the SHORT LEAF only (`cheap`), never `client:7/cheap`. The prefix is generated server-side and cannot be supplied."
+    - "A 404 means 'no such alias FOR YOU'. Another tenant's alias returns the same 404 by design, so a 404 is never evidence a name is globally free."
+    - "An alias that creates cleanly can still be unservable — creation validates shape, not the key's ability to serve that model. Read the slot key state from getClientAlias before blaming routing."
+    - "Reads need the `member` role; every write needs `admin`. A 403 on a write is a role answer, not a broken credential."
+
+methods:
+  listClientAliases:
+    description: >
+      List this tenant's own routing aliases, each with its ordered slots. These
+      are aliases the client created — the SpiderIQ task aliases (spideriq/*,
+      agent/*, opvs/*) never appear here.
+    guidance:
+      use: "See what this tenant already has before creating anything, and to find the leaf name of an existing alias."
+      next: "getClientAlias (inspect one, with its slot key state) · createClientAlias (add a new one)"
+      warn: "Takes no brand argument — the tenant comes from the credential. An empty list means this tenant has no aliases, never that the feature is off."
+      telemetry_signal_default: "cold"
+    http: GET /dashboard/gate/client-aliases
+    params:
+      limit:
+        type: integer
+        required: false
+        description: "1–200. Default 50."
+      offset:
+        type: integer
+        required: false
+        description: "Zero-based page offset."
+    response:
+      format: json
+
+  getClientAlias:
+    description: >
+      Read one client alias by its short leaf, with each slot's provider, model
+      and the STATE OF THE KEY behind it (key_label, cost_type, key_is_active).
+      This is the diagnostic call — an alias can exist and still be unservable.
+    guidance:
+      use: "Before changing a chain (you must send back the full slot list), and whenever an alias is not serving."
+      next: "updateClientAlias (fix the chain) · use-the-gateway (call it once the slots look right)"
+      warn: "404 means no such alias FOR YOU. Another tenant's alias returns the SAME 404 by design — never read it as 'that name is free'."
+      telemetry_signal_default: "hot"
+    http: GET /dashboard/gate/client-aliases/{name}
+    params:
+      name:
+        type: string
+        required: true
+        description: "The SHORT LEAF only, e.g. `cheap` — never the full `client:7/cheap`."
+    response:
+      format: json
+
+  createClientAlias:
+    description: >
+      Create a client alias with an ordered fallback chain. The server prepends
+      `client:<your-brand>/` to the name, so the alias can never collide with
+      spideriq/*, agent/* or opvs/*.
+    guidance:
+      use: "When the tenant wants their own stable model name, their own fallback order, or their calls funded by their own provider key."
+      next: "getClientAlias (confirm the slot key state) · use-the-gateway (call it)"
+      warn: "🔴 Creating PUBLISHES it — the alias is live for this tenant the moment the call returns. Pass enabled=false to author without arming. Every slot MUST name an integration_id: one of the tenant's OWN keys, which funds it. Requires the admin role."
+      telemetry_signal_default: "cold"
+    http: POST /dashboard/gate/client-aliases
+    params:
+      name:
+        type: string
+        required: true
+        description: "Short leaf only, e.g. `cheap`. Lowercase a-z0-9 plus - and _, max 64 chars. The `client:<brand>/` prefix is added by the server and cannot be supplied."
+      description:
+        type: string
+        required: false
+        description: "Free text for humans, max 500 chars."
+      enabled:
+        type: boolean
+        required: false
+        description: "Default true — and true means LIVE. Send false to author the alias without arming it."
+      slots:
+        type: array
+        required: true
+        description: "Ordered fallback chain, 1–16 entries. Slot 0 is tried first."
+        items:
+          type: object
+          properties:
+            integration_id:
+              type: integer
+              required: true
+              description: "One of THIS TENANT'S OWN provider keys (api_integrations.id). It funds the slot. No default — a slot may never fall back to the SpiderIQ pool."
+            provider:
+              type: string
+              required: true
+              description: "Provider name, e.g. `openai`."
+            model:
+              type: string
+              required: true
+              description: "Model id at that provider, e.g. `gpt-4o-mini`."
+            enabled:
+              type: boolean
+              required: false
+              description: "Default true. A disabled slot is skipped in the chain."
+    response:
+      format: json
+
+  updateClientAlias:
+    description: >
+      Update a client alias. Only the fields you send change. Use enabled=false
+      to take an alias out of service reversibly, keeping its chain and history.
+    guidance:
+      use: "Change the fallback order, swap a model or key, re-describe an alias, or park/unpark it."
+      next: "getClientAlias (confirm what the chain now is)"
+      warn: "⚠️ `slots` REPLACES the whole ordered set — not a merge, not an append. Read getClientAlias first and send back the FULL list, or the slots you omitted are deleted. Requires the admin role."
+      telemetry_signal_default: "warm"
+    http: PATCH /dashboard/gate/client-aliases/{name}
+    params:
+      name:
+        type: string
+        required: true
+        description: "The short leaf of the alias to update."
+      description:
+        type: string
+        required: false
+        description: "Replace the description (max 500 chars). Send null to clear it."
+      enabled:
+        type: boolean
+        required: false
+        description: "Arm (true) or take out of service (false), keeping the alias."
+      slots:
+        type: array
+        required: false
+        description: "REPLACES the whole ordered chain, 1–16 entries. Omit the field entirely to leave slots untouched."
+        items:
+          type: object
+          properties:
+            integration_id:
+              type: integer
+              required: true
+              description: "One of THIS TENANT'S OWN provider keys. It funds the slot."
+            provider:
+              type: string
+              required: true
+              description: "Provider name, e.g. `openai`."
+            model:
+              type: string
+              required: true
+              description: "Model id at that provider."
+            enabled:
+              type: boolean
+              required: false
+              description: "Default true. A disabled slot is skipped."
+    response:
+      format: json
+
+  deleteClientAlias:
+    description: >
+      Delete a client alias and its slots permanently. Answers 204 with no body.
+    guidance:
+      use: "Retire an alias for good, when the tenant is sure they will not want it back."
+      next: "listClientAliases (confirm it is gone)"
+      warn: "Requests still naming the alias are then REFUSED — they do NOT fall back to a spideriq/* alias or to our pool. Prefer updateClientAlias with enabled=false if the tenant may want it back: a disabled alias keeps its chain. Requires the admin role."
+      telemetry_signal_default: "cold"
+    http: DELETE /dashboard/gate/client-aliases/{name}
+    params:
+      name:
+        type: string
+        required: true
+        description: "The short leaf of the alias to delete."
+    response:
+      format: json
