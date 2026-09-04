@@ -563,7 +563,9 @@ For each internal link:
 The response tells you where to go next:
 
 1. **Fix at the source** — `source: "page:home/block[2].cta_primary.url"` means `blocks[2].data.cta_primary.url` on the page with slug `home`. Use `content_update_page` to edit that block.
-2. **Or create a redirect** — `proposed_redirects` suggests 301s when a broken path's suffix matches an existing slug. Review each one, then `content_create_redirect` for the ones you want.
+2. **Or create a redirect** — `proposed_redirects` suggests 301s when a broken path's suffix matches an existing slug. Review each one, then create the ones you want.
+
+   🔴 **There is no `content_create_redirect` tool, and no CLI command either.** The redirect surface is **HTTP-only**: `POST /api/v1/dashboard/content/redirects` (list with `GET`, remove with `DELETE /redirects/{id}`). Call it directly with the tenant's PAT, or create the redirect in the dashboard. `proposed_redirects` gives you the `from` / `to` / `status_code` to send — it does not apply them.
 
 ### Why this matters
 

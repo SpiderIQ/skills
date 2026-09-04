@@ -189,7 +189,7 @@ On dev tenants, `content_create_page({ title: "test" })` immediately is fine. On
 ## See also
 
 - `scripts/` in the SpiderIQ repo (internal) — the `dry-run-then-confirm.py` wrapper + exit codes
-- [`../../../scripts/verify-tenant-scope.sh`](../../../scripts/verify-tenant-scope.sh) — Locks 1+3 pre-flight
+- `scripts/verify-tenant-scope.sh` — Locks 1+3 pre-flight. ⚠️ **Not shipped inside this package** — it lives in the SpiderIQ repo, not in the installed skill, so treat every `./scripts/verify-tenant-scope.sh` line in these references as *"confirm the tenant scope"*, not as a file you can run from the install. Confirm it with `get_auth_status` / `list_workspaces` instead.
 - [`booking-model.md`](booking-model.md) — gated mutations on the booking surface
 - [`SKILL.md` → *Auth + two URL surfaces*](../SKILL.md) — which auth (X-Admin-Key vs PAT vs session) goes where
 - [`tool-surface.md`](tool-surface.md) — full tool catalog with per-tool gate flavour

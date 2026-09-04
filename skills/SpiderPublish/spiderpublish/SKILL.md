@@ -298,11 +298,13 @@ The user names ONE noun. That noun tells you which reference AND which package:
 |---|---|---|
 | page, section, block, hero | any universe (`page_insert_section` needs default+) | `references/content.md` · `references/block-types.md` |
 | blog, post, author, tag, category | any universe | `references/content.md` · `references/blog-page-design.md` |
-| header, footer, nav, chrome | nav: any · **override: kitchen sink** (fallback `template_upsert`) | `references/content.md` |
+| header, footer, nav, chrome | nav: any · 🔴 **override: `template_upsert` — the three `content_*_section` tools are registered by NO published server** | `references/content.md` |
 | component, marketplace, section library | default+ | `references/components.md` · `references/marketplace.md` |
 | theme, template, starter site, deploy | any universe | `references/templates-deploy.md` |
 | docs, API reference, OpenAPI | authoring: any · **ask/search: kitchen sink** | `references/content.md` · `references/docs-site-design.md` |
 | collection, case studies, products, custom type | any universe | `references/collections.md` |
+| **directory, listings, programmatic SEO, "a page per city"** | any universe | `references/directory-pages.md` |
+| **`dynamic_list`, `dynamic_item`, `collection_type`, "the list page is empty"** | any universe | `references/dynamic-collections.md` |
 | changelog, release notes | any universe | `references/changelog.md` |
 | **form, lead capture, contact form** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/forms-booking.md` |
 | **booking, appointment, calendar** | this skill: ✅ HTTP · MCP: **kitchen sink only** | `references/booking-model.md` |
@@ -479,6 +481,8 @@ is pending* invents a blocker. See the hard gate above.
 | Apply a theme / starter site | `listThemes`→`applyTheme` · `listSiteTemplates`→`applySiteTemplate` | `references/templates-deploy.md` |
 | Add a landing/opt-in/thank-you/VSL page (clone + adapt — the default) | `listPageTemplates`→`applyPageTemplate` | `references/templates-deploy.md` |
 | **Personalise a landing page per prospect** (`/lp/{page}/{id}` — outreach, ABM, a page per account) | `createPage`(`template="dynamic_landing"`)→`publishPage`→`deploySite`; identifier via `?resolve_key=` | `references/dynamic-landing.md` |
+| **Build a programmatic-SEO directory** — many per-city pages from the tenant's own business data ("plumbers in {city}") | `directory_create_category`→`directory_import_from_idap` (IDAP) or `directory_bulk_upsert_listings` (any other source). No publish step, no deploy step. Re-import with `prune=true` or stale listings serve forever | `references/directory-pages.md` |
+| **List a collection on a page** — `dynamic_list` / `dynamic_item` and which `collection_type` to bind | `createPage`(`template="dynamic_list"`, `collection_type=…`)→`publishPage`. 🔴 The binding is NOT validated against the DB — a typo is a `201` that renders an empty page forever | `references/dynamic-collections.md` |
 | Customise a Liquid template | `getTemplate` · `upsertTemplate` · `previewTemplate` | `references/templates-deploy.md` |
 | Deploy / preview a deploy / roll back | `deployPreview`→`deployProduction` · `deploySite` · `deployReadiness` | `references/templates-deploy.md` |
 | Build a form / lead capture / contact form | `form_create`→`form_add_field`→`form_publish`→`form_get_embed_snippet` — **kitchen sink only** | `references/forms-booking.md` |

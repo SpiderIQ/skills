@@ -171,7 +171,7 @@ Call once per session and cache. Each saves 1-3 round-trips per recipe.
 |---|---|---|
 | `GET /api/v1/content/help` | ~2,867-token YAML reference: block types, 14 Liquid filters, 4 custom tags, template structure, data sources, agent-natural alias hints | First call in any SpiderPublish-related conversation. Sets the schema vocabulary. |
 | `GET /api/v1/content/help/block-fields` | Per-block-type field maps + alias map + anti-patterns | Before composing any non-component block (catches the silent-blank trap from [`block-types.md`](block-types.md)). |
-| `GET /api/v1/dashboard/idap/merge-tags?page_id={id}` | Merge-tag vocabulary for dynamic landing pages (`{{firstname}}`, `{{company_name}}`, etc.) | Before authoring a `template: dynamic_list` / `dynamic_item` page that uses merge tags. |
+| `GET /api/v1/dashboard/idap/merge-tags?page_id={id}` | Merge-tag vocabulary for dynamic landing pages (`{{firstname}}`, `{{company_name}}`, etc.) | Before authoring a **`template: dynamic_landing`** page. 🔴 **NOT for `dynamic_list` / `dynamic_item`** — merge tags are `/lp/` lead-scoped and resolve to the empty shape on every other route. |
 
 All three are public reads — no auth required. Hit them via curl in any session:
 
@@ -228,7 +228,7 @@ Each row is a domain. Counts roughly reflect `packages/mcp-tools/src/publish/*.t
 | Docs query ⚠️ **sink** | `docs_query.ts` | 4 | `search_docs` / `semantic_search_docs` / `ask_docs` / `get_doc` |
 | Marketplace (browse + insert + agent_meta) ⚠️ **was -mac128** | `marketplace.ts` | ~12 | Section inserts, bg-videos, agent-meta authoring. **The reuse path** — present by default; the retired slice dropped it, which is what made that slice unusable. |
 | Site templates ⚠️ **was -mac128** (`apply` only) | `site_templates.ts` | 3 | Curated starter sites — `list` + `get` + `apply`. The retired slice dropped `content_apply_site_template`. |
-| Directory (SEO category/listing) | `directory.ts` (299 LOC) | 10 | Programmatic SEO |
+| Directory (SEO category/listing) | `directory.ts` | **11** | Programmatic SEO — guarded by `verifyToolSet('directory', …)` |
 | Duplicate (page/block/post/doc) | `duplicate.ts` (177 LOC) | 4 | Cheap deep-copies |
 | Component propagation | `component_propagation.ts` (210 LOC) | 2 | The two one-shots: `update_and_propagate`, `rollback` |
 | Audit + visual-check | `audit.ts` (47 LOC) + `content.ts` (visual-check) | 2 | Link audit + Playwright sidecar |

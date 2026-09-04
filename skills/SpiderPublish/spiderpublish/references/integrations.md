@@ -22,23 +22,54 @@ directory listings.
 
 ## Sync To Directory
 
-Sync an Airtable view → SpiderPublish directory listings via `directory_bulk_upsert_listings`. One-shot import, idempotent by external_id, runs nightly via cron or on-demand.
+Mirror an outside system — an Airtable view, a Google Sheet, a partner feed — into SpiderPublish
+directory listings with `directory_bulk_upsert_listings`. One-shot import or a cron you drive.
+
+### 🔴 Read this before you design the sync
+
+**Idempotency is by `slug`, within a category.** The unique index on `content_directory_listings`
+is **`(category_id, slug)`**. That pair is the whole matching rule.
+
+There is **no `external_id` column** — not on the table, not in `directory_service.py`, not in any
+tool schema. There is **no `on_conflict` parameter** anywhere. A sync designed around an external
+idempotency key has nothing to key on and will duplicate every row on the second run.
+
+**So: derive a STABLE slug from a stable source field, and treat it as the primary key.**
+
+```
+   Airtable "Slug" column (never edited)  ──▶  listing.slug  ──▶  (category_id, slug) UPSERT
+   Airtable record id "rec…"              ──▶  listing.data.airtable_record_id   (provenance only)
+```
+
+Put the source record id in the listing's **`data` JSONB** so you can audit provenance, and use
+**`source_job_id`** when the rows came from a SpiderIQ job. Neither is an idempotency key; both are
+audit trails.
+
+⚠️ **Slug stability is the whole game.** If your slug derives from a name the client edits, the
+next sync creates a *second* listing at a new URL and leaves the old one published. Use a
+dedicated, never-edited slug column in the source.
 
 ### When to use
 
-- A client maintains their canonical service list in Airtable and wants it published as programmatic-SEO directory pages.
-- Recurring sync: Airtable is the source of truth, SpiderPublish renders + serves.
-- Initial migration: 50-5000 rows from Airtable → tenant directory in one job.
-- Pattern: "Airtable view is the master; mirror it as a public directory."
+- A client maintains their canonical service list outside SpiderPublish and wants it published as
+  programmatic-SEO directory pages.
+- Recurring sync: the outside system is the source of truth, SpiderPublish renders and serves.
+- Initial migration: 50–5000 rows into a tenant directory in one job.
+
+**Not this recipe if the data is already in SpiderIQ.** For the tenant's own IDAP corpus, one call
+does the whole thing — `directory_import_from_idap`, see *IDAP → directory* below and
+[`directory-pages.md`](directory-pages.md).
 
 ### Prerequisites
 
-- Airtable Personal Access Token (PAT) with read access to the target base.
+- Read access to the source (e.g. an Airtable Personal Access Token for the base).
 - A SpiderPublish PAT scoped to the tenant.
-- A `directory_categories` row already created in the tenant (the parent for listings). See [`../../directory/import-listings.md`](integrations.md#import-listings).
-- Field map: which Airtable columns → which directory fields (`name`, `slug`, `description`, `address`, `phone`, `category_id`, etc.).
+- A **category** already created — `directory_create_category(name="Plumbers", slug="plumbers")`.
+  Listings hang off it and the calls below address it by **`category_slug`**, never by a UUID.
+- A field map: which source columns become `name`, `slug`, `city`, `state`, `phone`, `website`,
+  `rating`, `review_count`, and what goes in `data`.
 
-### Step 1 — Pull from Airtable
+### Step 1 — pull from the source
 
 ```python
 import requests
@@ -48,8 +79,8 @@ BASE_ID      = "appXXXXXXXXXXXX"
 TABLE_NAME   = "Listings"
 VIEW_NAME    = "Published"            # filter to "ready to publish" rows
 
-url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}"
-params = {"view": VIEW_NAME, "pageSize": 100}
+url     = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}"
+params  = {"view": VIEW_NAME, "pageSize": 100}
 headers = {"Authorization": f"Bearer {AIRTABLE_PAT}"}
 
 records = []
@@ -59,122 +90,148 @@ while True:
     if "offset" not in r:
         break
     params["offset"] = r["offset"]
-
-# records = [{id: "rec...", fields: {Name, Slug, Description, ...}, createdTime}, ...]
 ```
 
-### Step 2 — Map Airtable → SpiderPublish shape
+Airtable rate-limits at 5 req/sec per base — 5000 rows is about 17s serially. Do not parallelise
+the page reads.
+
+### Step 2 — map to the listing shape
 
 ```python
 listings = [
     {
-        "external_id":   r["id"],                                  # "rec..." — keep for idempotency
-        "name":          r["fields"]["Name"],
-        "slug":          r["fields"]["Slug"].lower().replace(" ", "-"),
-        "description":   r["fields"].get("Description", ""),
-        "address":       r["fields"].get("Address"),
-        "phone":         r["fields"].get("Phone"),
-        "website":       r["fields"].get("Website"),
-        "category_id":   "<dir-cat-uuid>",                         # the parent category
-        "metadata":      {
-            "hours":     r["fields"].get("Hours"),
-            "rating":    r["fields"].get("Rating"),
-            "airtable_record_id": r["id"]                          # also store inline for audit
-        }
+        "name":         r["fields"]["Name"],
+        "slug":         r["fields"]["Slug"],          # STABLE. never derived from Name.
+        "description":  r["fields"].get("Description", ""),
+        "city":         r["fields"]["City"],          # drives city_slug, derived server-side
+        "state":        r["fields"].get("State"),
+        "address":      r["fields"].get("Address"),
+        "phone":        r["fields"].get("Phone"),
+        "website":      r["fields"].get("Website"),
+        "rating":       r["fields"].get("Rating"),
+        "review_count": r["fields"].get("ReviewCount"),
+        "data": {                                     # anything else — free-form JSONB
+            "hours":               r["fields"].get("Hours"),
+            "airtable_record_id":  r["id"],           # provenance, NOT an idempotency key
+        },
     }
     for r in records
 ]
 ```
 
-**`external_id` is your idempotency key.** Use the Airtable record ID (`rec...`) verbatim. Re-runs of the sync recognize existing rows by external_id and UPDATE rather than INSERT-duplicates.
+🔴 **`city_slug` is not yours to set.** It is derived server-side from `city` + `state`
+(`'Miami Beach'` + `'Florida'` → `miami-beach-florida`). There is no city field to pass.
 
-### Step 3 — Bulk upsert via `directory_bulk_upsert_listings`
+### Step 3 — bulk upsert
 
 ```
 directory_bulk_upsert_listings({
-  category_id: "<dir-cat-uuid>",
-  listings:    listings,         # the array from Step 2
-  on_conflict: "update_by_external_id"
+  category_slug: "plumbers",       # SLUG, not a UUID. required.
+  listings:      listings          # required.
 })
-# → {
-#     success: true,
-#     stats: { created: 12, updated: 38, skipped: 0, errors: [] }
-#   }
 ```
 
-The bulk endpoint:
+The call matches each row on `(category, slug)` and UPDATEs on a hit, INSERTs on a miss. Rows
+default to `status='published'` — **there is no publish step.**
 
-1. INSERTs new rows for `external_id`s not yet seen.
-2. UPDATEs existing rows where `external_id` matches.
-3. Returns per-row stats so you can surface errors.
+**5000 listings per call.** Above that, paginate; a larger single call risks a transaction timeout.
 
-For a soft delete (rows in Airtable that disappeared from the view), the import doesn't auto-delete — call `directory_archive_listing({external_id})` for each missing ID in a follow-up step.
+### Step 4 — handle disappearances yourself
 
-### Step 4 — Deploy
-
-The directory pages are dynamically rendered at request time via Liquid; once the rows land, they're visible at `/{category-slug}/{listing-slug}` immediately. No deploy needed for new listings — but if you changed the directory **template**, redeploy via [`../../reference/deploy-protocol.md`](deploy-protocol.md).
-
-### Steps — full flow
+The upsert **never removes anything**. A row deleted from the source view stays published forever.
 
 ```python
-# 1. Pull Airtable → records
-records = pull_airtable_view(BASE_ID, TABLE_NAME, VIEW_NAME)
-
-# 2. Map → SpiderPublish shape (with external_id = record.id)
-listings = map_to_spideriq_shape(records)
-
-# 3. Bulk upsert
-result = directory_bulk_upsert_listings(category_id, listings, on_conflict="update_by_external_id")
-
-# 4. Detect deletions (optional)
-local_ids = {r["id"] for r in records}
-remote_listings = directory_list_listings(category_id)
-to_archive = [l for l in remote_listings if l["external_id"] not in local_ids]
-for l in to_archive:
-    directory_archive_listing(l["external_id"])
-
-# 5. Log + emit metrics
-print(f"Synced: {result['stats']}, archived: {len(to_archive)}")
+source_slugs = {l["slug"] for l in listings}
+live = directory_list_listings({"category_slug": "plumbers", "status": "published"})
+for l in live["listings"]:
+    if l["slug"] not in source_slugs:
+        directory_upsert_listing({
+            "category_slug": "plumbers",
+            "slug":          l["slug"],
+            "status":        "archived",      # never deletes; reversible
+        })
 ```
 
-Wrap this in a cron (`crontab -e` → `0 2 * * * /usr/local/bin/sync-airtable-to-spideriq.py`).
+🔴 **There is no `directory_archive_listing` tool.** Archiving is `directory_upsert_listing` with
+`status: "archived"` — the column's CHECK constraint allows `draft | published | archived`.
 
-### Gotchas
+*(For an **IDAP** source this step is a built-in: `directory_import_from_idap(..., prune=true)`
+archives everything the import did not produce, and refuses rather than guess on an empty or
+limit-truncated result set. `prune` is IDAP-only — it has no equivalent on bulk upsert, because the
+platform cannot know what your source contained.)*
 
-- **Slug stability matters.** If the client edits "Name" in Airtable, your slug-derivation regenerates and the listing URL changes — visitors hit 404. Either (a) use a separate "Slug" column in Airtable that doesn't change, or (b) detect slug changes and keep the old slug as a 301 redirect via `content_create_redirect`.
-- **Airtable rate limits at 5 req/sec per base.** Bulk-pull 5000 rows in one go = ~17s. Don't parallelize per-page reads; respect the limit.
-- **`directory_bulk_upsert_listings` has a per-call max** (~500 listings). For 5000 rows, batch in 10 calls of 500.
-- **`external_id` is unique per category, not per tenant.** Two categories CAN share the same `external_id` value — useful for "same Airtable row appears in two directories" patterns; confusing if you assume global uniqueness.
-- **Airtable's `Last Modified Time` field doesn't survive the sync** unless you map it explicitly to `metadata.last_modified_airtable`. Useful for "show what changed in the last sync."
-- **Deleted Airtable rows don't auto-delete in SpiderPublish.** The bulk upsert is upsert-only. Archive missing rows in a separate step (Step 4 in the flow above).
+### Step 5 — nothing to deploy
+
+Directory pages render at request time. Once the rows land they are live (~60s edge cache), at
+
+```
+/{directory_base}/{category_slug}/{city_slug}/{listing_slug}
+```
+
+`{directory_base}` defaults to `directory` and is renamable per tenant — never hard-code
+`/directory/`. **Only a template change needs a deploy** (see
+[`deploy-protocol.md`](deploy-protocol.md)).
+
+### The full loop
+
+```python
+records  = pull_airtable_view(BASE_ID, TABLE_NAME, VIEW_NAME)
+listings = map_to_listing_shape(records)                       # stable slugs
+
+result = directory_bulk_upsert_listings(
+    category_slug="plumbers", listings=listings)               # ≤5000 per call
+
+archived = archive_missing("plumbers", {l["slug"] for l in listings})
+
+print(f"upserted: {result}, archived: {archived}")
+```
+
+Wrap it in a cron (`0 2 * * * /usr/local/bin/sync-airtable-to-spideriq.py`). **Nothing schedules
+this for you** — there is no sync pipeline on the platform side.
 
 ### Verify
 
 ```
-directory_list_listings({ category_id: "<dir-cat-uuid>", limit: 5 })
-# → confirm recent items match Airtable
+directory_list_listings({ category_slug: "plumbers", limit: 5 })
+# → confirm recent items match the source, and that `data` carries what you put there
 
 content_visual_check({
-  page_url: "https://<tenant>/<category-slug>/<listing-slug>",
+  page_url: "https://<tenant>/directory/plumbers/miami-florida/acme-plumbing",
   viewport: "desktop"
 })
-# → confirm the dynamic page renders
 ```
+
+🔴 **Count the keys; do not eyeball the page.** Directory templates run values through `| default:`
+chains, so an absent field and an empty one render identically. Read a listing back through
+`directory_list_listings` before trusting a screenshot.
+
+### Gotchas
+
+- **A slug change is a new listing.** The old one keeps serving at the old URL. Archive it, or use
+  a slug column the client never edits.
+- **`data` is not typed.** Nothing validates its shape; a renamed key silently blanks whatever the
+  template read.
+- **A re-import overwrites editorial fixes.** The listing is a copy the CMS owns and anyone can
+  edit; the next sync writes over it.
+- **Two categories may hold the same slug.** The pair `(category_id, slug)` is unique, not the slug
+  alone. Sync per category and keep the category straight.
 
 ### Anti-patterns
 
-- **Loop-creating listings one at a time** instead of bulk-upserting. 5000 round-trips vs 10.
-- **Skipping `external_id`** and letting the sync create duplicates on every run. Idempotency requires the external_id key.
-- **Mapping Airtable's `id` to SpiderPublish's `id`** — different namespaces. Map `id` → `external_id` instead.
-- **Hardcoding the Airtable PAT in client-side code.** PATs read all rows; keep server-side.
-- **Forgetting to handle the deletion case.** Listings linger forever if Airtable rows disappear from the view but you don't archive them.
+- **Looping `directory_upsert_listing` per row** instead of bulk-upserting. 5000 round trips
+  vs 1.
+- **Designing around `external_id` / `on_conflict`.** Neither exists. Every run duplicates.
+- **Deriving the slug from an editable name field.** Guarantees drift.
+- **Hard-coding `/directory/`** in generated links. It is `{directory_base}`.
+- **Hard-coding the source PAT client-side.** It reads every row; keep it server-side.
+- **Forgetting Step 4.** Listings linger forever when source rows disappear.
 
 ### See also
 
-- [`../../directory/import-listings.md`](integrations.md#import-listings) — the generic bulk-upsert primitive (this recipe is its Airtable specialisation)
-- [`../../content/dynamic-list-page.md`](content.md#dynamic-list-page) — the listing-rendering primitive (Liquid template that paginates the directory)
-- [`../../reference/tool-surface.md`](tool-surface.md) — the `directory_*` tool family
-
+- [`directory-pages.md`](directory-pages.md) — the directory model end to end: categories, the
+  URL shape, `directory_base`, SEO templates, the sitemap, and the IDAP one-call importer
+- [`dynamic-collections.md`](dynamic-collections.md) — the FLAT layout over the same listings
+- [`tool-surface.md`](tool-surface.md) — the `directory_*` tool family
 
 ---
 
@@ -388,8 +445,13 @@ CNAME is operationally simpler and recommended. Push back gently on "I want it o
 
 This creates the `content_domains` row + triggers CF for SaaS to provision the certificate:
 
+⚠️ **The response shapes in this recipe are illustrative, not a contract.** The tool NAMES below are
+correct and registered in every universe — `content_add_domain`, `content_verify_domain`,
+`content_list_domains`, `content_set_primary_domain`, `content_delete_domain` — but read each tool's
+own schema for its real arguments and return fields rather than the comments here.
+
 ```
-content_attach_domain({
+content_add_domain({
   domain:         "www.acme.com",
   is_primary:     true,                       # the canonical domain for SEO + redirects
   redirect_apex:  true                         # 301 acme.com → www.acme.com
@@ -404,7 +466,7 @@ content_attach_domain({
 #     confirm_token: "cft_..."
 #   }
 
-content_attach_domain({
+content_add_domain({
   domain: "www.acme.com",
   ...,
   confirm_token: "cft_..."
@@ -434,7 +496,7 @@ Tenants editing their own DNS at the registrar:
 ### Step 3 — Wait for DNS propagation + CF cert issuance
 
 ```
-content_domain_status({ domain: "www.acme.com" })
+content_verify_domain({ domain: "www.acme.com" })
 # → {
 #     verification_status: "pending" | "verified" | "failed",
 #     dns_propagation: { record_found: true, last_checked: "..." },
@@ -471,14 +533,14 @@ content_visual_check({
 # → for form-bearing pages: dom.shadow_hosts.includes("spideriq-form") (Rule 62)
 ```
 
-If you get a 525 / 526 / 522 from CF: the cert isn't valid (yet). Re-check `content_domain_status` and wait.
+If you get a 525 / 526 / 522 from CF: the cert isn't valid (yet). Re-check `content_verify_domain` and wait.
 
 ### Step 5 — Redirect the apex (if applicable)
 
 If you attached `www.acme.com` as primary, ensure `acme.com` 301-redirects to it:
 
 ```
-content_attach_domain({
+content_add_domain({
   domain:        "acme.com",
   is_primary:    false,
   redirect_to:   "www.acme.com"
@@ -490,13 +552,13 @@ CF for SaaS handles the redirect at edge — no SpiderPublish code involvement.
 ### Steps — full flow
 
 ```python
-1. content_attach_domain(domain="www.acme.com", is_primary=True)
+1. content_add_domain(domain="www.acme.com", is_primary=True)
                                        # safe-default gated; preview + confirm
 2. (send tenant the CNAME instruction)
 3. (tenant adds CNAME at registrar)
-4. poll content_domain_status until verified + cert active
+4. poll content_verify_domain until verified + cert active
 5. content_visual_check(page_url="https://www.acme.com")
-6. (optional) content_attach_domain("acme.com", redirect_to="www.acme.com")
+6. (optional) content_add_domain("acme.com", redirect_to="www.acme.com")
 ```
 
 ### Gotchas
@@ -507,12 +569,12 @@ CF for SaaS handles the redirect at edge — no SpiderPublish code involvement.
 - **DNSSEC drift**: domains with DNSSEC enabled at the registrar but no DS record at the parent zone respond intermittently with SERVFAIL. Check `dig +dnssec www.acme.com`.
 - **`is_primary: true` matters for SEO.** All non-primary domains 301 to the primary. Set wrong primary = canonical-URL mismatch + crawl waste.
 - **DNS propagation lies.** `dig` from your terminal may show the new record; the tenant's ISP cache may still serve the old record for hours. Always sanity-check from an edge probe (CF's DNS-over-HTTPS) or wait 24h.
-- **The MCP tool `content_attach_domain` is Phase 11+12 gated** — preview shows you the CNAME target. Don't skip the preview; copy-paste errors on CNAME values are the #1 onboarding failure mode.
+- **The MCP tool `content_add_domain` is Phase 11+12 gated** — preview shows you the CNAME target. Don't skip the preview; copy-paste errors on CNAME values are the #1 onboarding failure mode.
 
 ### Verify
 
 ```
-content_domain_status({ domain: "www.acme.com" })
+content_verify_domain({ domain: "www.acme.com" })
 # → { verification_status: "verified", cert_status: { state: "active" } }
 
 content_list_domains()
@@ -527,7 +589,7 @@ curl -sI "https://www.acme.com" | head -5
 ### Anti-patterns
 
 - **Telling the tenant "just point your domain at us" without specifying CNAME vs A.** They'll guess wrong and spend a day debugging.
-- **Skipping `content_attach_domain` and just adding the DNS record.** CF for SaaS routes by hostname; without the SpiderPublish-side row, the request hits CF but no Worker handles it → 522.
+- **Skipping `content_add_domain` and just adding the DNS record.** CF for SaaS routes by hostname; without the SpiderPublish-side row, the request hits CF but no Worker handles it → 522.
 - **Setting two domains as `is_primary: true`.** Only one can be primary per tenant; the system rejects the second. SEO chaos otherwise.
 - **Removing the original `.sites.spideriq.ai` URL.** Keep it active as a fallback during DNS transitions; useful for debugging.
 - **Trying to issue your own cert via Let's Encrypt.** CF for SaaS handles certs; competing cert lifecycles cause renewal failures.
@@ -537,7 +599,7 @@ curl -sI "https://www.acme.com" | head -5
 
 - [`../../content/custom-domain.md`](integrations.md#custom-domain) — generic custom-domain attach flow (this recipe is its Cloudflare-specialised twin with onboarding context)
 - [`../../audit/visual-check-a-page.md`](audit.md#visual-check-a-page) — verification primitive used in Step 4
-- [`../../reference/deploy-protocol.md`](deploy-protocol.md) — the safe-default gate on `content_attach_domain`
+- [`../../reference/deploy-protocol.md`](deploy-protocol.md) — the safe-default gate on `content_add_domain`
 - [`../../reference/tool-surface.md`](tool-surface.md) — the `content_*_domain` tool family
 
 
@@ -1759,7 +1821,9 @@ Two concepts, three URLs:
 
 - **Category** (e.g. `plumbers`) — a vertical with SEO templates
 - **Listing** — an individual business inside a category, tagged with `{city, state, country, ...}`
-- URLs: `/directory/{category}` → cities list · `/directory/{category}/{city}` → listings · `/directory/{category}/{city}/{listing}` → detail
+- URLs: `/{directory_base}/{category}` → cities list · `/{directory_base}/{category}/{city}` → listings · `/{directory_base}/{category}/{city}/{listing}` → detail
+
+🔴 **`{directory_base}` is a per-tenant setting, not the literal string `directory`.** It defaults to `"directory"` and a tenant can rename it (`template_update_config(directory_base="ls")` → `/ls/plumbers/…`). Renaming is SEO-safe — the old paths keep serving as permanent **301** redirects and `sitemap.xml` switches to the new prefix — but **never hard-code `/directory/` into generated links or docs**. Full rules: [`directory-pages.md`](directory-pages.md).
 
 ### The one-shot path (v2.89.0+)
 
@@ -1790,7 +1854,7 @@ directory_bulk_upsert_listings(
 )
 ```
 
-Returns `{upserted: N, failed: 0, affected_cities: ["miami-beach-florida", ...]}`. No publish step (listings default to `status: "published"`). No deploy step — the public `/directory/*` routes render live.
+Returns `{upserted: N, failed: 0, affected_cities: ["miami-beach-florida", ...]}`. No publish step (listings default to `status: "published"`). No deploy step — the public `/{directory_base}/*` routes render live. **A template change or a `directory_base` change does need a deploy.**
 
 #### CLI
 
@@ -1800,18 +1864,28 @@ spideriq directory categories create \
   --seo-title "Best {category} in {city} | Your Brand" \
   --seo-description "Compare top-rated {category} in {city}. Ratings, reviews, hours."
 
+# from a file (non-IDAP source):
 spideriq directory listings import plumbers --file plumbers-miami.json
+
+# from the tenant's own IDAP corpus — one command, no file:
+spideriq directory listings import-from-idap plumbers \
+  --category-filter "Plumber" --country-code US --rating-min 4.0 --limit 5000 --prune
 ```
 
 `plumbers-miami.json` is a JSON array of listing objects.
+
+`--prune` archives listings the import did not produce. It is **off by default**, and it refuses
+rather than guess on an empty or limit-truncated result set — see *IDAP → directory* below.
 
 ### URL structure
 
 | URL | What it renders |
 |---|---|
-| `/directory/{category_slug}` | Category landing — grid of every city that has published listings |
-| `/directory/{category_slug}/{city_slug}` | Listings in that city, sorted by rating DESC then review_count DESC |
-| `/directory/{category_slug}/{city_slug}/{listing_slug}` | Single listing with contact info + hours + optional breadcrumbs |
+| `/{directory_base}/{category_slug}` | Category landing — grid of every city that has published listings |
+| `/{directory_base}/{category_slug}/{city_slug}` | Listings in that city, sorted by rating DESC then review_count DESC |
+| `/{directory_base}/{category_slug}/{city_slug}/{listing_slug}` | Single listing with contact info + hours + optional breadcrumbs |
+
+`{directory_base}` is `directory` unless the tenant changed it — see above. A published CMS page at slug `<directory_base>` renders in place of the built-in category hub.
 
 **`city_slug` is auto-computed** as `LOWER(city + '-' + state)` with non-alphanumeric stripped. "Miami Beach" + "Florida" → `miami-beach-florida`. Don't manage city slugs by hand — the materialized view does it.
 
@@ -1834,7 +1908,7 @@ Every category, every `(category, city)`, and every published listing auto-lands
 
 ### Listing fields
 
-Only `name` is required. Everything else shapes the page + the merge-tag pipeline:
+Only `name` is required. Everything else shapes the page. (**Not** the merge-tag pipeline — merge tags do not reach directory pages; see *Merge tags inside listings* below.)
 
 | Field | Required? | Notes |
 |---|---|---|
@@ -1851,34 +1925,55 @@ Only `name` is required. Everything else shapes the page + the merge-tag pipelin
 
 ### Ecosystem integration
 
-#### IDAP dump → directory
+#### IDAP → directory — ONE CALL, no transform
 
-IDAP stores every business SpiderIQ has seen. A single call dumps an entire IDAP result set into a directory category:
+🔴 **Do not hand-transform an IDAP dump.** There is a dedicated importer that reads the tenant's
+`norm_cli_*.businesses` **directly** — no scheduler, no sync pipeline, no export step, no external
+call — and carries **every declared column** through (typed columns onto the listing, everything
+else into its `data` JSONB):
 
 ```
-# 1. Run a SpiderMaps campaign — collect N businesses with full IDAP context
-# 2. Transform the results into listing objects
-# 3. One call:
-directory_bulk_upsert_listings(
-  category_slug = "plumbers",
-  listings = idap_results.map(biz => ({
-    name: biz.company_name,
-    city: biz.city,
-    state: biz.region,
-    country: biz.country_code,
-    phone: biz.phone,
-    website: biz.website,
-    rating: biz.rating,
-    review_count: biz.reviews_count,
-    source_job_id: biz.source_job_id,  # traceability
-    data: { categories: biz.categories, pain_points: biz.pain_points }
-  }))
+directory_import_from_idap(
+  category_slug  = "plumbers",
+  category_filter = "Plumber",   # matches the businesses.categories[] array
+  country_code    = "US",        # ISO-2, uppercase, exact
+  city            = "Miami",     # ILIKE substring
+  rating_min      = 4.0,         # inclusive
+  limit           = 5000,        # hard cap 5000
+  prune           = False        # see below
 )
 ```
 
-#### Merge tags inside listings
+Returns `{upserted, inserted, updated, pruned, failed, source_rows, affected_cities, source_schema,
+fields_mapped, filter, sync_log_id, failures?, prune_skipped_reason?, hint?}`. If the tenant has no
+`norm_cli_*` schema yet (never ran SpiderMaps), `hint` explains the workaround instead of failing
+silently.
 
-Listings use the same merge-tag pipeline as dynamic landing pages. If you store `{{ salesperson_email }}` in a listing's custom field and render a bespoke detail template, the same `{{ ... }}` resolution rules apply.
+**Use `directory_bulk_upsert_listings` only for a NON-IDAP source** — a hand-built list, a partner
+feed, an Airtable view (see *Sync To Directory* at the top of this file). There, set
+`source_job_id` so provenance is auditable.
+
+🔴 **Both paths are an UPSERT keyed on `(category, slug)` and neither removes anything.** A business
+deleted from IDAP, or renamed so it derives a different slug, stays **published forever**, and every
+re-import drifts the category further from its source. `prune=true` archives (never deletes) what
+the import did not produce — and it **refuses rather than guess**, naming which in
+`prune_skipped_reason`: `source_returned_no_rows` (an empty result is far more often a filter that
+matched nothing) or `source_truncated_at_limit` (absence is a pagination artefact). A refusal is an
+**answer** — re-running unchanged refuses identically.
+
+#### Merge tags inside listings — 🔴 THEY DO NOT WORK HERE
+
+`{{ first_name }}`, `{{ company_name }}`, `{{ salesperson_email }}` and the rest are **`/lp/`
+lead-scoped only**. They are built from a lead resolved by the `/lp/{page_slug}/{identifier}`
+routes; on every other route — directory pages included — they resolve to the canonical **empty
+shape** and render as empty strings, **silently, at HTTP 200**.
+
+Storing `{{ salesperson_email }}` in a listing field and rendering it produces a blank, not a
+substitution.
+
+**Directory templates read `listing.*` (the typed columns) and `data.*` (whatever you put in the
+listing's `data` JSONB) instead.** For per-prospect personalisation you want a different surface
+entirely — [`dynamic-landing.md`](dynamic-landing.md).
 
 ### Common variants
 
@@ -1901,7 +1996,16 @@ directory_list_listings(category_slug="plumbers", city="Miami Beach")
 directory_refresh_stats()
 ```
 
-Normally auto-refreshed on `directory_bulk_upsert_listings` success. Call manually if you've been hand-editing rows or importing via raw SQL.
+Rebuilds the **`city_stats` materialized view** — the per-(category, city) rollup that the category
+hub and every city page read to know which cities exist and how many listings each holds.
+
+🔴 **It does NOT recompute a category's `listing_count`.** Two similar names, two different numbers:
+`listing_count` lives on the category row and is maintained by the **write** paths only (bulk
+upsert, import, prune, delete-listing). Nothing recomputes it on demand and this tool will not. If a
+`listing_count` looks wrong, re-run the write that produced it.
+
+Every write path already refreshes `city_stats` itself, so you rarely need this. Reach for it when a
+hub or city page shows a stale city list after a change made outside the normal write path.
 
 ### When to use
 
@@ -1924,15 +2028,10 @@ Normally auto-refreshed on `directory_bulk_upsert_listings` success. Call manual
 - DO NOT bypass the bulk endpoint for IDAP dumps — individual `directory_upsert_listing` calls for a 3000-row dump burns 3000× the API budget.
 - DO NOT add listings to a category that doesn't exist — you'll get 404. Create the category first, then import.
 
-### Files in this skill
-
-- `SKILL.md` — this file
-- `schema.yaml` — Tier 2 tool-sequence for MCP consumers
-
 ### See also
 
-- [AGENTS.md → Content → Directory](../SKILL.md)
-- [recipes/bulk-media-upload](../SKILL.md) — how to upload listing images
-- [LEARNINGS.md → Content](../SKILL.md) — gotchas
+- [`directory-pages.md`](directory-pages.md) — the full directory reference: the copy-not-IDAP model, `directory_base`, staleness and `prune`, the three re-import doors, the overridable templates
+- [`dynamic-collections.md`](dynamic-collections.md) — the FLAT layout over the same listings, and every other `collection_type`
+- [`media.md`](media.md) — uploading listing images
 - [SpiderIQ `/content/help` → `build_a_directory`](https://spideriq.ai/api/v1/content/help?format=yaml)
 - [SpiderIQ `/content/playbook` → `build_a_directory`](https://spideriq.ai/api/v1/content/playbook?intent=build_a_directory&format=yaml)

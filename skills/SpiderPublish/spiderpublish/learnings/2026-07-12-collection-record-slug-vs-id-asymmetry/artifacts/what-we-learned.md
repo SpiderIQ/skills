@@ -61,5 +61,5 @@ whether a write surface **drops** unknown fields (posts) or **rejects** them
 
 ## See also
 
-- [`../references/collections.md`](../../references/collections.md) — the full call path + Gotchas.
+- [`references/collections.md`](../../../references/collections.md) — the full call path + Gotchas.
 - `2026-06-11-post-field-names-silently-dropped/` — the contrast: posts drop, collections reject.

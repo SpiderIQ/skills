@@ -154,7 +154,8 @@ methods:
       dynamic_list | dynamic_item). Use `default` for an ordinary content page —
       it is the only value that wraps the theme layout, which is where the page's
       background and text colour live. For dynamic_list/dynamic_item you MUST set
-      collection_type (posts | docs | directory_listings).
+      collection_type: posts | docs | directory_listings | idap.<collection> |
+      any custom-collection slug.
     guidance:
       use: "add a new page to the site (starts as a draft)"
       next: "publishPage -> deploySite to make it live; insertSection to add components"
@@ -165,7 +166,7 @@ methods:
       title:           { type: string,  required: true,  description: 'Page title' }
       slug:            { type: string,  required: false, description: 'URL slug — kebab-case, no leading slash, no nested path' }
       template:        { type: string,  required: false, description: 'default | blank | landing | about | contact | dynamic_list | dynamic_item. Default to `default` — `blank` renders NO theme layout, so the page has no background/text colour (white-on-white on a dark tenant).' }
-      collection_type: { type: string,  required: false, description: 'REQUIRED for dynamic_list/dynamic_item: posts | docs | directory_listings; else omit' }
+      collection_type: { type: string,  required: false, description: 'REQUIRED for dynamic_list/dynamic_item, forbidden otherwise. posts | docs | directory_listings | idap.<collection> (e.g. idap.businesses) | any custom-collection slug. NOT validated against the DB — a well-formed slug for a collection that does not exist is a 201 that renders an empty page forever; confirm with collection_list / list_data_sources.' }
       blocks:
         type: array
         required: false

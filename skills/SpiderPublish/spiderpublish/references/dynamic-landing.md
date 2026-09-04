@@ -49,16 +49,84 @@ preview. Keep placeholders in the copy.
 
 ## What the template gets
 
+Two vocabularies, and they do NOT have the same rules. Mixing them up is the single most common
+`/lp/` authoring mistake.
+
 | Variable | Shape |
 |---|---|
-| `lead` | the business record: `name`, `address`, `city`, `country_code`, `rating`, `reviews_count`, `phone_e164`, `domain`, `website`, `categories`, `description`; plus `lead.related.{emails,phones,domains,contacts}` when requested |
-| flat merge tags | `{{ company_name }}`, `{{ city }}`, `{{ firstname }}`, `{{ email }}`, `{{ phone }}`, `{{ rating }}`, `{{ vat_number }}` … — snake_case, null-safe, spread at top level alongside `lead` |
+| `lead` | the business record — **every column the tenant's IDAP `businesses` table has**, spread verbatim. Plus `lead.related.{emails,phones,domains,contacts}` when requested. |
+| flat merge tags | `{{ company_name }}`, `{{ city }}`, `{{ firstname }}`, `{{ email }}`, `{{ phone }}`, `{{ rating }}` … — snake_case, null-safe, spread at top level **alongside** `lead`, never instead of it. |
 | `salesperson` | `name`, `title`, `location`, `bio`, `photo_url`, `calendar_url` — matched from the URL slug against `salespersons` in the project's template config |
 
 ```liquid
 {{ lead.name }} in {{ lead.city }} — {{ lead.rating }} from {{ lead.reviews_count }} reviews
 Hi {{ firstname }}, a quick note for {{ company_name }}.
 ```
+
+### `{{ lead.x }}` is free. `{{ x }}` comes from a generated spec.
+
+**`lead.*` needs nothing.** `GET /content/leads/resolve` spreads the resolved row into its
+response verbatim (`**data`) and the renderer stores it in Liquid scope **unprojected** — there is
+no allowlist, no field map, no serializer to extend. A column that exists on the tenant's
+`businesses` table is readable as `{{ lead.<column> }}` with **zero** platform work. The only two
+keys that move are `created_at` / `updated_at`, which the door pops and re-emits as `created_at` /
+`modified_at`.
+
+🔴 **Do not go looking for a number of columns.** It has changed twice in one quarter and will
+change again. The authoritative list is the manifest, `app/data/idap-fields.json`; the list an
+agent can read at runtime is **`content_get_variables`**. Ask the surface, do not quote a count.
+
+**Flat tags come from a generated spec, and adding a column now mints one automatically.** The
+vocabulary lives in `apps/liquid-renderer/merge-tags.spec.json`, generated from that same
+manifest. Every tag the spec marks `generated: true` is resolved by one generic loop —
+`lead[column]` — so a new column produces a working `{{ column }}` tag with no code change.
+
+⚠️ **Two exceptions, and both are deliberate.** A column listed in `merge-tags.bespoke.json`'s
+`covered_columns` gets **no** generated tag, because a hand-written picker already serves that name
+and reads somewhere else: `{{ team_size }}` resolves
+`lead.related.domains[0].company_vitals.team_size`, **not** `businesses.team_size`. And a bespoke
+picker always wins over the generic loop. So: **`{{ x }}` is not guaranteed to be
+`{{ lead.x }}`** — where a bespoke picker exists, the two can legitimately hold different values.
+`{{ phone }}` is E.164 (`+13055551234`) while `{{ phone_national }}` is `(305) 555-1234`, from the
+same record. When you need a specific column, `{{ lead.<column> }}` is the unambiguous form.
+
+Run `content_get_variables` for the live vocabulary with per-tag descriptions — it is the only
+list that cannot go stale.
+
+---
+
+## Preview: `/lp/{slug}/demo` does NOT read IDAP
+
+```
+/lp/{page_slug}/demo              ← the literal identifier "demo"
+/lp/{page_slug}/{anything}?preview=sample-lead
+```
+
+Both **bypass IDAP entirely** and serve a built-in fixture. That is the point — you can preview a
+personalised page before you have a single prospect — but it means **a preview is not evidence
+about a real lead, in either direction.**
+
+🔴 **The trap this used to set, and what changed.** The fixture was hand-maintained and drifted
+behind production: it carried 24 of the 43 columns the live door served. An author wrote
+`{{ lead.working_hours }}`, previewed on `/lp/x/demo`, saw blank, and concluded the field does not
+bind. **It binds.** The blank was the fixture, not the platform — and the staleness was invisible
+from both sides, because a missing key and an empty value render identically.
+
+**ISU-20 (2.2b) made that class of lie structurally impossible.** `demo-fixture.ts` is now
+**GENERATED** — its key set comes from `app/data/idap-fields.json`, keyed exactly as the resolve
+door keys a real lead, so it cannot fall behind the manifest again. Its *values* stay hand-curated
+in `demo-lead.curated.json`.
+
+⚠️ **State it at that level and no higher.** What is established is that the fixture's **key set**
+is generated from the manifest. A live diff of the `/lp/{slug}/demo` key set against a real
+`/lp/{slug}/{place_id}` on a deployed tenant was **not** run at `/test-live` — so "the preview
+shows exactly what production shows" is a claim nobody has measured. If a field is blank in
+preview, check it against a real identifier before concluding anything.
+
+**And the preview surface lags the deploy.** The renderer bundle reaches tenants through a
+per-tenant sweep; the `preview-*` scripts are swept by nothing. A blank tag on a *preview* URL
+after a platform change is expected until that tenant redeploys — never use a preview URL as the
+test for whether a field binds.
 
 ---
 
@@ -124,9 +192,21 @@ A **404** on `/lp/...` means the *page slug* does not exist, not that the identi
 - It does **not** import anything. It reads business records already in the account.
 - There is no visitor analytics, A/B testing, or per-visitor storage on this surface.
 - Page titles and social previews are not personalised.
+- **Do not claim the preview matches production.** The fixture's key set is generated from the
+  manifest; a live key-set diff between `/lp/{slug}/demo` and a real identifier has not been run.
+- **Do not claim a flat `{{ x }}` equals `{{ lead.x }}`.** Where a bespoke picker owns the name it
+  reads elsewhere by design (`{{ team_size }}`, `{{ phone }}`).
+- **Do not quote a column count or a merge-tag count.** Both move with the manifest. Name
+  `content_get_variables` instead.
+- **Merge tags are `/lp/` only.** They do not populate on `dynamic_list`, `dynamic_item`, or
+  directory pages — see `references/dynamic-collections.md`.
 
 ## See also
 
+- `references/dynamic-collections.md` — the other dynamic templates (`dynamic_list` /
+  `dynamic_item`) and why merge tags do **not** reach them
+- `references/directory-pages.md` — programmatic-SEO directory pages, the other way to publish
+  many pages from IDAP data
 - `references/content.md` — page CRUD, blocks, custom fields
 - Customer guide: https://publish.spideriq.ai/docs/building-your-site/dynamic-landing-pages
 - API reference: https://publish.spideriq.ai/docs/api-reference/content

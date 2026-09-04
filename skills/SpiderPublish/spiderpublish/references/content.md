@@ -3,7 +3,8 @@
 > **REQUIRES — read before you plan.**
 > **Package:** works in **every** universe (kitchen sink · mcp-publish default · mac-128).
 > **Tools:** `createPage` `updatePage` `createPost` `createDoc` `getNavigation` `updateNavigation` `getSettings` `updateSettings` `addDomain` `insertSection`
-> **Partial:** the header/footer **section override** (`content_override_section`, `content_get_section_source`, `content_apply_layout_preset`) is **kitchen-sink only**. On mcp-publish use `template_get`/`template_upsert` with `path='sections/header.liquid'` — same effect, one extra step. `insertSection` needs default-or-kitchen-sink (not the `mac-128` slice).
+> 🔴 **Partial — and worse than "kitchen-sink only": the three section-override tools are registered by NO published MCP server.** `content_override_section`, `content_get_section_source` and `content_apply_layout_preset` are defined and bundled into every dist, but `sectionOverrideTools` is spread into no served tool array — measured 2026-09-04 against a runtime `tools/list` from published `@spideriq/mcp-publish@1.43.0` (164 tools) **and** `@spideriq/mcp@1.91.1` (513 tools): **absent from both**. Their five retired-from-publish siblings (`content_lock_page`, `content_unlock_page`, `content_list_page_versions`, `content_restore_page_version`, `content_docs_tree`) DO come back from the sink, which is the control that makes this a real absence rather than a truncated probe.
+> **Use `template_get` / `template_upsert` with `path='sections/header.liquid'` — that is not a fallback, it is the only path.** The recipes below that call the three tools are kept for the shape of the operation; substitute `template_upsert`. `insertSection` (the real tool is `page_insert_section`) needs default-or-kitchen-sink (not the `mac-128` slice).
 > **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
 > **Not sure which universe you are in?** SKILL.md → *Step 0*.
 
@@ -1434,7 +1435,7 @@ content_visual_check({
 - **Publishing the duplicate without editing SEO.** Duplicate-content penalty. Always edit `seo_title` + `seo_description` first.
 - **Treating `content_duplicate_page` as "copy and edit in place."** It's "copy to a new row." If you wanted to edit the source, just call `content_update_page` on the source.
 - **Duplicating to "back up" a page before edits.** Use [`export-page-roundtrip.md`](content.md#export-page-roundtrip) for a true snapshot, or [`restore-page-version.md`](content.md#restore-page-version) to roll back if needed. The version history is already there — don't pollute the page list.
-- **Looping `content_duplicate_page` 50× to seed a directory.** Use [`../directory/import-listings.md`](integrations.md#import-listings) for bulk SEO pages — that hits a single bulk endpoint instead of 50 round-trips.
+- **Looping `content_duplicate_page` 50× to seed a directory.** A directory needs no page rows at all — see [`directory-pages.md`](directory-pages.md). `directory_import_from_idap` (one call) or `directory_bulk_upsert_listings` (up to 5000 per call) replaces the whole loop.
 - **Forgetting that `content_publish_page` is safe-default-gated.** Even though duplicate isn't gated, publishing the new page is. Review the preview, then confirm with the token.
 
 ### See also
@@ -1559,13 +1560,16 @@ For form-containing duplicates, assert on `dom.shadow_hosts.includes("spideriq-f
 
 ## Dynamic List Page
 
-Create a dynamic LIST page — iterates a collection (posts, docs, or directory_listings) and renders one card per item. The "/blog" / "/docs" / "/directory" index pattern.
+Create a dynamic LIST page — iterates a bound collection and renders one card per item. The "/blog" / "/docs" / "/listings" index pattern.
+
+**Five `collection_type` values are accepted**, not three: `posts`, `docs`, `directory_listings`, an `idap.<collection>` (e.g. `idap.businesses`), and any **custom-collection slug**. Statuses differ per value — see [`dynamic-collections.md`](dynamic-collections.md), which is the authoritative table.
 
 ### When to use
 
 - You want a `/blog` index that auto-lists all published blog posts (so adding a post doesn't require editing the index).
 - You want a `/docs` landing page that shows the docs tree.
-- You want a `/listings` or `/places` page for a directory of `content_directory_listings`.
+- You want a `/listings` or `/places` page for a directory of `content_directory_listings` — a FLAT layout with no category or city in the URL. (For per-city programmatic SEO, the built-in `/{directory_base}/{category}/{city}/{listing}` routes are a different and better fit — see [`directory-pages.md`](directory-pages.md).)
+- You want to list a **custom collection** you made with `collection_create`, or the tenant's own **`idap.businesses`** corpus.
 - More broadly: any page that should display a list of dynamically-changing items without manually editing the page.
 
 For a single dynamic page (e.g. `/blog/<slug>` or `/listings/<city>`) → [`dynamic-item-page.md`](content.md#dynamic-item-page). For a static page → [`landing-page.md`](content.md#landing-page).
@@ -1592,13 +1596,19 @@ content_create_page({
 
 That's the whole page. The renderer iterates published `content_posts` and emits one card per item, using `templates/dynamic-list.liquid` for the layout.
 
-### The three collection types
+### The collection types
 
-| `collection_type` | Iterates | URL convention |
+| `collection_type` | Iterates | Item URL |
 |---|---|---|
-| `posts` | Published `content_posts` (blog posts) | List at `/<slug>`; items at `/<slug>/<post_slug>` (typically `/blog/<post_slug>`) |
-| `docs` | `content_docs` tree (only published nodes) | List at `/<slug>`; items at `/<slug>/<doc_full_path>` (typically `/docs/<full_path>`) |
-| `directory_listings` | Published `content_directory_listings` | List at `/<slug>`; items at `/<slug>/<listing_slug>` (typically `/listings/<slug>`) |
+| `posts` | Published `content_posts` | `/blog/<post_slug>` |
+| `docs` | `content_docs` tree (published nodes) | `/docs/<full_path>` |
+| `directory_listings` | Published `content_directory_listings` | `/<page-slug>/<listing_slug>` |
+| `idap.<collection>` | the tenant's own IDAP corpus (`idap.businesses`) | ⚠️ **no working detail URL** — see [`dynamic-collections.md`](dynamic-collections.md) |
+| `<custom-collection-slug>` | published records of that collection | `/<collection_slug>/<record_slug>` |
+
+The list itself is always at `/<page-slug>`.
+
+🔴 **`collection_type` is NOT validated against the database at create time** — the validator has no DB connection. A well-formed slug for a collection that does not exist is a **201**, and the live page then renders its empty state, which is byte-identical to a real collection with no published records. Confirm with `list_data_sources` / `collection_list`; do not trust the 201.
 
 The page slug is independent of the URL convention — you can have `template: dynamic_list, collection_type: posts, slug: "articles"` and the list lives at `/articles`. The dynamic-item page (the per-item page) is a SEPARATE recipe; see [`dynamic-item-page.md`](content.md#dynamic-item-page).
 
@@ -1662,12 +1672,16 @@ After deploy, `https://<tenant>/blog` renders the iterated list.
 The dynamic-list template (`templates/dynamic-list.liquid`) is a Liquid file that:
 
 1. Fetches the collection at request time via the content API:
-   - `posts` → `GET /content/posts?status=published&page=1&page_size=20`
-   - `docs` → `GET /content/docs/tree` (recursive)
-   - `directory_listings` → `GET /content/directory/listings?status=published`
-2. Iterates the array in Liquid: `{% for item in collection %}<a href="{{ item_url }}">...</a>{% endfor %}`
+   - `posts` → `GET /content/posts` — **first 50 only**
+   - `docs` → `GET /content/docs/tree` (recursive, whole tree)
+   - `directory_listings` → `GET /content/directory/listings` — **first 100 only**
+   - `idap.*` and custom collections → `GET /content/data-sources/{id}/items` — **first 100 only**
+2. Iterates the array in Liquid: `{% for item in items %}<a href="{{ item.url }}">...</a>{% endfor %}`
 3. Default item card layout (themable per-tenant).
-4. Pagination via `?page=N` (default 20 per page; configurable in the template).
+
+⚠️ **`status='published'` is not a parameter on any of these doors — it is enforced by construction.** A draft is indistinguishable from a row that does not exist. Do not pass `?status=`; the flat directory door takes `?category=`, `?city=`, `?page=` and `?page_size=` and nothing else.
+
+🔴 **There is no pagination on a `dynamic_list` page.** The fetcher requests exactly one page at the fixed sizes above and the template iterates what it got — a `?page=N` on the rendered URL does nothing. A collection larger than its limit renders **truncated, silently, at HTTP 200**. If you need everything, author your own blocks and page the API yourself, or use a surface built for scale (the built-in `/{directory_base}/…` directory routes page server-side).
 
 If you want different per-item rendering, customize `templates/dynamic-list.liquid` via `template_upsert` ([`section-override.md`](content.md#section-override) covers the pattern).
 
@@ -1680,8 +1694,10 @@ The dynamic-list page lives at `/<page-slug>`. The per-item URL pattern depends 
 | `posts` | `/blog/<post_slug>` (default; matches the `templates/blog-post.liquid` route) |
 | `docs` | `/docs/<full_path>` (where `full_path` is the parent-id chain) |
 | `directory_listings` | `/<page-slug>/<listing_slug>` |
+| `<custom-collection-slug>` | `/<collection_slug>/<record_slug>` — served by the catch-all record door |
+| `idap.<collection>` | ⚠️ built as `/<collection_type>/<slug>` — i.e. `/idap.businesses/acme` — which **nothing serves**. A dot is not admissible in a collection `route_base` and it is not a page slug, so every default-mode item link 404s. Author your own blocks and build the hrefs yourself. |
 
-For `posts` and `docs`, the URLs are conventional (and the default theme's renderer hard-codes them). For `directory_listings`, you typically pair the list page with a `template: "dynamic_item"` page using the same `slug` prefix. See [`dynamic-item-page.md`](content.md#dynamic-item-page).
+For `posts` and `docs`, the URLs are conventional (and the default theme's renderer hard-codes them). For `directory_listings`, pair the list page with a `template: "dynamic_item"` page using the same `slug` prefix — both halves work. See [`dynamic-item-page.md`](content.md#dynamic-item-page).
 
 ### Common patterns
 
@@ -1704,7 +1720,7 @@ content_create_page({
 })
 ```
 
-#### Categorized directory list
+#### Flat directory list
 
 ```
 content_create_page({
@@ -1714,9 +1730,13 @@ content_create_page({
   collection_type: "directory_listings",
   blocks: []
 })
-# The list iterates published directory_listings — pre-filter by category in the
-# Liquid template if needed (template_inspect_block_fields / template_upsert).
+# → /restaurants lists EVERY published listing this tenant has, across ALL
+#   categories, capped at the first 100. Items at /restaurants/<listing-slug>.
 ```
+
+🔴 **This does not produce a *categorized* list, and it cannot be made into one from the page.** The fetcher calls the flat door with no `category` argument, so the binding is tenant-wide — there is no per-page category filter and no page field that adds one. Filtering inside the Liquid template only hides rows the fetcher already truncated at 100, which is worse than not filtering.
+
+**If you want per-category pages, use the built-in directory routes** — `/{directory_base}/{category}/{city}/{listing}`, which page server-side and generate their own SEO and sitemap entries. See [`directory-pages.md`](directory-pages.md). The flat layout is for *"one page, all our listings"*, and the two can coexist over the same rows.
 
 #### Empty-state with a CTA
 
@@ -1784,13 +1804,17 @@ content_create_page({
 
 This is a SINGLE page that handles ALL `/blog/<any_slug>` URLs by resolving `<any_slug>` against published posts.
 
-### The three collection types (same as dynamic_list)
+### The collection types (same set as dynamic_list)
 
 | `collection_type` | Resolves slug against | URL pattern |
 |---|---|---|
 | `posts` | `content_posts.slug` | `/blog/<post_slug>` |
 | `docs` | `content_docs.full_path` (recursive parent_id chain) | `/docs/<full_path>` |
-| `directory_listings` | `content_directory_listings.slug` | `/<page-slug>/<listing_slug>` |
+| `directory_listings` | `content_directory_listings.slug`, via `GET /content/directory/listings/{slug}` | `/<page-slug>/<listing_slug>` |
+| `<custom-collection-slug>` | the collection's record slug | `/<page-slug>/<record_slug>` |
+| `idap.<collection>` | — | ⚠️ bindable, but the list's default item links do not reach a served path |
+
+⚠️ **A directory listing slug is unique per CATEGORY, not per tenant.** Where two categories hold the same slug, the flat detail door returns a **deterministic first match** and reports which category it chose in `category_slug`. It never 400s on the ambiguity.
 
 For `posts` and `docs`, the URL prefix is conventional (`/blog`, `/docs` — built into the default theme's routing). For `directory_listings`, the prefix is whatever `slug` you set on the dynamic-item page.
 
@@ -1849,11 +1873,16 @@ For `docs`, the URL can be N segments deep (`/docs/foo/bar/baz`) — the rendere
 
 The default theme has specific templates that take precedence over the generic `dynamic-item.liquid`:
 
-| Collection | Template file (priority order) |
+| Route | Template file |
 |---|---|
-| `posts` | `templates/blog-post.liquid` → `templates/dynamic-item.liquid` |
-| `docs` | `templates/doc.liquid` → `templates/dynamic-item.liquid` |
-| `directory_listings` | `templates/listing.liquid` → `templates/dynamic-item.liquid` |
+| the built-in `/blog/<slug>` route | `templates/blog-post.liquid` |
+| the built-in `/docs/<path>` route | `templates/doc.liquid` |
+| the built-in `/{directory_base}/{category}/{city}/{listing}` route | `templates/directory-listing.liquid` |
+| **any `dynamic_item` page, whatever its `collection_type`** | `templates/dynamic-item.liquid` |
+
+🔴 **There is no `templates/listing.liquid`.** It is not one of the theme's templates and never was. The file that renders a directory listing is `templates/directory-listing.liquid`, and it is reached by the **built-in nested directory route** — never by `dynamic_item`.
+
+🔴 **`dynamic_item` does not fall back through a per-collection template.** It dispatches to `templates/dynamic-item.liquid` for every `collection_type`. The three files above are reached by their own built-in routes, not by this one. To style a `dynamic_item` page per collection, branch inside `dynamic-item.liquid` on `page.collection_type`, or author blocks on the page.
 
 To customize per-collection rendering, override the specific file via `template_upsert` (or `content_override_section({ section_slug: "blog-post", ... })` for the per-post template).
 
@@ -1983,6 +2012,11 @@ Any other slug like `myfeature` maps to `sections/myfeature.liquid`. The section
 ```
 1. content_get_section_source({ section_slug })   — see what's currently rendering
 2. content_override_section({ section_slug, liquid_source })   — write the new source
+
+🔴 NEITHER TOOL IS REGISTERED BY ANY PUBLISHED MCP SERVER (see the header note). The working
+equivalent is:
+1. template_get({ path: "sections/header.liquid" })
+2. template_upsert({ path: "sections/header.liquid", content: <the new source> })
 3. content_deploy_site_production                  — push to edge (~2-5s)
 ```
 
@@ -2059,7 +2093,8 @@ Site is live in ~2-5s.
 If you don't want to write Liquid and you just want a different "shape" of chrome (header? footer? edge-to-edge?), use `content_apply_layout_preset`:
 
 ```
-content_apply_layout_preset({ preset: "blank" })
+content_apply_layout_preset({ preset: "blank" })   # 🔴 NOT REGISTERED by any published server —
+                                                  # edit layout/theme.liquid via template_upsert
 // → { success: true, preset: "blank", description: "No header, no footer; full-page content", next_steps: "Deploy ..." }
 ```
 
