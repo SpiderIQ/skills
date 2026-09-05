@@ -21,19 +21,49 @@ Everything below is **project-scoped**. Bind a project first (`spideriq use <id>
 
 ## Which shape do you want?
 
-```
-  Do the URLs need a CITY in them?  ("plumbers in miami")
-    │
-    ├─ YES → CATEGORY-FIRST. This file.
-    │        /{directory_base}/{category}/{city}/{listing}
-    │        Built-in routes, SEO templates, sitemap. No page rows at all.
-    │
-    └─ NO  → FLAT. One page, every listing, no category or city segment.
-             A dynamic_list page bound to collection_type "directory_listings".
-             → references/dynamic-collections.md
+There are **three**, and they are not alternatives to each other so much as three different
+answers to *"where does the row live at request time?"*
 
-  Both layouts read the SAME listings and can coexist. Flat does not replace nested.
 ```
+  Does the reader need a CITY in the URL?   ("plumbers in miami")
+    │
+    ├─ YES ─▶ 1. CATEGORY-FIRST — this file.
+    │            /{directory_base}/{category}/{city}/{listing}
+    │            Built-in routes, SEO templates, sitemap. No page rows at all.
+    │
+    └─ NO ──▶ Do you want to author + edit the rows in the CMS?
+                │
+                ├─ YES ─▶ 2. FLAT. One dynamic_list page over every listing.
+                │            collection_type "directory_listings"
+                │            → references/dynamic-collections.md
+                │
+                └─ NO ──▶ 3. LIVE FROM IDAP. No import, no copy, no staleness.
+                             collection_type "idap.businesses"
+                             → references/dynamic-collections.md
+```
+
+**1 and 2 read the same `content_directory_listings` rows** and coexist happily — flat does not
+replace nested.
+
+**3 is a different store.** A `dynamic_list` page bound to `idap.businesses` reads
+`norm_cli_<tenant>.businesses` **at request time**, tenant-scoped, with all **45** declared fields
+available to the template. Nothing is imported, so nothing goes stale and `prune` is meaningless —
+but nothing is editable in the CMS either, and:
+
+🔴 **`idap.businesses` has no working per-item URL in default mode.** The list renders; every
+default-mode item link 404s. Use authored mode and write your own `href`s, or pick shape 1 or 2 if
+you need detail pages. The full rules are in `references/dynamic-collections.md` — read them before
+promising a customer shape 3.
+
+| | 1. category-first | 2. flat | 3. live from IDAP |
+|---|---|---|---|
+| store read at request time | `content_directory_listings` | `content_directory_listings` | `norm_cli_*.businesses` |
+| import step | yes | yes | **none** |
+| goes stale | yes — see *Staleness* | yes | **no** |
+| editable in the CMS | yes | yes | no |
+| city in the URL | yes | no | no |
+| detail pages | yes | yes | **not in default mode** |
+| sitemap entries | automatic | page only | page only |
 
 Not this file: **one** personalised page per prospect at `/lp/{page}/{id}` — that is
 `references/dynamic-landing.md`, a different surface with different rules.
@@ -96,8 +126,32 @@ collection `route_base`. **Renaming is SEO-safe**: the old `/directory/...` URLs
 permanent **301** redirects to the new prefix, and `sitemap.xml` switches to advertising only the
 new one. A published CMS page at slug `<directory_base>` renders in place of the built-in hub.
 
-⚠️ `directory_base` lives in the deploy-time config overlay — changing it **needs a deploy**, unlike
-listings.
+#### 🔴 The rename is NOT atomic. Deploy in the same breath as the flip.
+
+`directory_base` is read from **two stores that propagate at different speeds**, and the gap
+between them is a live SEO hazard, not a cosmetic lag:
+
+```
+  template_update_config(directory_base="ls")
+        │
+        ├──▶ content_template_configs.directory_base   (a DB column)
+        │      the API + /sitemap.xml read this        ── INSTANT
+        │
+        └──▶ _config.json in Workers KV
+               the RENDERER reads this                 ── DEPLOY-TIME ONLY
+```
+
+Measured on a throwaway tenant, 2026-09-04: with the column flipped and no deploy yet,
+`/sitemap.xml` advertised **13 `/ls/` URLs, every one of which 404'd**, while `/directory/` still
+served 200. A deploy closes the window; nothing closes it on its own and nothing warns you.
+
+**So: flip and deploy as one operation.** If a deploy is failing, do not flip — you would be
+handing Google a sitemap full of 404s for as long as the outage lasts.
+
+⚠️ **Verifying the flip has its own trap.** Public directory routes carry
+`cache-control: public, s-maxage=60`. A `/ls/` path you probed *before* the flip is a cached 404,
+and re-probing it straight after the deploy returns that cached 404 — which reads exactly like
+asymmetric routing. **Wait out the 60s TTL before believing a 404 on a path you already touched.**
 
 ### 🔴 `{city}` is not yours to set
 
@@ -108,6 +162,19 @@ no way to pass a city slug.
 **So: never create one category per city.** One category spans all its cities — that is what the
 hub page is. `directory_create_category(name="Plumbers in Miami")` is the classic wrong turn; it
 produces a directory with one city per vertical and no hub worth having.
+
+**Two ways the derivation bites, both measured on live tenant data (2026-09-04):**
+
+- **An inconsistent `state` splits one city into two pages.** `city_slug(city, state)` is faithful,
+  so `New York` stored once as `NY` and once as `New York` yields **both** `new-york-ny` and
+  `new-york-new-york` — two live pages, each with its own listings, competing for one city. Five
+  cities in the production corpus are split this way. **Canonicalise `state` upstream, before the
+  import**, not after; merging two slugs afterwards changes live URLs.
+- **A listing with an empty `city` appears on NO city page at all.** It produces no `city_stats`
+  row, so the hub never lists it and no city page contains it. It is still in
+  `directory_list_listings` and still reachable by its own URL — so a check that walks city pages
+  will not find it. **Absence of a page is not absence of a listing.** Audit with
+  `directory_list_listings` and compare against the hub, never the other way round.
 
 ### SEO templates render server-side — and ship to Google
 
@@ -139,6 +206,23 @@ external call. It carries **every declared column** through: the typed columns l
 `content_directory_listings`, everything else lands in the listing's `data` JSONB. It returns
 `{upserted, inserted, updated, pruned, failed, source_rows, affected_cities, source_schema,
 fields_mapped, filter, sync_log_id, failures?, prune_skipped_reason?, hint?}`.
+
+**"Every declared column" is a generated set, not a hand-written list — and you can read it.**
+
+```
+GET /content/data-sources          →  idap.businesses · is_servable: true · 45 fields
+```
+
+Those 45 field ids come from one generated manifest that every consumer derives from — the
+registry, the merge tags, the importer and the renderer — with a CI gate that fails the build when
+they drift apart. Practical consequence for you: **a column added to the corpus reaches this
+importer without anyone editing a list**, so do not assume the field set is whatever this file
+happens to name. Read `/content/data-sources` and check `fields_mapped` in the import's own
+response.
+
+⚠️ **Field ids are not column names.** Four ids are frozen for compatibility — `category`, `city_slug`,
+`phone`, `review_count` — and are addressed by *those* names regardless of what the underlying
+column is called. Bind to the declared id.
 
 If the tenant has never run SpiderMaps there is no `norm_cli_*` schema; the response's `hint`
 explains the workaround rather than failing silently.
@@ -285,6 +369,12 @@ content_visual_check({page_url: "https://<tenant>/directory/plumbers/miami-flori
   have renamed it.
 - **Do not promise merge tags on directory pages.**
 - **Do not claim listings need a deploy.** Only templates and `directory_base` do.
+- **Do not flip `directory_base` without deploying in the same operation.** The sitemap moves
+  instantly and the renderer does not; the gap advertises 404s to search engines.
+- **Do not claim a listing is reachable because the hub shows its city.** A listing with an empty
+  `city` is on no city page at all, and a city-page walk cannot see it.
+- **Do not hand-maintain a list of IDAP fields.** Read `/content/data-sources`; the set is
+  generated and gated.
 
 ## See also
 
