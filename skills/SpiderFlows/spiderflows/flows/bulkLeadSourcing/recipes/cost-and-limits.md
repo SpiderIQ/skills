@@ -1,8 +1,14 @@
 # Recipe: what a bulk run costs, and what stops it
 
-Read this **before** `sourceLeadsBulk`. A bulk submit is a single purchase from a
-third-party provider. Unlike a campaign, it cannot be stopped halfway and the
-spend is committed by one call.
+Read this **before** `sourceLeadsBulk`. A bulk submit is a single committing
+call: unlike a campaign it cannot be stopped halfway.
+
+🔴 **It is not always a purchase.** Four of the six registered sources
+(`sortlist`, `csv`, `json`, `internal`) buy **nothing at the source**. Branch your
+copy on **`source_is_free`**, never on "no cost was reported" — an *unpriced
+provider* returns `estimated_cost_usd: null` and is indistinguishable from a *free
+source* on every money field. And free at the source is **not free**: the
+downstream enrichment still spends `N leads x enabled stages`.
 
 ## How the estimate is computed
 
@@ -82,6 +88,41 @@ purchase. If you hit it, split the run by geo — not by lowering per-query limi
    record ceiling is the only arm.
 5. **Decide `vayapin` explicitly.** It publishes permanent public profiles; that
    is a separate irreversibility from the money.
+6. 🔴 **Quote the DURATION, not only the cost.** See below — on a free-source run
+   it may be the only honest number you have.
+
+## How long it will take — quote this before they commit
+
+`POST /api/v1/dashboard/bulk-lead-sourcing/estimate` returns a **`duration`**
+object beside the record and cost estimate, derived from **this client's own**
+`jobs_per_hour` on the slowest enabled stage — never a constant.
+
+```yaml
+duration:
+  hours: 42.0
+  human: "about 42 hours"
+  bottleneck_stage: spidersite
+  jobs_per_hour: 500
+```
+
+Fan-out is paced against that quota, so the run genuinely takes that long. 21,000
+records at 500 jobs/hour is **42 hours**, and a client at 1,000/hr gets half that
+for the same leads.
+
+⚠️ **Where the quota cannot be resolved it does NOT guess.** You get
+`hours: null`, `unresolved_reason`, and the literal string:
+
+```
+  "we cannot estimate how long this will take"
+```
+
+**Report that sentence verbatim. Never substitute a default number** — "nobody
+configured this" and "zero" are different facts.
+
+🔴 **On a `source_is_free` run this may be the ONLY non-zero number on the
+screen**, because `estimated_cost_usd`, `has_cost` and every other money field
+read `0`/`null`. Quoting cost alone there tells the user the run is free and
+instant. It is neither.
 
 ## Gotchas
 

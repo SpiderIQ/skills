@@ -9,6 +9,116 @@ been published; marketplace versions are immutable.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Both bulk recipes told agents that past runs are not in the corpus. They are.**
+  The 0.12.0 notes said *forward-only: runs submitted before 2026-08-25 are not in the
+  corpus, a backfill tool exists and has not been run.* The backfill **was run, on
+  2026-08-25** — 7,035 of 7,035 carriers, 0 rejected, all synced, idempotent at full
+  scale. Re-measured 2026-08-29 against production with a same-age control.
+
+  🔴 **The stale note was worse than merely out of date: it taught the wrong reflex.**
+  It told an agent that `count: 0` on an old run was *correct*. Today a `count: 0` on an
+  old run is a signal — most likely the dashed `campaign_id` the controls in the same
+  recipe warn about, where a wrong id and an empty run are indistinguishable. So an
+  agent reading the old wording would have accepted the one answer it should question.
+
+  `read-results.md` now says past runs read like any other and that a zero wants the
+  dash check. `sortlist-agencies.md` keeps the limit that survives, narrowed to what is
+  actually true: the **lead** is in the corpus, but an upload submitted before the
+  allow-list widening carries no directory **values** and no backfill can recover them,
+  because they were never in the stored record. Re-uploading is the only route.
+
+## [0.13.0] — 2026-08-26 — a long `enriching` is not a stuck run, the duration is quotable, and a bulk submit is not always a purchase
+
+Umbrella card `SDS-64`, covering the shipped behaviour of `SDS-35`, `SDS-37` and
+`SDS-28`. All three were merged, deployed and `/test-live` PASSED days before this
+skill caught up with them.
+
+### Fixed
+
+- **`flows/bulkLeadSourcing/recipes/read-results.md` — Step 1 enumerated a manifest
+  walk that was missing four of its states, including the one a healthy run now
+  sits in for hours.**
+
+  ```
+    it said     pending -> submitted -> fanning_out -> completed
+    reality     pending -> submitted -> polling -> ready -> fetching -> parsing
+                        -> fanning_out -> enriching -> completed
+  ```
+
+  🔴 **The omission pre-dates `SDS-35`; what `SDS-35` changed is its consequence.**
+  `enriching` used to be capped by a 45-minute settle timer. That timer is now a
+  *condition* — the run stays open while `campaign_locations` holds non-terminal
+  rows — bounded only by a 24-hour backstop. So an agent polling a **healthy**
+  8-hour run saw a status its own skill said did not exist, and the natural
+  conclusion was "stuck". Filing that as a defect is the exact false-finding shape
+  `SDS-32` was opened to eliminate, one surface over.
+
+  The recipe now names every state, says a long `enriching` is legitimate work
+  paced by the client's own quota (21,000 records at 500 jobs/hour is ~42 hours),
+  and documents `settle_outcome` / `leads_outstanding` — including that
+  `gave_up_waiting` is **a distinct outcome, not a finish**, and that zero
+  outstanding work is a legitimate *immediate* completion.
+
+- **`flows/bulkLeadSourcing/recipes/cost-and-limits.md` opened with the money
+  sentence `SDS-28` fixed one layer down:** *"A bulk submit is a single purchase
+  from a third-party provider."* False for `sortlist`, `csv`, `json` and
+  `internal` — four of the six registered sources. Now branches on
+  **`source_is_free`**, never on `!has_cost`, and states that free at the source
+  is not free because the downstream `N leads x stages` still spends.
+
+### Added
+
+- **`cost-and-limits.md` — how long the run will take.** `/estimate` gained a
+  `duration` object (`SDS-37`) derived from *this client's own* `jobs_per_hour` on
+  the slowest enabled stage. The recipe now tells an agent to quote it, and — the
+  part that matters — that where the quota is unresolvable it returns
+  `hours: null` and the literal *"we cannot estimate how long this will take"*,
+  which must be reported **verbatim, never as a default number**. On a
+  `source_is_free` run this may be the only non-zero number on the screen.
+
+- **`read-results.md` — poll the PUBLIC `job_id`.** `SDS-32`: sending the internal
+  record id returns a `404` naming the id you should have used
+  (`INTERNAL_JOB_ID_SUPPLIED` / `public_job_id`) — but only for a job this tenant
+  owns; another tenant's id returns a bare `404`.
+
+## [0.12.0] — 2026-08-25 — bulk leads reach the CRM, and the IDAP read path is no longer marked unverified
+
+Correction release, for a claim that went from true to false when the product changed
+underneath it.
+
+`flows/bulkLeadSourcing/recipes/read-results.md` carried a standing warning not to present
+IDAP-by-campaign as the bulk read path, on the strength of a 2026-08-21 live check that
+found **zero** normalized rows for any bulk run. That measurement was correct and its cause
+is now established: a bulk lead's carrier row was inserted already-completed, so the
+callback that writes a `results` row never fired and the CRM sync worker had nothing to
+claim. The carrier now writes its own `results` row, and a bulk lead lands in `businesses`
+like any campaign lead.
+
+Removing the warning surfaced a **second defect it had been hiding**. The recipe's own
+example substituted `bulk_job_id` verbatim — dashed, as the submit response returns it —
+while the stored `campaign_id` has the dashes removed. Re-measured with a control, because
+a wrong id and an empty run give the same answer:
+
+```
+  A  campaign_id=bulk_2cd290e9897f4ebe96910231155e0915      count 3   <- undashed, correct
+  B  campaign_id=bulk_2cd290e9-897f-4ebe-9691-0231155e0915  count 0   <- what the recipe said
+  C  campaign_id=bulk_zzzznotreal                           count 0   <- control
+```
+
+B is indistinguishable from C, so an agent following the recipe verbatim would have
+concluded the path was broken — reproducing the very finding that produced the warning.
+
+`recipes/sortlist-agencies.md` gains the ten directory fields a Sortlist agency now carries
+in the corpus, stated as **Sortlist-scoped**: six sources feed bulk lead sourcing and this
+is the one that fills those columns. An uploaded `csv`/`json` row is mapped through a closed
+field allow-list with no directory field in it, so those columns stay null for uploads.
+
+Both notes say **forward-only**: runs submitted before 2026-08-25 are not in the corpus. A
+backfill tool exists and has not been run against production.
+
+
 ## [0.11.0] — 2026-08-23 — internal sources: enrich the leads a tenant ALREADY owns
 
 Feature release. Adds `flows/internalSources/` — the recipe set for `provider: "internal"`,

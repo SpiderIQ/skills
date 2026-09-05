@@ -27,10 +27,55 @@ campaign       bulk_<bulk_job_id>  — the campaign the per-lead jobs were fanne
 
 ## Step 1 — wait for terminal
 
-Poll `GET /jobs/{job_id}/status` (3–5 s minimum interval). The manifest walks
-`pending → submitted → fanning_out → completed`. `submitted` means the provider
-has the job; `fanning_out` means records are arriving and per-lead jobs are being
-created.
+Poll `GET /jobs/{job_id}/status` (3–5 s minimum interval). The manifest walks:
+
+```
+pending → submitted → polling → ready → fetching → parsing → fanning_out → enriching → completed
+```
+
+with `partial`, `failed` and `cancelled` as the other terminal states.
+`submitted` means the source has the job; `fanning_out` means records are
+arriving and per-lead jobs are being created; **`enriching` means fan-out is done
+and the run is waiting on its leads.**
+
+### 🔴 A long `enriching` is NOT a stuck run — do not report it as one
+
+This is the single most likely way to file a false finding against this flow.
+
+```
+  what you see        status: enriching, unchanged for hours
+  what you conclude   the run is stuck
+  what is true        fan-out is paced against the client's own per-hour job
+                      quota, so 21,000 records at 500 jobs/hour is ~42 HOURS
+                      of legitimate work
+```
+
+The run is **not** closed by a timer. It stays `enriching` while
+`campaign_locations` still holds non-terminal rows, and closes when its *leads*
+finish. Keep polling; say "still enriching, N outstanding", never "stuck".
+
+There is still a **24-hour backstop**. If it expires with leads in flight the run
+closes as `gave_up_waiting` — **a distinct outcome, not a finish.** Two fields on
+the results summary say which happened:
+
+| `settle_outcome` | Means |
+|---|---|
+| `no_wait_needed` | there was never any outstanding enrichment to wait for |
+| `all_leads_terminal` | every lead reached a terminal state — the ordinary finish |
+| `gave_up_waiting` | the 24-hour backstop fired. **Report this as a partial outcome** |
+
+`leads_outstanding` carries the count the predicate saw (`null` where it was never
+measured).
+
+⚠️ **Zero outstanding work is a legitimate IMMEDIATE finish.** A run with every
+enrichment stage disabled produces no per-lead jobs and completes in ~90 s with
+`settle_outcome: no_wait_needed`. That is correct by construction — reading it as
+a failure is a known bug that has been shipped twice and fixed twice.
+
+⚠️ **Poll the PUBLIC `job_id`.** It is not the same value as the internal record
+id. If you send the internal one you get a `404` that names the id you should have
+used (`error.code: INTERNAL_JOB_ID_SUPPLIED`, `error.public_job_id`) — but only
+for a job this tenant owns; another tenant's id returns a bare `404`.
 
 ## Step 2 — read the PARENT for the funnel, the money, and the pointers
 
@@ -129,17 +174,47 @@ curl "https://spideriq.ai/api/v1/jobs/spiderMaps/campaigns/bulk_<bulk_job_id>/wo
 
 ## Reading through IDAP
 
+✅ **This works for bulk runs as of 2026-08-25, and it did not before.** Until then the
+carrier row that represents a bulk lead was inserted already-completed, so the callback
+that writes a `results` row never fired, so the CRM sync worker had nothing to claim and
+**no bulk lead ever reached the normalized corpus.** The carrier now writes its own
+`results` row, and a bulk lead lands in `businesses` like any campaign lead.
+
+🔴 **The campaign id is the bulk job id with its DASHES REMOVED.** This is the whole
+trick, and getting it wrong is silent — a wrong value returns `count: 0`, exactly like a
+value with no rows:
+
+```
+  bulk_job_id  (as the submit response returns it)   2cd290e9-897f-4ebe-9691-0231155e0915
+  campaign_id  (what IDAP stores and filters on)     bulk_2cd290e9897f4ebe96910231155e0915
+```
+
 ```bash
-curl "https://spideriq.ai/api/v1/idap/businesses?campaign_id=bulk_<bulk_job_id>&include=emails,phones,domains,pins" \
+BULK_ID=2cd290e9-897f-4ebe-9691-0231155e0915
+curl "https://spideriq.ai/api/v1/idap/businesses?campaign_id=bulk_${BULK_ID//-/}&include=emails,phones,domains,pins" \
   -H "Authorization: Bearer $SPIDERIQ_PAT"
 ```
 
-⚠️ **Not verified for bulk runs.** A live check on 2026-08-21 found **zero** rows in
-the tenant's normalized corpus carrying a bulk run's `source_job_id` or a `bulk_%`
-`source_campaign_id`, while a bare `/idap/businesses` for the same tenant returned
-rows. The cause is not established — it may be correct for a run whose only enabled
-stage was `spidersite`. **Do not present IDAP-by-campaign as the bulk read path
-until that is scoped.** Steps 2 + 3 above are the path that is measured to work.
+Measured 2026-08-25 with a control, because "0 rows" and "wrong id" are the same
+response and only a control tells them apart:
+
+```
+  A  campaign_id=bulk_2cd290e9897f4ebe96910231155e0915      count 3   <- undashed, correct
+  B  campaign_id=bulk_2cd290e9-897f-4ebe-9691-0231155e0915  count 0   <- dashed
+  C  campaign_id=bulk_zzzznotreal                           count 0   <- control
+```
+
+**B and C are indistinguishable.** If you get `count: 0`, check the dashes before
+concluding the run produced nothing.
+
+✅ **Past runs are in the corpus too.** Bulk runs submitted before 2026-08-25 were
+backfilled on 2026-08-25 — every carrier, all synced — so this filter reads an old run
+like any other. 🔴 **A `count: 0` on an old run is therefore NOT expected any more.**
+Check the dashes on the `campaign_id` before concluding the run produced nothing: a
+wrong id and an empty run give the same answer (controls A/B/C above).
+
+Steps 2 + 3 still work on any run regardless, because they read the job results
+directly rather than the corpus.
 
 ## Gotchas
 

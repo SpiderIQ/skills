@@ -137,6 +137,38 @@ on a finished record comes from **the agency's own website**, crawled by
 That is why `spidersite` is the stage worth enabling here: with it off, you get
 agency names and sites and no way to reach anyone.
 
+## What a Sortlist agency carries in the CRM
+
+Since 2026-08-25 a Sortlist lead lands in the normalized corpus with ten directory
+fields the other sources do not supply, on top of the ordinary business columns:
+
+```
+  tagline      team_size    work_count   verified   claimed
+  languages    services     sectors      awards     clients
+```
+
+`team_size` and `work_count` are **sortable** (`GET /idap/businesses?sort=team_size&order=asc`);
+`tagline`, `services`, `sectors` and `clients` are **searchable**. Read them back with the
+IDAP recipe in [`read-results.md`](read-results.md).
+
+🔴 **Four of the six sources fill these columns — say WHICH, never "bulk leads".**
+`sortlist` fills them from the directory. Since `SDS-59` a `csv` or `json` **upload**
+fills them too, and an `internal` re-run carries them forward — but only from columns
+the client's own file (or the corpus) actually has. `outscraper` and `apify` are
+Google-Maps shaped and carry **none** of the ten; a Maps lead's `team_size` is null
+because Maps does not publish one, not because anything dropped it.
+
+The upload path reads a **named** allow-list, not a passthrough: the ten are accepted
+under their own names (plus a few spreadsheet spellings — `No. of Employees`,
+`Industries`), and every other column a client invents is still dropped. So `team_size`
+in a spreadsheet now lands; `revenue` still does not.
+
+⚠️ **A past run is in the corpus; its directory VALUES may not be.** Runs submitted before
+2026-08-25 were backfilled, so the leads themselves are readable. But an upload submitted
+before the allow-list was widened carries **no** directory values, and no backfill can
+recover them — the fields were never in the stored record, so there is nothing to replay.
+Re-uploading the file is the only way to add them to a past upload.
+
 ## When to use it
 
 | Use Sortlist when | Use Maps/`outscraper` when |
