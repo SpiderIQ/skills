@@ -1,0 +1,271 @@
+# stitch-video-extract-frames — API surface + envelope (guidance:) block.
+# See opvs-ai/vendors 04-publishing/4-layer-and-envelope.md and
+# docs/services/SpiderCLI/AUTHORING-SPIDERIQ-SKILLS.md §4.6.
+#
+# base_url is the RELATIVE base OPVS composes the call from (upstream.base_url + method path).
+# Every route below is in https://spideriq.ai/api/v1/openapi.json (checked 2026-09-23).
+# Params mirror app/schemas/spider_video.py — SpiderVideoJobPayload (stitch) and
+# ExtractFramesPayload (frames). Both submits take the fields WRAPPED in `payload`.
+name: stitch-video-extract-frames
+version: "0.1.0"
+description: >
+  SpiderVideo — stitch hosted video clips into one mp4 (fade transitions, 9:16 or 16:9,
+  background music, a voiceover, music ducked under the voice, burned word captions), or
+  extract a numbered WebP/JPEG frame sequence from one video for a scroll-linked animation.
+  Both are async jobs: submit, poll, read the result, then measure the output.
+category: media
+base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - stitch video clips
+  - make a video from scenes
+  - add music to a video
+  - add a voiceover to a video
+  - burn captions into a video
+  - duck the music under the voice
+  - extract frames from a video
+  - scroll sequence from a video
+
+guidance:
+  use: >
+    Assemble clips you already host into one finished video with music, narration and captions
+    (stitch), or turn one video into an image sequence for a scroll animation (frames). Nothing is
+    generated here — every scene, track and voice is a URL you supply.
+  not:
+    - "generate-media → create the clips, images or voiceover first (SpiderVideo generates nothing)"
+    - "spiderpublish (publish-skills) → video_to_scroll_sequence puts frames on a page in one call, and deploys it"
+    - "spideriq-media-catalog (media-skills) → find, host and browse the files you stitch"
+  # Q1 — no method takes a free-text search query, so the aliases map the words an agent uses
+  # for the job's inputs onto the canonical payload fields.
+  intent_aliases:
+    clips: scenes
+    shots: scenes
+    narration: voiceUrl
+    voiceover: voiceUrl
+    background_music: musicUrl
+    subtitles: captions
+    ducking: duckMusic
+    source_video: video_url
+  pitfalls:
+    - "Submit returns job_id + status:queued, never a video. A running render still reads queued; a render may take up to 30 minutes."
+    - "completed is not correct: a scene clip shorter than its durationInSeconds renders a FROZEN tail with no error. Measure the output (scripts/verify-video.py) before reporting it."
+    - "Without payload.upload.enabled the mp4 never leaves the renderer — data.outputFile is a path on that machine, not a file anyone can open."
+    - "A failed job's error_message is a fixed 'quote this job id' sentence — the reason is withheld. Diagnose from the input (verify-video.py preflight), never by retrying the same request."
+    - "An identical request within 24 hours returns the EARLIER job (from_cache:true). Change projectName to force a new render."
+    - "The published API example for the extract-frames route is a stitch payload and returns 422 — use the fields declared on submitExtractFramesJob."
+
+methods:
+  # -- Path A: stitch ---------------------------------------------------------
+  submitStitchJob:
+    description: >
+      Stitch 1-50 hosted video clips into one h264 mp4 at 30 fps with fade transitions, optional
+      background music, a voiceover track, music ducked under the voice, and burned word captions.
+      Output length = sum(round(durationInSeconds x 30)) - (scenes - 1) x transitionDurationInFrames
+      frames. Returns job_id + status:queued; the file arrives in getJobResults at
+      data.upload.seaweedfs_url when upload.enabled is true.
+    guidance:
+      use: "a finished video assembled from clips you already host"
+      next: "getJobStatus until completed or failed, then getJobResults; then measure with scripts/verify-video.py render"
+      warn: "run scripts/verify-video.py preflight on the payload first — a clip shorter than its durationInSeconds renders a frozen tail with status completed. Set upload.enabled or you get no file."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderVideo/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: "The stitch job. Wrap every field in payload: {\"payload\": {...}} — a flat body is a 422."
+        properties:
+          projectName:
+            type: string
+            required: true
+            description: "Output file name without extension, 1-200 chars. Change it to force a new render of an otherwise identical request."
+          aspectRatio:
+            type: string
+            values: ["9:16", "16:9"]
+            description: "9:16 renders 1080x1920, 16:9 renders 1920x1080 (default 9:16). Clips are scaled to cover the frame and cropped."
+          scenes:
+            type: array
+            required: true
+            description: "1-50 clips, played in order, each from its start for exactly durationInSeconds."
+            items:
+              type: object
+              properties:
+                videoUrl:
+                  type: string
+                  required: true
+                  description: "http(s) URL of the clip (mp4, webm, mov). Any other scheme is accepted here and fails the job later."
+                durationInSeconds:
+                  type: number
+                  required: true
+                  description: "Seconds of this clip to use, > 0 and <= 300. MUST NOT exceed the clip's real length — the missing seconds render as a frozen still, with no error."
+          transitionDurationInFrames:
+            type: integer
+            description: "Fade length between scenes in frames at 30 fps, 0-60 (default 15 = 0.5 s; 0 = hard cuts). Each fade overlaps two scenes, shortening the output."
+          musicUrl:
+            type: string
+            description: "http(s) URL of background music (mp3, wav). Starts at 0 s, not looped, cut at the last frame."
+          musicVolume:
+            type: number
+            description: "Music level 0-1 outside speech (default 0.3)."
+          voiceUrl:
+            type: string
+            description: "http(s) URL of a voiceover you already have (mp3, wav, m4a) — no text-to-speech here. Its own track from 0 s. A URL that 404s or carries no audio stream FAILS the job; a non-http(s) URL is a 422."
+          voiceVolume:
+            type: number
+            description: "Voiceover level 0-1 (default 1.0)."
+          duckMusic:
+            type: boolean
+            description: "Lower the music 12 dB while the voice speaks. OFF unless true, and 422 unless BOTH musicUrl and voiceUrl are set."
+          captions:
+            type: array
+            description: "1-20,000 word tokens burned into the video, drawn EXACTLY as timed — nothing listens to the audio. Times in ms from the start of the OUTPUT video."
+            items:
+              type: object
+              properties:
+                text:
+                  type: string
+                  required: true
+                  description: "The word, 1-200 chars. A leading space starts a new word; if NO token has one, each entry is its own word."
+                startMs:
+                  type: number
+                  required: true
+                  description: "When the word appears, ms from the start of the video."
+                endMs:
+                  type: number
+                  required: true
+                  description: "When the word ends, ms; must be >= startMs (422 otherwise)."
+                pageBreakAfter:
+                  type: boolean
+                  description: "Force a new caption page after this token."
+          upload:
+            type: object
+            description: "Set {enabled: true} to receive the file at data.upload.seaweedfs_url. Needs SpiderMedia storage on the account, or the job fails."
+            properties:
+              enabled:
+                type: boolean
+                description: "true to upload the render (default false — the file then stays on the renderer)."
+          preprocess:
+            type: object
+            description: "Auto-transcode clips the renderer cannot play. ON when omitted; send {enabled: false} to refuse such clips instead."
+            properties:
+              enabled:
+                type: boolean
+                description: "false to disable the automatic transcode."
+      priority:
+        type: integer
+        description: "Job priority 0-10 (higher first; default 5)."
+    response:
+      format: json
+
+  # -- Path B: frames ---------------------------------------------------------
+  submitExtractFramesJob:
+    description: >
+      Extract a numbered image sequence (frame_0001.webp ...) from one hosted video into the
+      account's SpiderMedia bucket. The result manifest {base_url, pattern, count} is exactly the
+      three props of the sys-scroll-sequence component. ffmpeg only — no transitions, no audio.
+    guidance:
+      use: "frames for a scroll-linked animation when you will place them yourself; to place them on a page in one call use video_to_scroll_sequence (spiderpublish)"
+      next: "getJobStatus, then getJobResults (data is the manifest); then measure with scripts/verify-video.py frames"
+      warn: "action MUST be extract_frames and strategy needs its companion field. The published API example for this route is a stitch payload — it returns 422."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderVideo/extract-frames/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: "The frames job, wrapped in payload."
+        properties:
+          action:
+            type: string
+            required: true
+            values: ["extract_frames"]
+            description: "Always extract_frames."
+          video_url:
+            type: string
+            required: true
+            description: "http(s) URL of the source video. media.spideriq.ai and media.di-atomic.com are trusted; other hosts must serve video/mp4, video/webm or video/quicktime under 500 MB within 30 s."
+          strategy:
+            type: string
+            required: true
+            values: ["target_frames", "fps", "duration_fps"]
+            description: "target_frames = exactly N frames over the whole video; fps = N per second over the whole video; duration_fps = the first duration_seconds at fps."
+          target_frames:
+            type: integer
+            description: "Required for strategy target_frames: 10-600."
+          fps:
+            type: integer
+            description: "Required for strategy fps or duration_fps: 1-60."
+          duration_seconds:
+            type: integer
+            description: "Required for strategy duration_fps: seconds to take from the start, 1-120."
+          output_format:
+            type: string
+            values: ["webp", "jpeg"]
+            description: "Frame format (default webp — about half the bytes of jpeg)."
+          output_width:
+            type: integer
+            description: "Frame width in px, 320-1920 (default 1280); height follows the source aspect."
+          output_quality:
+            type: integer
+            description: "Encoder quality 50-95 (default 80)."
+      priority:
+        type: integer
+        description: "Job priority 0-10 (higher first; default 5)."
+    response:
+      format: json
+
+  # -- Both: poll + read ------------------------------------------------------
+  getJobStatus:
+    description: >
+      Status of a SpiderVideo job: queued (waiting OR rendering — a first attempt never reads
+      processing), processing (a retry after a failed attempt), completed, failed or cancelled.
+    guidance:
+      use: "poll every 5-10 s after a submit"
+      next: "getJobResults once completed or failed"
+      warn: "a long queued is normal — renders run one at a time and a running render reads queued; only 30+ minutes suggests a problem"
+      telemetry_signal_default: "hot"
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: "The job_id returned by the submit."
+      format:
+        type: string
+        values: ["json", "yaml", "md", "llm"]
+        description: "Response format (default json). yaml or md cut tokens; llm returns JSON with a guidance block."
+    response:
+      format: json
+
+  getJobResults:
+    description: >
+      The job's result envelope {success, job_id, type, status, completed_at, data, error_message}.
+      Stitch: data.upload.seaweedfs_url is the file (with upload on), data.warnings lists what was
+      cut. Frames: data is the manifest {base_url, pattern, count, format, width, ...}.
+    guidance:
+      use: "read the render or the frames manifest after the job is terminal"
+      next: "measure the output with scripts/verify-video.py (render or frames) before reporting it"
+      warn: "a failed job's error_message never says why (a fixed 'quote this job id' sentence); an upload object with an error key can sit on a completed job"
+      telemetry_signal_default: "warm"
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: "The job_id returned by the submit."
+      format:
+        type: string
+        values: ["json", "yaml", "md", "llm"]
+        description: "Response format (default json). yaml or md cut tokens; llm returns JSON with a guidance block."
+    response:
+      format: json

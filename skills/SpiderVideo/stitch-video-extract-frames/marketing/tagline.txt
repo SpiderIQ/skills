@@ -1,0 +1,1 @@
+SpiderVideo — stitch clips into a finished video, or a video into scroll-animation frames, and prove the output is right

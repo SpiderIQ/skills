@@ -1,0 +1,14 @@
+{
+  "title": "The published API example for extract-frames is a STITCH payload — copying it returns 422",
+  "summary": "The API reference entry for POST /jobs/spiderVideo/extract-frames/submit shows projectName / scenes / musicUrl — the stitch payload — while the route requires action:'extract_frames', video_url and strategy. Copying the documented example returns 422. Root cause: the request model's schema example is overridden by a second, stitch example declared in the same class, so the OpenAPI spec itself carries the wrong example (and the stitch route carries none). Confirmed on the live OpenAPI and the live API reference page on 2026-09-23. Use the payload in references/extract-frames.md until the example is fixed.",
+  "created_at": "2026-09-23",
+  "updated_at": "2026-09-23",
+  "tags": ["spidervideo", "extract-frames", "api-docs", "422", "live-trap"],
+  "stale_after": "2026-12-31",
+  "references": [
+    "https://spideriq.ai/api/v1/openapi.json on 2026-09-23 — components.schemas.ExtractFramesSubmit.example.payload keys = [aspectRatio, musicUrl, musicVolume, projectName, scenes, transitionDurationInFrames, upload]; SpiderVideoJobSubmit carries no example",
+    "https://spideriq.ai/docs/api-reference/jobs on 2026-09-23 — the extract-frames/submit entry renders projectName and no video_url/strategy",
+    "app/schemas/spider_video.py — ExtractFramesSubmit declares two `class Config:` blocks; the second (the stitch example) replaces the first",
+    "docs/services/SpiderVideo/PROPAGATE.md, SC-465 propagate 'Traps found on the way' #3 — first recorded, pre-existing, not fixed"
+  ]
+}

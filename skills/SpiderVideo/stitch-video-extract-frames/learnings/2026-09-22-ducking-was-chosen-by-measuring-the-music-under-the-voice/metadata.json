@@ -1,0 +1,12 @@
+{
+  "title": "Music ducking is a fixed -12 dB, chosen by measuring the music UNDER the voice — and that is how to check it",
+  "summary": "duckMusic lowers the music a fixed 12 dB while the voice speaks (120 ms look-ahead, 450 ms release, pauses under 350 ms held). The design was picked by measurement, not preference: a fixed-depth envelope ducked every word by the same amount (0.1 dB spread across 8 words) while a compressor-style duck followed each syllable (4-5.5 dB spread, audible pumping). You cannot measure music under speech on a real song — they share frequencies — so use an 11 kHz test tone the voice cannot produce and isolate it with a high-pass (not 15 kHz: the AAC encoder removes it). Live proof: -56.2 dB under speech vs -44.0 dB in the pause (12.2 dB), control without duckMusic flat at -44.0 dB.",
+  "created_at": "2026-09-22",
+  "updated_at": "2026-09-23",
+  "tags": ["spidervideo", "audio", "ducking", "measurement"],
+  "references": [
+    "SpiderIQ PR #4188 (SC-465, merged 2026-09-22) — the audio lane; ducking design comparison recorded in docs/services/SpiderVideo/LEARNINGS.md 'Ducking was chosen by measuring the music UNDER the voice'",
+    "workers/SpiderVideo/remotion-app/src/lib/duck-envelope.ts — DUCK_DB = -12, DUCK_ATTACK_SECONDS = 0.12",
+    "SC-465 /test-live PASS 2026-09-22 on worker v1.6.0 through the public API: ducked job music band -56.23 dB in speech vs -44.04 dB in the pause (12.19 dB); control (duckMusic false, only differing field) flat at -43.96 dB; video stream hash identical ON vs OFF"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Only http(s) URLs are fetched — the API accepts other strings for scenes and music, then the job fails",
+  "summary": "Every scene, music and voice URL is downloaded by the renderer as a single argument to its downloader, and only http:// and https:// URLs are fetched; anything else is refused at download time and the job fails. The API validates the scheme up front only for voiceUrl (422). videoUrl and musicUrl are plain strings at the API: a file:// URL or a relative path answers 201 and fails minutes later, with the reason withheld from the result. Send hosted https URLs, and run verify-video.py preflight, which opens every URL before a render is spent.",
+  "created_at": "2026-09-22",
+  "updated_at": "2026-09-23",
+  "tags": ["spidervideo", "urls", "validation", "preflight"],
+  "references": [
+    "SpiderIQ PR #4188 (SC-465, merged 2026-09-22), commit af5d5f05d — every download/probe runs as an argv call and downloads refuse non-http(s) URLs (assertHttpUrl in workers/SpiderVideo/remotion-app/src/lib/asset-manager.ts)",
+    "app/schemas/spider_video.py — voiceUrl carries pattern ^https?:// (422 at submit); SpiderVideoScene.videoUrl and musicUrl are unconstrained strings",
+    "docs/services/SpiderVideo/PLAN.md Backlog — 'musicUrl and scene videoUrl accept any string at the schema ... the API still accepts file://… and answers 201'"
+  ]
+}
