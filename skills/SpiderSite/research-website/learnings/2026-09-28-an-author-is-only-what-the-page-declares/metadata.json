@@ -1,0 +1,12 @@
+{
+  "title": "An author is only what the page declares — and a related-posts list is not a byline",
+  "summary": "sources[].author and published_at are read from what the page declares about itself: structured data (JSON-LD Article), meta tags, a byline that links to the site's author page, a <time> element, or PDF metadata. null means the page declares none of those — not that the page is anonymous. On the first live run a blog post whose only byline was a link to /author/<name>/ came back with author null; reading every author link then returned three names, because the related-posts cards at the foot of the page carry bylines too. Only the first byline's own container is read now, and the post returns its one author. Never fill author or date from the body text, and treat several comma-separated names as what the byline says.",
+  "created_at": "2026-09-28",
+  "updated_at": "2026-09-28",
+  "tags": ["spidersite", "research", "attribution", "author", "byline"],
+  "references": [
+    "SpiderIQ card SPI6-10 — live runs on 2026-09-28 inside the SpiderSite worker image against https://blog.cloudflare.com/announcing-1111/: author null, then 'Matthew Prince, Michelle Zatlyn, Jules Lemee', then 'Matthew Prince' (published 2018-04-01T13:01:00.000Z on all three)",
+    "workers/SpiderSite/research_engine.py — extract_attribution: JSON-LD Article types, then meta tags, then author-page byline links restricted to the first link's container (600 characters), then <time>",
+    "tests/unit/workers/test_spidersite_research_engine.py — test_a_byline_link_to_the_sites_author_page_is_a_declared_author, test_related_post_bylines_are_not_this_posts_authors, test_red_control_an_author_index_link_is_not_an_author"
+  ]
+}

@@ -2,9 +2,9 @@
 name: stitch-video-extract-frames
 description: >
   SpiderVideo — two jobs behind one service. STITCH: join video clips (scenes) into one
-  mp4 with fade transitions, portrait 9:16 or landscape 16:9, background music, a
-  voiceover track, music that ducks under the voice, and burned word-by-word captions;
-  optionally upload it to SpiderMedia. FRAMES: pull a numbered WebP/JPEG image sequence
+  mp4 with fade transitions or hard cuts, portrait 9:16 or landscape 16:9, background music, a
+  voiceover track, music that ducks under the voice, burned word-by-word captions and
+  optional loudness normalisation; optionally upload it to SpiderMedia. FRAMES: pull a numbered WebP/JPEG image sequence
   out of a video for a scroll-linked hero (the sys-scroll-sequence component). Use for
   "stitch these clips", "make a video from scenes", "join AI video clips", "add music /
   a voiceover / narration / subtitles / captions to a video", "duck the music", "render
@@ -13,7 +13,7 @@ description: >
   a render that completes can still be wrong. Generating the clips or the voice is
   generate-media; publishing a page is spiderpublish; hosting and browsing files is
   spideriq-media-catalog.
-version: "0.1.0"
+version: "0.2.0"
 category: media
 ---
 
@@ -75,10 +75,12 @@ result's `outputFile` is a path on that machine — nothing you or a user can do
 the verifier can open. With it, the file is at `data.upload.seaweedfs_url`. Why: it is the only
 way the video leaves the renderer. (The account needs SpiderMedia storage, or the job fails.)
 
-**Diagnose a failure from the INPUT, never from `error_message`.** For this service a failed job's
-`error_message` is one fixed sentence asking you to quote the `job_id` to support — the real reason
-is withheld from client responses. Why: parsing it tells you nothing, and retrying an input failure
-fails identically. `preflight` is how you find the broken URL yourself.
+**Diagnose a failure from the INPUT, never from `error_message` — with ONE exception.** For this
+service a failed job's `error_message` is almost always one fixed sentence asking you to quote the
+`job_id` to support: the real reason is withheld from client responses. The exception is a request
+the renderer REFUSED. It reads `[invalid_video_request] <sentence>`, fails on the first attempt, and
+the sentence names what to change. Why: parsing the fixed sentence tells you nothing, and retrying an
+input failure fails identically. `preflight` is how you find a broken URL yourself.
 
 **Captions are drawn exactly as you timed them.** Nothing listens to the audio — there is no
 speech recognition and no alignment. Wrong timings render as wrong captions, with no error.
@@ -91,9 +93,15 @@ Why: an omitted flag produces a valid, plausible mix with no warning.
 
 **`create_video` sends a FIXED field list.** It forwards `project_name`, `scenes`, `aspect_ratio`,
 `music_url`, `music_volume`, `voice_url`, `voice_volume`, `duck_music` (only when `true`),
-`captions`, `transition_frames`, `upload`, `preprocess` (only when `true`) and `test` — and drops
+`captions`, `transition_frames`, `loudness_target` (only when set; `@spideriq/mcp-leads` ≥ 1.19.0 /
+`@spideriq/mcp` ≥ 1.95.0), `upload`, `preprocess` (only when `true`) and `test` — and drops
 anything else without an error. A field the API gained after your MCP package was built is
 unreachable through the tool; send it over HTTP instead. Why: a dropped field is a silent 201.
+
+**`transitionDurationInFrames: 0` is hard cuts, and a fade must fit every scene.** A fade longer
+than the scene before or after it is refused with a 422 that names the scene and the largest fade
+that fits. Why: it is the one transition mistake the API catches for you. Everything else about
+timing (`stitch-scenes.md`) it does not.
 
 **Only http(s) URLs are fetched.** The API accepts any string for `videoUrl` and `musicUrl` and
 answers 201; a `file://`, `ftp://` or bare path then fails the job at download. `voiceUrl` is
@@ -158,14 +166,15 @@ is cut, captions past the last frame are not shown. A non-empty `warnings` is a 
 | `upload` off | completed | no file you can open | the absence of `data.upload` |
 
 And the ones that DO fail, correctly: a scene or voice URL that 404s or carries no media stream
-(after 3 attempts), `duckMusic` without both tracks (422), a caption ending before it starts (422).
+(after 3 attempts), `duckMusic` without both tracks (422), a caption ending before it starts (422),
+a fade longer than a scene (422, naming the scene), a `loudnessTarget` outside −30..−10 (422).
 
 ## References (loaded on demand)
 
 - **`references/stitch-scenes.md`** — Path A payload, the duration arithmetic (transitions overlap —
-  three 5 s scenes are 14 s, not 15), preprocessing, upload, timing.
-- **`references/audio-lane.md`** — voice, ducking and captions: each contract, the caption format,
-  the ~42–52 ms lead captions have over the heard audio. **Always read** before an audio job.
+  three 5 s scenes are 14 s, not 15; hard cuts do not), preprocessing, upload, timing, output format.
+- **`references/audio-lane.md`** — voice, ducking, loudness and captions: each contract, the caption
+  format, the ~43 ms lead captions have over the heard audio. **Always read** before an audio job.
 - **`references/extract-frames.md`** — Path B strategies, source-host rules, the manifest, the
   one-call page path and why its `dry_run` still spends a job.
 - **`references/verify-the-output.md`** — the three verifier modes, what each check measures, what it
@@ -183,7 +192,8 @@ truth — confirm against the live API before relying on a number.
 - `2026-09-22-ducking-was-chosen-by-measuring-the-music-under-the-voice`
 - `2026-09-22-audio-lands-42-to-52ms-after-the-timeline`
 - `2026-09-22-only-http-urls-are-fetched`
-- `2026-09-23-a-failed-job-does-not-say-why` — the reason is withheld; diagnose from the input.
+- `2026-09-23-a-failed-job-does-not-say-why` — the reason is withheld (except a refused request);
+  diagnose from the input.
 - `2026-09-23-the-extract-frames-api-example-is-a-stitch-payload` — copying the published example
   returns 422; use the payload in `references/extract-frames.md`.
 

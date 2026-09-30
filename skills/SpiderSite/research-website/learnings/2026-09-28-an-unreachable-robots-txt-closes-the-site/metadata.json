@@ -1,0 +1,13 @@
+{
+  "title": "An unreachable robots.txt closes the whole site; a missing one opens it (RFC 9309)",
+  "summary": "Research decides robots.txt itself, by RFC 9309: a 2xx file is parsed and applied to every page, a 4xx (a missing file) means no rules, and a 5xx, a timeout or no answer means the WHOLE host is disallowed. A disallowed page is never fetched; it is counted in pages_skipped_robots and listed in skipped[] as robots_disallowed or robots_unreachable. When no page can be read the job fails at once with [research_no_readable_pages] and the count per reason, and is not retried. Measured: https://www.google.com/search?q=spideriq is disallowed by google.com's robots.txt — the job fetched nothing and failed in 0.6 s with '1 disallowed by robots.txt'. Treat this as the site's answer, not an outage.",
+  "created_at": "2026-09-28",
+  "updated_at": "2026-09-28",
+  "tags": ["spidersite", "research", "robots.txt", "rfc9309"],
+  "references": [
+    "SpiderIQ card SPI6-10 — live run on 2026-09-28 inside the SpiderSite worker image: discover single, url https://www.google.com/search?q=spideriq → [research_no_readable_pages] No page could be read, so there is no answer; 1 disallowed by robots.txt, 0 refused as unsafe, 0 failed to load (0.6 s)",
+    "RFC 9309 §2.3.1 — 'unavailable' (4xx) allows all, 'unreachable' (5xx or no answer) disallows all",
+    "workers/SpiderSite/research_engine.py — robots_policy_from_fetch and RobotsPolicy (agent token SpiderIQ); ResearchNoPagesError is retryable=False",
+    "tests/unit/workers/test_spidersite_research_engine.py — test_robots_follows_rfc_9309_not_crawl4ais_fail_open, test_a_robots_disallowed_url_is_never_fetched_and_the_job_says_why"
+  ]
+}

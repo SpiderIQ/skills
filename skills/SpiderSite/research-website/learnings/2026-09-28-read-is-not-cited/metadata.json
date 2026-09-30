@@ -1,0 +1,12 @@
+{
+  "title": "Read is not cited — five pages read, one page the answer rests on",
+  "summary": "sources[] lists every page a job read; cited: true marks the ones the answer used. They differ, and pages_read is not evidence. Measured with discover seed and max_pages 5 on a pricing question at https://plausible.io/: 5 pages read, 1 cited — the homepage carried the three plans; the other four were feature pages whose URLs matched the question's words. The answer's source_url values pointed at that one page and every one was on it (answer_urls.ungrounded would have been empty). Quote the cited sources, say how many pages were read, and check answer_urls.ungrounded before quoting any URL from the answer itself.",
+  "created_at": "2026-09-28",
+  "updated_at": "2026-09-28",
+  "tags": ["spidersite", "research", "sources", "citations", "seed"],
+  "references": [
+    "SpiderIQ card SPI6-10 — live run on 2026-09-28 inside the SpiderSite worker image: discover seed, max_pages 5, start https://plausible.io/, question 'What pricing plans are there and what does each cost per month?' → 3 tiers (Starter, Business, Enterprise), each with source_url https://plausible.io/; 5 pages read, 1 cited; 5,069 tokens; 13.6 s",
+    "workers/SpiderSite/research_engine.py — ResearchRun.run: cited = the model's citations that index a source; answer_url_check (answer_urls {checked, ungrounded})",
+    "tests/unit/workers/test_spidersite_research_engine.py — test_a_source_url_no_page_contains_is_flagged_and_the_read_one_is_not"
+  ]
+}

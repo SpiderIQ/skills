@@ -10,5 +10,9 @@ What it means for you:
   a viewer hears.
 - **Captions** are placed on the picture timeline, so each word appears about 42-52 ms (one to one and
   a half frames at 30 fps) before it is heard. Most viewers will not notice.
-- **Do not "correct" your caption timings by a fixed amount** unless you have measured your own render:
-  the cause is not established and the offset may not be constant.
+- **Do not "correct" your caption timings by a fixed amount** unless you have measured your own render.
+
+**Measured more precisely (2026-09-28):** cross-correlating a whole voice file against a render gives
+exactly **2048 samples at 48 kHz (42.67 ms)** — the size of two AAC audio frames, which is what an
+encoder's start-up delay looks like when the file does not tell players to skip it. It is still
+not fixed on our side.

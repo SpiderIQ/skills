@@ -1,15 +1,15 @@
-# Voiceover, ducked music and burned captions
+# Voiceover, ducked music, loudness and burned captions
 
-Three optional additions to a Path A stitch. Each is a URL or a list you supply: SpiderVideo does
-**not** generate speech (no text-to-speech here — make the voice with generate-media first) and does
-**not** transcribe it.
+Optional additions to a Path A stitch. The voice, music and captions are URLs or lists you supply:
+SpiderVideo does **not** generate speech (no text-to-speech here — make the voice with
+generate-media first) and does **not** transcribe it. Loudness normalisation is a switch.
 
 ## The three contracts
 
 | Field | Default | What it does | What it does NOT do |
 |---|---|---|---|
 | `voiceUrl` + `voiceVolume` | none, 1.0 | adds the voice as its own track from frame 0, mixed over the music | delay it, trim it, or generate it |
-| `duckMusic` | **false** | lowers the music **12 dB** while the voice speaks (120 ms look-ahead, 450 ms release; pauses under 350 ms stay ducked) | anything at all unless you set it to `true` |
+| `duckMusic` | **false** | lowers the music **12 dB** while the voice speaks: it starts 120 ms before a word, holds 150 ms after it, then recovers over 450 ms; pauses under 350 ms stay ducked | anything at all unless you set it to `true` |
 | `captions` | none | burns word-by-word captions, the current word highlighted | listen to the audio — it draws exactly the timings you send |
 
 - A `voiceUrl` that 404s, or a file with no audio stream, **fails the job** (after 3 attempts). It is
@@ -19,6 +19,34 @@ Three optional additions to a Path A stitch. Each is a URL or a list you supply:
   the music plays at one flat level under the speech, and nothing warns you.
 - The voice starts at 0.0 s of the output. To start narration later, put the silence in the file.
 - A voice longer than the video is cut at the last frame; the result's `data.warnings[]` says so.
+- **What counts as speech** for the duck: 10 ms windows louder than 40 dB below the voice's peak
+  (never quieter than −55 dBFS), with runs shorter than 100 ms ignored. Quiet word endings count as
+  speech, so the music does not start to recover inside a word.
+
+## Loudness (`loudnessTarget`)
+
+Rendered mixes come out wherever the inputs put them (a measured render: −18.9 LUFS). Set
+`loudnessTarget` (LUFS, **−30 to −10**; −14 is the usual streaming target) to normalise the
+finished file with EBU R128 two-pass `loudnorm`:
+
+- The true peak stays at or under **−1 dBTP**, measured on the encoded file you receive.
+- The picture is copied untouched.
+- Omit the field and the file is exactly what it was.
+- The result carries what happened: `data.loudness` =
+  `{targetLufs, truePeakCeilingDbtp, mode, before: {integratedLufs, truePeakDbtp, rangeLu}, after: {…}}`.
+
+⚠️ **Read `mode`.**
+- `linear` is one constant gain; the ducking is untouched.
+- `dynamic` means the target could not be reached under the peak ceiling with one gain, so the
+  level was ridden across the whole mix. That nudges the ducked music too. Measured on a real
+  render at −14: the music moved 1.6 dB inside speech, against the 12 dB duck. It is audible only
+  on close listening.
+- If the ducking must stay exactly as rendered, pick a target one gain can reach:
+  `before.truePeakDbtp + (target − before.integratedLufs)` must stay under about −1.2 dBTP. On the
+  measured render (−18.9 LUFS, peak −1.8) that meant nothing louder than about −18.5. Confirm
+  `mode: linear` in the result.
+
+`after.integratedLufs` lands within about ±1 LU of the target (measured: −14.98 for −14).
 
 ## Caption format
 
@@ -62,17 +90,18 @@ Captions are only as right as the timings. Two sources, neither verified by the 
    transcript of a different take, or of the script, is not the same timing.
 2. **Hand-timed** — only for a few words, and check them against the waveform.
 
-⚠️ **The rendered audio lands ~42–52 ms after the composition timeline** (measured: a voice starting
-at 0.500 s in its file starts at 0.542 s in the output). Captions follow the timeline, so they
-appear about that much **before** the heard word. Ducking is applied inside the render and stays
-aligned with the voice as heard. At one video frame (33 ms) this is rarely visible; do not "fix" it
-by shifting every token unless you have measured your own output.
+⚠️ **The rendered audio lands ~43 ms after the composition timeline** (measured: a voice starting
+at 0.500 s in its file starts at 0.542 s in the output; a whole-file cross-correlation gives exactly
+2048 samples at 48 kHz = 42.67 ms, i.e. two AAC frames of encoder delay). Captions follow the
+timeline, so they appear about that much **before** the heard word. Ducking is applied inside the
+render and stays aligned with the voice as heard. At about one video frame (33 ms) this is rarely
+visible; do not "fix" it by shifting every token unless you have measured your own output.
 
 ## Gotchas
 
 - The duck is a fixed depth, not a compressor: every word gets the same −12 dB, so music does not
-  "pump" between syllables. A voice with long pauses lets the music swell back between phrases —
-  that is the 450 ms release working, not a failure.
+  "pump" between syllables (a measured pump of 0.3 dB inside speech). A voice with long pauses
+  lets the music swell back between phrases — that is the 450 ms release working, not a failure.
 - `musicVolume` is the level **outside** speech; the duck is 12 dB below it.
 - Captions sit in the bottom 14% band. Scenes with their own on-screen text there will collide.
 

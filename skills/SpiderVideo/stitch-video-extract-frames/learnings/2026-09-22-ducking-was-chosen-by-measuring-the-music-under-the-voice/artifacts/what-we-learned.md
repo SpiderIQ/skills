@@ -1,8 +1,13 @@
 # Ducking is a fixed -12 dB — measure it with a tone the voice cannot make
 
 **The behaviour.** With `duckMusic: true` the music drops 12 dB while the voice speaks and comes back
-in the pauses (it starts dropping 120 ms before a word, recovers over 450 ms, and stays down across
-pauses shorter than 350 ms). Every word gets the same depth.
+in the pauses (it starts dropping 120 ms before a word, holds 150 ms after it, recovers over 450 ms,
+and stays down across pauses shorter than 350 ms). Every word gets the same depth.
+
+**What counts as speech (since 2026-09-28):** 10 ms windows louder than 40 dB below the voice's peak,
+never quieter than −55 dBFS, runs under 100 ms ignored — the same rule a customer's ducking gate
+used. Before, quiet word endings were read as pauses, so the music began to recover inside words;
+that gate measured 7.95 dB of "pump" (limit 3). Now: 0.31 dB.
 
 **Why fixed.** Two designs were compared on identical inputs. The fixed envelope ducked 8 words
 within 0.1 dB of each other. A compressor-style duck varied by 4-5.5 dB between words and swung

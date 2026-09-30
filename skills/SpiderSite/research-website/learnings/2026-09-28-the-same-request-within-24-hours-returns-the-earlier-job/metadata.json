@@ -1,0 +1,13 @@
+{
+  "title": "The same request within 24 hours returns the EARLIER job — a changed site is not re-read",
+  "summary": "Job submission is de-duplicated per workspace over the whole payload for 24 hours (JOB_CACHE_TTL 86400 s in production, read 2026-09-28). A research request whose url, mode and research block are identical to one sent in the last 24 hours returns that earlier job — its job_id, its status and, once read, its answer — with from_cache: true on the submit. research_website passes from_cache through and says so in its message. Retrying a null answer this way reads nothing new, and a page that changed an hour ago is not read again. Any change to the payload — one word of the question, max_pages, discover — is a new job and a fresh read.",
+  "created_at": "2026-09-28",
+  "updated_at": "2026-09-28",
+  "tags": ["spidersite", "research", "dedup", "cache", "from_cache"],
+  "references": [
+    "app/api/v1/jobs/common.py — submit_job: generate_job_hash({client_id, type, payload}) looked up in Redis before a job is created; a hit returns the existing job with from_cache=True and 'Job already submitted recently. Returning cached job.'",
+    "app/core/config.py — JOB_CACHE_TTL default 86400; the production api-gateway environment carried JOB_CACHE_TTL=86400 when read on 2026-09-28",
+    "packages/mcp-tools/src/leads/jobs.ts — research_website returns from_cache and a 'not a new read' message (SpiderIQ card SPI6-10)",
+    "packages/mcp-tools/tests/leads/research_website.test.ts — 'says so when the API returned the EARLIER job for an identical request'"
+  ]
+}

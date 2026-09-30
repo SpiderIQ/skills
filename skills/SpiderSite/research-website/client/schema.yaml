@@ -1,0 +1,184 @@
+# research-website — API surface + envelope (guidance:) block.
+# See opvs-ai/vendors 04-publishing/4-layer-and-envelope.md and
+# docs/services/SpiderCLI/AUTHORING-SPIDERIQ-SKILLS.md §4.6.
+#
+# base_url is the RELATIVE base OPVS composes the call from (upstream.base_url + method path).
+# Params mirror app/schemas/spider_site.py — SpiderSiteJobSubmit {payload, priority}, with
+# SpiderSiteJobPayload.mode = "research" and SpiderSiteResearchConfig as payload.research.
+# SpiderSiteResearchConfig is extra="forbid": a misspelled research key is a 422, never ignored.
+name: research-website
+version: "0.1.0"
+description: >
+  SpiderSite research mode — answer one question about one website from the site's own pages.
+  Returns a typed answer (shaped by the JSON Schema you send), every page read with its author
+  and publication date as the page declares them, the passages the answer was built from, the
+  URLs in the answer that no page read contains, and the answer call's real token usage.
+  Honours robots.txt (RFC 9309); reads PDFs on request. An async job: submit, poll, read.
+category: data-collection
+base_url: /api/v1
+upstream:
+  base_url: https://spideriq.ai/api/v1
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: OPVS_PAT
+defaults:
+  format: yaml
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - research a website
+  - answer a question from a website
+  - what does this company charge
+  - find pricing tiers on a site
+  - who wrote this article
+  - when was this page published
+  - does this site say
+  - read this pdf and answer
+
+guidance:
+  use: >
+    Answer one question from one website's own pages, with the pages the answer came from —
+    pricing, policies, product facts, who wrote a page and when, what a PDF says. Pass an
+    answer_schema to get structured data with a source_url per item.
+  not:
+    - "scrape-website-extract-leads → emails, phones and social profiles into your leads (research never writes to your leads)"
+    - "scrape-google-maps → find businesses in an area; research reads a site you already have"
+    - "lookup-company-data / company-intel → registry and firmographic facts about a company"
+  # Q1 — the textual input is `question`; the other aliases map the words an agent uses for the
+  # job's inputs onto the canonical payload fields.
+  intent_aliases:
+    query: question
+    prompt: question
+    ask: question
+    search_query: question
+    website: url
+    site: url
+    page: url
+    output_schema: answer_schema
+    json_schema: answer_schema
+    schema: answer_schema
+    crawl_mode: discover
+    strategy: discover
+    depth: max_pages
+    pages: max_pages
+    pdfs: include_pdfs
+  pitfalls:
+    - "Submit returns job_id + status, never an answer. Poll getJobStatus, then read data.research from getJobResults. queued can last the whole run."
+    - "answer_urls.ungrounded lists every URL in the answer that appears on NO page read — the model wrote it. Never report one as a source; cite sources[] instead."
+    - "answer null is an answer (the pages read do not say), not a failure. An identical request within 24 hours returns the SAME job (from_cache: true), so change the url or discover rather than resubmitting."
+    - "author and published_at are what the page declares; null means it declares none. Never fill them from the body text."
+    - "robots.txt is honoured: a disallowed page is never fetched, and a robots.txt that answers 5xx or cannot be reached closes the whole site. A job that reads no page fails with [research_no_readable_pages] and the counts, and is not retried."
+    - "PDFs are read only with include_pdfs: true. Only public http(s) URLs are fetched — file: and raw: are a 422 at submit; an address that resolves to a private or reserved network fails the job with [unsafe_url]."
+
+methods:
+  submitResearchJob:
+    description: >
+      Submit a research job: read the website at payload.url (one page, or up to max_pages of
+      the same host) and answer payload.research.question from what it says. Returns job_id and
+      status (from_cache: true when an identical request in the last 24 hours returned that
+      earlier job). The answer arrives in getJobResults at data.research.
+    guidance:
+      use: "one question about one website, answered from its own pages with sources"
+      next: "getJobStatus every 3-5 s until completed or failed, then getJobResults and read data.research"
+      warn: "mode must be \"research\" beside the research block (422 otherwise). Put a source_url field on every answer_schema item you want traced to a page, then check answer_urls.ungrounded before quoting any URL."
+      telemetry_signal_default: "cold"
+    http: POST /jobs/spiderSite/submit
+    params:
+      payload:
+        type: object
+        required: true
+        description: "The job. Wrap the fields in payload: {\"payload\": {...}} — a flat body is a 422."
+        properties:
+          url:
+            type: string
+            required: true
+            description: "Absolute public http:// or https:// URL to start from, 1-2048 chars. file:, raw:, whitespace and backslashes are a 422; an address that resolves to a private or reserved network fails the job with [unsafe_url]."
+          mode:
+            type: string
+            required: true
+            values: ["research"]
+            description: "Always research. A research block with any other mode, or mode research without one, is a 422."
+          research:
+            type: object
+            required: true
+            description: "The question and how to read the site. Unknown keys are refused (422)."
+            properties:
+              question:
+                type: string
+                required: true
+                description: "The question to answer from the site's own pages, 3-2000 characters."
+              answer_schema:
+                type: object
+                description: "JSON Schema (draft 2020-12) the answer must match; omit for a free-text answer. Add a source_url string wherever you want the page an item came from. Only local $refs (#/...); at most 20,000 characters. An invalid schema is a 422."
+              discover:
+                type: string
+                values: ["single", "seed", "adaptive"]
+                description: "single (default) = read exactly url; seed = url plus its links and sitemap, ranked against the question; adaptive = follow the best link one page at a time until the question is covered."
+              max_pages:
+                type: integer
+                description: "Most pages read, 1-20 (default 8). Ignored for single, which reads one page."
+              include_pdfs:
+                type: boolean
+                description: "Read PDFs too (default false; up to 25 MB and 200 pages each). Without it a PDF is never fetched."
+              model:
+                type: string
+                description: "SpiderGate model or alias for the answer call (default spideriq/research); your client alias client:<brand_id>/<name> works. Runs on your credential — the usage and the trace are yours."
+              respect_robots:
+                type: boolean
+                description: "Honour robots.txt (default true, RFC 9309: a 5xx or unreachable robots.txt disallows the whole site). Set false only for a site you own or have permission to read."
+      priority:
+        type: integer
+        description: "Job priority 0-10 (higher first; default 0)."
+    response:
+      format: json
+
+  getJobStatus:
+    description: >
+      Status of the research job: queued (waiting OR running — a first attempt can read queued
+      until it finishes), processing (a retry after a failed attempt), completed, failed or
+      cancelled.
+    guidance:
+      use: "poll every 3-5 s after submitResearchJob"
+      next: "getJobResults once completed or failed"
+      warn: "a single-page job usually finishes in well under a minute and a 20-page one in a few; queued for the whole run is normal"
+      telemetry_signal_default: "hot"
+    http: GET /jobs/{job_id}/status
+    params:
+      job_id:
+        type: string
+        required: true
+        description: "The job_id returned by submitResearchJob."
+      format:
+        type: string
+        values: ["json", "yaml", "md", "llm"]
+        description: "Response format (default json). yaml or md cut tokens; llm returns JSON with a guidance block."
+    response:
+      format: json
+
+  getJobResults:
+    description: >
+      The job's result envelope {success, job_id, type, status, completed_at, data, error_message}.
+      data.research carries answer, answer_schema_valid, answer_schema_errors, answer_urls
+      {checked, ungrounded}, sources[] {url, title, author, published_at, fetched_as, passages,
+      cited}, pages_read, pages_skipped_robots, pages_refused_unsafe, pages_failed, skipped[],
+      robots, usage {model, requested_model, prompt_tokens, completion_tokens, total_tokens,
+      calls} and full_text. A failed job's error_message starts with a [reason] token.
+    guidance:
+      use: "read the answer and its sources once the job is terminal"
+      next: "check answer_urls.ungrounded, answer_schema_valid and sources[].cited, then report the answer with the cited sources"
+      warn: "ungrounded URLs came from the model, not the site; answer null means the pages do not say; format md renders the answer and sources first"
+      telemetry_signal_default: "warm"
+    http: GET /jobs/{job_id}/results
+    params:
+      job_id:
+        type: string
+        required: true
+        description: "The job_id returned by submitResearchJob."
+      format:
+        type: string
+        values: ["json", "yaml", "md", "llm"]
+        description: "Response format (default json). md puts the research answer and its sources first; yaml cuts tokens; llm returns JSON with a guidance block."
+    response:
+      format: json

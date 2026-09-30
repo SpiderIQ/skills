@@ -1,0 +1,13 @@
+{
+  "title": "null is an answer, not a failure — the model is told to use the pages, not what it knows",
+  "summary": "The answer call is told to use ONLY the passages it is given and to answer null (or say the sources do not say) when they do not contain the answer. Measured: asked for Python's default recursion limit starting from the sys module's documentation page, the job read 2 pages and answered 'The sources do not say.' — correct, because that page never states the number (its only '1000's are sys.tracebacklimit's default and a Windows resource id), even though every model knows it. A null answer completes normally, is never a schema violation, and resubmitting the identical request within 24 hours returns the same job. Report it as 'the pages read do not say', name the pages, and change what is read (a better start page, seed instead of single) rather than retrying.",
+  "created_at": "2026-09-28",
+  "updated_at": "2026-09-28",
+  "tags": ["spidersite", "research", "null", "grounding"],
+  "references": [
+    "SpiderIQ card SPI6-10 — live run on 2026-09-28 inside the SpiderSite worker image: discover adaptive, max_pages 3, start https://docs.python.org/3/library/sys.html, question 'What is the default recursion limit in Python?' → answer 'The sources do not say.', 2 pages read, 1,764 tokens",
+    "https://docs.python.org/3/library/sys.html fetched 2026-09-28: getrecursionlimit() and setrecursionlimit() state no default value; '1000' appears only as sys.tracebacklimit's default and a Windows DLL string resource id",
+    "workers/SpiderSite/research_engine.py — SYSTEM_PROMPT ('Do not use outside knowledge. If the sources do not contain the answer, the answer is null') and schema_errors (a null answer is not a violation)",
+    "tests/unit/workers/test_spidersite_research_engine.py — test_a_null_answer_is_the_honest_no_and_is_not_a_schema_violation"
+  ]
+}

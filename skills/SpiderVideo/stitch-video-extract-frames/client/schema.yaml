@@ -7,10 +7,11 @@
 # Params mirror app/schemas/spider_video.py — SpiderVideoJobPayload (stitch) and
 # ExtractFramesPayload (frames). Both submits take the fields WRAPPED in `payload`.
 name: stitch-video-extract-frames
-version: "0.1.0"
+version: "0.2.0"
 description: >
-  SpiderVideo — stitch hosted video clips into one mp4 (fade transitions, 9:16 or 16:9,
-  background music, a voiceover, music ducked under the voice, burned word captions), or
+  SpiderVideo — stitch hosted video clips into one mp4 (fade transitions or hard cuts, 9:16 or 16:9,
+  background music, a voiceover, music ducked under the voice, burned word captions, optional
+  loudness normalisation), or
   extract a numbered WebP/JPEG frame sequence from one video for a scroll-linked animation.
   Both are async jobs: submit, poll, read the result, then measure the output.
 category: media
@@ -55,12 +56,15 @@ guidance:
     background_music: musicUrl
     subtitles: captions
     ducking: duckMusic
+    loudness: loudnessTarget
+    normalize: loudnessTarget
+    hard_cuts: transitionDurationInFrames
     source_video: video_url
   pitfalls:
     - "Submit returns job_id + status:queued, never a video. A running render still reads queued; a render may take up to 30 minutes."
     - "completed is not correct: a scene clip shorter than its durationInSeconds renders a FROZEN tail with no error. Measure the output (scripts/verify-video.py) before reporting it."
     - "Without payload.upload.enabled the mp4 never leaves the renderer — data.outputFile is a path on that machine, not a file anyone can open."
-    - "A failed job's error_message is a fixed 'quote this job id' sentence — the reason is withheld. Diagnose from the input (verify-video.py preflight), never by retrying the same request."
+    - "A failed job's error_message is a fixed 'quote this job id' sentence — the reason is withheld — EXCEPT a refused request, which reads '[invalid_video_request] <what to change>' and fails on the first attempt. Diagnose from the input (verify-video.py preflight), never by retrying the same request."
     - "An identical request within 24 hours returns the EARLIER job (from_cache:true). Change projectName to force a new render."
     - "The published API example for the extract-frames route is a stitch payload and returns 422 — use the fields declared on submitExtractFramesJob."
 
@@ -68,8 +72,9 @@ methods:
   # -- Path A: stitch ---------------------------------------------------------
   submitStitchJob:
     description: >
-      Stitch 1-50 hosted video clips into one h264 mp4 at 30 fps with fade transitions, optional
-      background music, a voiceover track, music ducked under the voice, and burned word captions.
+      Stitch 1-50 hosted video clips into one h264 mp4 (yuv420p, BT.709) at 30 fps with fade transitions
+      or hard cuts, optional background music, a voiceover track, music ducked under the voice, burned
+      word captions and optional loudness normalisation (loudnessTarget).
       Output length = sum(round(durationInSeconds x 30)) - (scenes - 1) x transitionDurationInFrames
       frames. Returns job_id + status:queued; the file arrives in getJobResults at
       data.upload.seaweedfs_url when upload.enabled is true.
@@ -110,7 +115,7 @@ methods:
                   description: "Seconds of this clip to use, > 0 and <= 300. MUST NOT exceed the clip's real length — the missing seconds render as a frozen still, with no error."
           transitionDurationInFrames:
             type: integer
-            description: "Fade length between scenes in frames at 30 fps, 0-60 (default 15 = 0.5 s; 0 = hard cuts). Each fade overlaps two scenes, shortening the output."
+            description: "Fade length between scenes in frames at 30 fps, 0-60 (default 15 = 0.5 s; 0 = hard cuts). Each fade overlaps two scenes, shortening the output, and must not be longer than either neighbouring scene — otherwise 422 naming the scene and the largest fade that fits."
           musicUrl:
             type: string
             description: "http(s) URL of background music (mp3, wav). Starts at 0 s, not looped, cut at the last frame."
@@ -126,6 +131,9 @@ methods:
           duckMusic:
             type: boolean
             description: "Lower the music 12 dB while the voice speaks. OFF unless true, and 422 unless BOTH musicUrl and voiceUrl are set."
+          loudnessTarget:
+            type: number
+            description: "Normalise the finished file to this integrated loudness, LUFS, -30 to -10 (-14 is the usual streaming target). EBU R128 two-pass; true peak <= -1 dBTP on the encoded file; the picture is untouched. Omit for no normalisation. The result reports it in data.loudness (read its mode: dynamic means the level was ridden to meet the peak ceiling)."
           captions:
             type: array
             description: "1-20,000 word tokens burned into the video, drawn EXACTLY as timed — nothing listens to the audio. Times in ms from the start of the OUTPUT video."

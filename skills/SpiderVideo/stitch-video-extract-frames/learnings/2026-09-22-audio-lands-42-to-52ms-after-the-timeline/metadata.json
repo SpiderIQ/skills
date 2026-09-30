@@ -1,11 +1,12 @@
 {
   "title": "Rendered audio lands ~42-52 ms after the video timeline, so captions lead the heard word slightly",
-  "summary": "Measured on a SpiderVideo render: a voice starting at 0.500 s in its source file starts at 0.542 s in the output (second phrase 5.002 -> 5.054 s), with stream start_time 0 on both tracks. The cause is not established (consistent with audio-encoder priming) and it affects music too. Ducking is applied inside the render and stays aligned with the voice as heard; captions follow the video timeline, so they appear ~1-1.5 frames before the heard word. Rarely visible — do not shift every caption token unless you measured your own output against its source.",
+  "summary": "Measured on a SpiderVideo render: a voice starting at 0.500 s in its source file starts at 0.542 s in the output (second phrase 5.002 -> 5.054 s), with stream start_time 0 on both tracks. The cause is not established (consistent with audio-encoder priming) and it affects music too. Ducking is applied inside the render and stays aligned with the voice as heard; captions follow the video timeline, so they appear ~1-1.5 frames before the heard word. Rarely visible — do not shift every caption token unless you measured your own output against its source. Measured more precisely in SPI3-70 (2026-09-28): a whole-file cross-correlation of the voice stem against a render gives exactly 2048 samples at 48 kHz (42.67 ms) — two AAC frames, i.e. encoder priming the file does not compensate for.",
   "created_at": "2026-09-22",
-  "updated_at": "2026-09-23",
+  "updated_at": "2026-09-28",
   "tags": ["spidervideo", "audio", "captions", "sync", "measurement"],
   "references": [
     "SpiderIQ PR #4188 (SC-465, merged 2026-09-22) — measured during the audio-lane build; recorded in docs/services/SpiderVideo/LEARNINGS.md 'Remotion's encoded audio lands ~42-52 ms after the composition timeline'",
-    "docs/services/SpiderVideo/PLAN.md Backlog — 'Remotion's audio is ~42-52 ms late against the composition timeline (cause not established)'"
+    "docs/services/SpiderVideo/PLAN.md Backlog — 'Remotion's audio is ~42-52 ms late against the composition timeline (cause not established)'",
+    "SpiderIQ PR #4337 (SPI3-70, 2026-09-28) — Di-Atomic's verify-ducking gate (cross-correlation of the voice stem against the render) measured the lag at 2048 samples on job 92a313de's replay; recorded in docs/services/SpiderVideo/LEARNINGS.md 'Remotion's encoded audio lands ~42–52 ms after the composition timeline'"
   ]
 }

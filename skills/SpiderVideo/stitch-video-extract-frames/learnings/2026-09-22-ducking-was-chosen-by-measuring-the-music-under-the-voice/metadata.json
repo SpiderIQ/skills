@@ -1,12 +1,13 @@
 {
   "title": "Music ducking is a fixed -12 dB, chosen by measuring the music UNDER the voice — and that is how to check it",
-  "summary": "duckMusic lowers the music a fixed 12 dB while the voice speaks (120 ms look-ahead, 450 ms release, pauses under 350 ms held). The design was picked by measurement, not preference: a fixed-depth envelope ducked every word by the same amount (0.1 dB spread across 8 words) while a compressor-style duck followed each syllable (4-5.5 dB spread, audible pumping). You cannot measure music under speech on a real song — they share frequencies — so use an 11 kHz test tone the voice cannot produce and isolate it with a high-pass (not 15 kHz: the AAC encoder removes it). Live proof: -56.2 dB under speech vs -44.0 dB in the pause (12.2 dB), control without duckMusic flat at -44.0 dB.",
+  "summary": "duckMusic lowers the music a fixed 12 dB while the voice speaks (120 ms look-ahead, 450 ms release, pauses under 350 ms held). The design was picked by measurement, not preference: a fixed-depth envelope ducked every word by the same amount (0.1 dB spread across 8 words) while a compressor-style duck followed each syllable (4-5.5 dB spread, audible pumping). You cannot measure music under speech on a real song — they share frequencies — so use an 11 kHz test tone the voice cannot produce and isolate it with a high-pass (not 15 kHz: the AAC encoder removes it). Live proof: -56.2 dB under speech vs -44.0 dB in the pause (12.2 dB), control without duckMusic flat at -44.0 dB. SPI3-70 (2026-09-28): speech is now detected the way Di-Atomic's ducking gate detects it (48 kHz, 10 ms windows above max(peak-40, -55) dBFS, runs under 100 ms dropped) and the duck holds 150 ms after each run before releasing; their gate's pump on a real render went 7.95 -> 0.31 dB (limit 3).",
   "created_at": "2026-09-22",
-  "updated_at": "2026-09-23",
+  "updated_at": "2026-09-28",
   "tags": ["spidervideo", "audio", "ducking", "measurement"],
   "references": [
     "SpiderIQ PR #4188 (SC-465, merged 2026-09-22) — the audio lane; ducking design comparison recorded in docs/services/SpiderVideo/LEARNINGS.md 'Ducking was chosen by measuring the music UNDER the voice'",
     "workers/SpiderVideo/remotion-app/src/lib/duck-envelope.ts — DUCK_DB = -12, DUCK_ATTACK_SECONDS = 0.12",
-    "SC-465 /test-live PASS 2026-09-22 on worker v1.6.0 through the public API: ducked job music band -56.23 dB in speech vs -44.04 dB in the pause (12.19 dB); control (duckMusic false, only differing field) flat at -43.96 dB; video stream hash identical ON vs OFF"
+    "SC-465 /test-live PASS 2026-09-22 on worker v1.6.0 through the public API: ducked job music band -56.23 dB in speech vs -44.04 dB in the pause (12.19 dB); control (duckMusic false, only differing field) flat at -43.96 dB; video stream hash identical ON vs OFF",
+    "SpiderIQ PR #4337 (SPI3-70, 2026-09-28) — workers/SpiderVideo/remotion-app/src/lib/duck-envelope.ts (DUCK_HOLD_SECONDS = 0.15, RELATIVE_RANGE_DB = 40, ABSOLUTE_FLOOR_DB = -55); Di-Atomic's gate on the 92a313de replay: pump 0.31, depth 12.37, balance 12.39"
   ]
 }

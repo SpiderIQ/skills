@@ -18,3 +18,13 @@ What that changes:
   scene, music and voice URL and says which one breaks. For frames, `curl -sI <video_url>` shows the
   status, content type and size the source rules check.
 - If the input checks out, quote the `job_id` to support; the real reason is recorded.
+
+## The one exception (since 2026-09-28)
+
+A request the renderer **refuses** — one that could never render, such as a fade longer than a
+scene — fails on its **first** attempt with a sentence written for you:
+
+> [invalid_video_request] The 20-frame transition is longer than scene 2, which is 15 frames at
+> 30 fps. Use a transition of at most 15 frames, or 0 for hard cuts.
+
+Do what it says. You will rarely see one: the API refuses most of these at submit with a 422.

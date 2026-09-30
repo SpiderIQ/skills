@@ -18,11 +18,12 @@ video or the frames arrive in the results, minutes later.
 | `queued` | waiting for the renderer, **or already rendering** — a first attempt never reads `processing` | keep polling; a render may take up to 30 min |
 | `processing` | a **retry** is running after a failed attempt | keep polling — something in the input may be wrong |
 | `completed` | finished — not necessarily right | read `data`, then measure |
-| `failed` | every attempt failed | the reason is withheld — see *A failed job does NOT tell you why* |
+| `failed` | every attempt failed — or the request was refused | the reason is withheld unless it starts `[invalid_video_request]` — see *A failed job does NOT tell you why* |
 | `cancelled` | stopped | resubmit if you still need it |
 
 A failed attempt is retried automatically (3 attempts in total, a short backoff between them), so a
-bad URL takes about a minute to reach `failed`, not seconds.
+bad URL takes about a minute to reach `failed`, not seconds. A request the renderer **refuses** is not
+retried: it fails on the first attempt, because it would fail the same way every time.
 
 ## The results envelope
 
@@ -41,9 +42,18 @@ bad URL takes about a minute to reach `failed`, not seconds.
 Path A `data`: `upload.seaweedfs_url` is the file (only with `upload` on); `outputFile` is a path
 inside the renderer — never hand it to a user. Path B `data`: the manifest in `extract-frames.md`.
 
-## A failed job does NOT tell you why
+## A failed job does NOT tell you why — unless it was refused
 
-For a SpiderVideo job, `error_message` in the results is always the same sentence:
+**The exception first.** A request the renderer refuses fails once, with a sentence written for you:
+
+```
+[invalid_video_request] The 20-frame transition is longer than scene 2, which is 15 frames at 30 fps. Use a transition of at most 15 frames, or 0 for hard cuts.
+```
+
+Do what it says and resubmit. You will rarely see one, because the API checks most of these at
+submit and answers 422 instead (below).
+
+**Every other failure.** For a SpiderVideo job, `error_message` in the results is the same sentence:
 
 > *This job failed. The technical detail is internal, and has been recorded for support — quote this
 > job id if you need help with it.*
@@ -72,6 +82,9 @@ If none of these explains it, quote the `job_id` to support — they can read th
 | 422 says | Fix |
 |---|---|
 | `duckMusic requires both musicUrl and voiceUrl` | send both, or drop `duckMusic` |
+| `The N-frame transition is longer than scene K …` | shorten the fade to the number it gives, or send `0` for hard cuts |
+| `Scene K rounds to zero frames at 30 fps …` | that scene is under 1/60 s — lengthen it or drop it |
+| `loudnessTarget` greater/less than … | use −30 to −10 LUFS, or omit it |
 | `endMs must be >= startMs` | a caption ends before it starts |
 | `voiceUrl` pattern | the voice URL is not http(s) |
 | `projectName` / `scenes` field required | a frames payload was sent to the stitch route — use `/jobs/spiderVideo/extract-frames/submit` |
