@@ -22,7 +22,7 @@ description: >
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.3.0"
+version: "0.3.1"
 category: ai-gateway
 ---
 

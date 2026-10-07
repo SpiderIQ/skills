@@ -144,20 +144,91 @@ Each row also carries `attempts`, `errors`, `rate_limited`, `error_pct`,
 
 ### `subscription_windows` — present-and-**null** is not zero
 
+Your brand's own keys as they stand now. `days` does not apply to this block.
+
 ```json
-"subscription_windows": { "scope": "brand_keys", "gauge_available": false,
-  "gauge_blocked_reason": "sub_window_count counts tokens; the subscription tier limit counts requests…",
-  "keys": [ { "provider": "cerebras", "state": "unmeasurable",
-              "window_tokens_counted": 41822, "window_percent": null,
-              "weekly_percent": null, "verdict": null, "can_set_plan": true } ] }
+"subscription_windows": {
+  "scope": "brand_keys", "gauge_available": true, "gauge_blocked_reason": null,
+  "keys": [
+    { "integration_id": 670, "provider": "gemini_cli", "cost_type": "subscription",
+      "subscription_tier": "gemini_ai_pro", "package_label": "Gemini AI Pro · $20/mo",
+      "window_tokens_counted": 9001, "window_requests_counted": 412,
+      "window_limit": 1000, "window_hours": 24, "window_reset_at": null,
+      "state": "measured", "reason": null, "detail": null,
+      "window_percent": 41.2, "weekly_percent": null, "verdict": null,
+      "packages_available": 5, "can_set_plan": false },
+    { "integration_id": 671, "provider": "codex", "cost_type": "subscription",
+      "subscription_tier": "codex_pro", "package_label": "ChatGPT Pro 200 · $200/mo",
+      "window_tokens_counted": null, "window_requests_counted": null,
+      "window_limit": null, "window_hours": null, "window_reset_at": null,
+      "state": "unmeasurable", "reason": "plan_has_no_published_cap",
+      "detail": "Plan: ChatGPT Pro 200 · $200/mo. No request limit is published for this plan, so there is nothing to measure this window against.",
+      "window_percent": null, "weekly_percent": null, "verdict": null,
+      "packages_available": 5, "can_set_plan": false } ] }
 ```
 
-🔴 **Read `gauge_available` every time — it is live-changing, not a constant**, and flips as
-the unit work lands. While it is `false`, `window_percent` / `weekly_percent` are
-**present and `null`**, not absent and **not `0`**. Never render a null as an empty gauge;
-that is indistinguishable from "you have used nothing". `can_set_plan` says whether
-assigning a package is even possible for that key. `window_tokens_counted` is named for
-what it counts — **tokens** — because the underlying column name is not.
+Both rows are the service's own test fixtures run through the live handler. The values are
+synthetic; the shape is exact.
+
+🔴 **A field that is present and `null` is not zero and not missing.** Test for `null`
+(`is None`, `=== null`), never for a falsy value. A truthiness check turns a real `0` into
+"unknown", and lets a `null` render as an empty gauge, which reads "you have used nothing".
+
+**Read each row's `state`, not the block flag.**
+
+- `measured`: `window_percent` is a number from `0` to `100`. **`0` is a reading**: the
+  window is open and has made no requests yet.
+- `unmeasurable`: `window_percent` is `null`, and `reason` says why.
+
+**The counts follow the same rule.** `window_tokens_counted` and `window_requests_counted`
+are `null` on a key with no window width (`window_hours` is `null` or `0`). Nothing resets a
+count on such a key, so no per-window figure exists. With a width, `0` means nothing has been
+counted in this window yet. A `null` count is a normal answer, not a broken response. The
+first field counts **tokens** and the second counts **requests**; only requests are compared
+with `window_limit`. Use `window_percent` as given. Do not recompute it from the counts.
+
+**`gauge_available` is derived on every response.** It is `true` when at least one key in
+`keys` is `measured`. It answers "can any gauge be drawn on this panel", not "is this row a
+number": with it `true`, other rows can still be `unmeasurable`, as the second row above is.
+`gauge_blocked_reason` is `null` whenever it is `true`. When it is `false`, that field is one
+sentence, written from the rows, saying why nothing can be drawn. Show the sentence to a
+person. Do not branch on its wording; branch on each row's `reason`.
+
+An `unmeasurable` row carries exactly one `reason`:
+
+| `reason` | It means | Suggest setting a plan? | Tell the user |
+|---|---|---|---|
+| `no_plan_assigned` | The key holds no limit to measure against, and its provider offers packages. Normally no package is assigned. | **Yes.** This is the only reason with `can_set_plan: true`. | A package can be picked for this key. Relay `detail`: it gives how many are on offer and who can pick one. Do not promise a percentage, because a package with no published limit reads `plan_has_no_published_cap` afterwards. |
+| `no_packages_for_provider` | The provider offers no packages. | No. There is nothing to pick. | This key's window cannot be measured, and nothing needs doing. |
+| `counter_incomparable` | A limit is set, and the request count is more than 10 times that limit. | No. A limit is already set, and another package would not help. | The count and the limit do not describe the same window, so no percentage is shown in place of a false 100%. |
+| `plan_has_no_published_cap` | A package is assigned, and it publishes no request limit. | No. The key already has its plan. | The key is on the plan named in `package_label`. That plan has no published request limit, so no percentage exists for it. This is a normal reading, not a fault. Many plans publish no limit. |
+
+Offer "set a plan" from `can_set_plan`, never from your own reading of the other fields.
+
+Every row carries all 18 fields on every response:
+
+| Field | Type | `null` when |
+|---|---|---|
+| `integration_id` · `provider` · `cost_type` | integer · string · string | never |
+| `subscription_tier` | string | no tier is set. It can also be an empty string; neither is a plan |
+| `package_label` | string | no tier is set, or the tier matches no package |
+| `window_tokens_counted` · `window_requests_counted` | integer | the key has no window width |
+| `window_limit` | integer | the key holds no limit |
+| `window_hours` | integer | the key has no window width (`0` means the same) |
+| `window_reset_at` | ISO-8601 string | the key has no window width, or no reset time is recorded |
+| `state` | `measured` or `unmeasurable` | never |
+| `reason` · `detail` | string | `state` is `measured` |
+| `window_percent` | number, `0` to `100` | `state` is `unmeasurable` |
+| `weekly_percent` · `verdict` | `null` | **always.** No weekly count is collected, and a window row carries no verdict |
+| `packages_available` | integer | never. The number of packages the key's provider offers |
+| `can_set_plan` | boolean | never. `true` only on `no_plan_assigned` |
+
+**Which keys are listed.** A key appears when it has counted tokens, has a tier set, holds a
+limit, or is an active subscription key whose provider offers packages. So a new
+subscription key is listed before its first request, as `no_plan_assigned` with `null`
+counts. Free and paid keys with a running count appear too. `keys` holds at most `key_limit`
+rows (default 50, maximum 200), keys that hold a limit first, and carries no truncation
+flag. If you receive exactly `key_limit` rows, raise it before saying you saw every key.
 
 ---
 

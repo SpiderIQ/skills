@@ -9,7 +9,7 @@
 # gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
-version: "0.3.0"
+version: "0.3.1"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
@@ -58,7 +58,8 @@ guidance:
     - "usage.by_provider is the litellm WIRE PREFIX, not the provider (~75k MiniMax rows read openai). For the real provider use the gate_flow tool, which resolves it through the integration behind the key."
     - "usage.cost_avoided is a COUNTERFACTUAL against a reference list price, never an invoice — never present avoided_usd as billing or savings."
     - "gate_capacity.key_pressure is traffic_scope=pool_wide (every tenant on that key), NOT your usage. Its verdict can REFUSE: on not_quota / account_capped, suggested_keys is deliberately null — rendering a number there turns a refusal into an upsell."
-    - "gate_capacity.subscription_windows: read gauge_available EACH TIME (it is live-changing). While false, window_percent/weekly_percent are PRESENT AND NULL — not absent, not 0%. Never render a null as an empty gauge."
+    - "gate_capacity.subscription_windows: decide per ROW on `state`, never on gauge_available. gauge_available is derived on every response (true when at least one key is measured), so with it true other rows can still be unmeasurable. On an unmeasurable row window_percent is PRESENT AND NULL — not absent, not 0% — and `reason` is one of no_plan_assigned / no_packages_for_provider / counter_incomparable / plan_has_no_published_cap. Suggest setting a plan only when can_set_plan is true. Never render a null as an empty gauge."
+    - "gate_capacity.subscription_windows counts can be null too: window_tokens_counted / window_requests_counted are null on a key with no window width (window_hours null or 0) — a normal answer, not a broken response — and weekly_percent is always null. Test for null, never for a falsy value: 0 is a real reading (an open window with nothing counted yet)."
     - "gate_capacity / gate_flow need @spideriq/mcp-gate >= 1.10.0 (sink @spideriq/mcp >= 1.89.0) or @spideriq/cli >= 1.71.0. On an older client they do not exist."
     - "Embeddings (embed) are HTTP-only (no MCP/CLI tool yet) and need a brand OpenAI key with the vault supports_embeddings flag — else 503 no_embeddings_key; use the SpiderGate PAT as api_key, never a raw OPENAI_API_KEY."
 
