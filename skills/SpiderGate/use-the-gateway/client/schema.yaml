@@ -9,7 +9,7 @@
 # gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
-version: "0.3.1"
+version: "0.3.2"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …), with a
@@ -82,7 +82,7 @@ methods:
       model:
         type: string
         required: true
-        description: Task alias (e.g. "spideriq/coding") or model id (e.g. "gpt-4o").
+        description: 'Task alias (e.g. "spideriq/coding") or one model. For a model picked from the catalog, send its `call_as` (model-catalog skill: listCatalog / getModel), not its `id`; a null `call_as` means the model cannot be called through the gateway now.'
       messages:
         type: array
         required: true
@@ -150,12 +150,15 @@ methods:
 
   listModels:
     description: >
-      List every model SpiderGate can serve, each with its provider, context
+      List the models in SpiderGate's catalog, each with its provider, context
       window, and per-1M-token pricing (in the `spidergate_info` block). Use it to
-      find a specific model id and compare cost before pinning one.
+      find a model and compare cost. A row here is not proof that the model can
+      be called, and its `id` is not always the string to send: these rows carry
+      no `call_as`. Read the model's `call_as` with the model-catalog skill
+      (listCatalog / getModel) before you send it as `model`.
     guidance:
-      use: "Discover available models + their pricing/context window."
-      next: "chat (send `model: <id>`), listAliases (prefer a task alias over a pinned model)"
+      use: "Discover the catalog's models + their pricing/context window."
+      next: "getModel in model-catalog (read `call_as`), then chat (send `model: <call_as>`); listAliases (prefer a task alias over one fixed model)"
       warn: "The catalog is large + stable — fetch once and cache; don't re-list every turn."
       telemetry_signal_default: "cold"
     http: GET /models

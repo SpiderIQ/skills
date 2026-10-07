@@ -14,8 +14,9 @@ description: >
   there", "rank models by category score", "per-category quality score".
   This skill teaches the READ surface — choosing a model. It does NOT send
   completions (that's use-the-gateway) and does NOT author catalog copy or edit
-  the category taxonomy (that's admin-only). Read it before you pin a model.
-version: "0.2.0"
+  the category taxonomy (that's admin-only). Read it before you call a model you
+  picked from the catalog: the string to send is the row's `call_as`.
+version: "0.2.1"
 category: ai-gateway
 ---
 
@@ -37,7 +38,8 @@ agent               │       enriched rows, narrowed to the sections you need
     │               ├── GET /catalog/models/{id}          full record for one
     │               └── GET /catalog/models/{id}/evals    the #7 prior (per task)
     │
-    ▼  pick a model_id  ──▶  pin it via use-the-gateway  chat(model: <model_id>)   (D7)
+    ▼  pick a row  ──▶  read its call_as  ──▶  use-the-gateway  chat(model: <call_as>)
+          call_as is null  ──▶  that model cannot be called through the gateway now
 ```
 
 All reads are **LIST-ONLY — not metered, not billable** (same class as `listModels`).
@@ -61,9 +63,12 @@ All reads are **LIST-ONLY — not metered, not billable** (same class as `listMo
   `getModel(fields=category_scores)`. Only ~19% of models are scored — an empty
   `category_scores[]` means "unscored", not "bad".
   → [references/pick-by-category.md](references/pick-by-category.md).
-- **Pin the winner** — pass the chosen `model_id` straight to
-  `use-the-gateway`'s `chat` as `model` (D7 direct-model) — you don't have to
-  route through a task alias.
+- **Call the winner: send its `call_as`.** Every catalog row carries `call_as`,
+  the exact `model` string to pass to `use-the-gateway`'s `chat` for that row
+  right now, or `null`. If it is `null`, the model cannot be called through the
+  gateway now. Do not send the row's `id` or `model_id` instead. You do not have
+  to route through a task alias.
+  → [references/enriched-catalog.md](references/enriched-catalog.md#call-a-model-send-its-call_as).
 
 ## Decision tree
 
@@ -75,8 +80,26 @@ All reads are **LIST-ONLY — not metered, not billable** (same class as `listMo
 | Compare a set on spec/price/evals/category scores | `listCatalog(fields=…)` | brand PAT |
 | Inspect one model fully | `getModel(model_id)` | brand PAT |
 | Read the eval prior for a model×task | `modelEvals(model_id, task_type=…)` | brand PAT |
+| Call the model you picked | read the row's `call_as` (`listCatalog` row or `getModel(id)`), then `chat(model: <call_as>)` in `use-the-gateway` | brand PAT |
 
 ## The rules that trip agents up
+
+<HARD-GATE name="send-call-as-not-the-id">
+To call a model from the catalog, send its **`call_as`**. If `call_as` is `null`,
+the model cannot be called through the gateway now.
+
+- A row's `id` is a lookup key. For a Codex row the `id` and the `model_id` are
+  both refused as `model`; the row is called as `codex/<model_id>`, and that is
+  what its `call_as` holds while the gateway holds a pooled Codex seat.
+- A filter does not make a row callable. `configured_only=true` selects on a
+  stored `is_configured` flag, not on a live check, and it can return a row whose
+  `call_as` is `null`. `servable` stays `false` for Codex. Decide on `call_as`.
+- **Leaderboard rows carry `id` and no `call_as`.** Before you call a ranked
+  model, read it with `getModel(id)` and send that record's `call_as`.
+- `call_as` is read from one gateway process's key state on each request and can
+  differ between two reads for a moment. Read it close to the call; do not cache
+  it with the rest of the catalog.
+</HARD-GATE>
 
 <HARD-GATE name="rank-then-filter-by-price">
 The leaderboard ranks by **eval score** (or category percentile), NOT price. To

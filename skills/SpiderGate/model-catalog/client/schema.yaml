@@ -9,7 +9,7 @@
 # not metered, not billable (same class as listModels).
 
 name: model-catalog
-version: "0.2.0"
+version: "0.2.1"
 description: >
   Read the enriched SpiderGate model catalog, the public model×task leaderboard,
   the model-capability CATEGORY taxonomy (Coding, Design/Frontend, Reasoning,
@@ -48,9 +48,9 @@ guidance:
   use: >
     Reach for this to CHOOSE a model: rank models for a task on the leaderboard,
     pull the enriched catalog (spec + benchmarks + live per-provider pricing +
-    eval scores) to compare, then pin the winner. The leaderboard answers "best
-    model for <task_type> under $X"; the evals aggregate is the shared prior a
-    planner blends against its own experience.
+    eval scores) to compare, then call the winner by its `call_as`. The
+    leaderboard answers "best model for <task_type> under $X"; the evals
+    aggregate is the shared prior a planner blends against its own experience.
   not:
     - "use-the-gateway → SEND a completion once you've picked a model (this skill only READS the catalog)"
     - "spidergate-manager → administer the key POOL / providers — not model selection"
@@ -66,10 +66,13 @@ guidance:
   pitfalls:
     - "Reads are NOT metered/billable (list-only) — the leaderboard is fully PUBLIC (no PAT needed); catalog/get/evals resolve your brand from the PAT."
     - "To answer a budget question, rank with leaderboard(task_type=…) THEN filter rows by the blended price — the endpoint ranks by eval score, it does not filter by price for you."
-    - "model_id is the catalog id — a spidergate_id OR a raw provider/model (e.g. openai/gpt-4o-mini); the slash is part of the id, pass it whole."
+    - "model_id (the getModel / modelEvals path param) is a LOOKUP key — a spidergate_id OR a raw provider/model (e.g. openai/gpt-4o-mini); the slash is part of the id, pass it whole. It is not the string you send as `model` on a completion — that is the row's `call_as`."
     - "Eval fields can be null until an OPVS eval contribution lands for that model×task — treat a null score as 'no prior yet', not 'zero'."
     - "The catalog is large + stable — pull once with fields= to narrow, then cache; don't re-list every turn."
-    - "Once you've picked a model, pin it by passing its model_id as `model` to use-the-gateway's chat (D7 direct-model) — you don't have to route through a task alias."
+    - "To CALL a model from the catalog, send its `call_as` as `model` to use-the-gateway's chat. If `call_as` is null, the model cannot be called through the gateway now. Do not send the row's `id` or `model_id` instead: for a Codex row both are refused, and the row is called as codex/<model_id>, which is what its `call_as` holds while the gateway holds a pooled Codex seat. You don't have to route through a task alias."
+    - "A filter does not make a row callable. configured_only=true selects on a stored is_configured flag (a saved flag, not a live check) and can return a row whose `call_as` is null. `servable` is true when the row's provider has a healthy pooled key and stays false for Codex. Decide on `call_as`, not on `servable` or `is_configured`."
+    - "`call_as` is read from one gateway process's in-memory key state on each request, per PROVIDER (not per model, not per key, not a check of your credential's allowed models). It can differ between two reads for a moment — read it close to the call; cache the rest of the row, not `call_as`."
+    - "Leaderboard rows carry `id` but NO `call_as`. Before calling a ranked model, getModel(id) and send that record's `call_as`."
     - "TWO ranking axes, don't confuse them: leaderboard(task_type=…) ranks by the #7 EVAL success rate (needs an eval contribution); leaderboard(category=…, sort=score) ranks by the benchmark-derived per-category PERCENTILE (needs published benchmarks). Use `category` for capability questions ('best coding/vision model'), `task_type` for eval-prior questions."
     - "A category `score` IS a within-category PERCENTILE (0–100), NOT a raw benchmark mean — higher = better relative to peers scored in that category. Read `rank` ÷ the response `total` for 'rank/N'; each score's `components[]` is the WHY (the contributing benchmarks, self_reported flagged)."
     - "Only ~19% of catalog models (≈219 of 1126) carry any category score — a model with an empty `category_scores[]` is unscored (no published benchmarks yet), NOT bad. Render 'no score' gracefully; don't rank it last."
@@ -82,11 +85,14 @@ methods:
       (description/tags/badges) plus — by default — benchmarks, a per-provider
       price/latency snapshot, reference links, and the evals aggregate, every
       sourced row carrying provenance. Pass `fields` (CSV) to narrow the payload
-      to just the sections you need for concrete-model selection.
+      to just the sections you need for concrete-model selection. Every row
+      carries `call_as` under every `fields` projection: the exact `model` string
+      to send for that row right now, or null when the model cannot be called
+      through the gateway now.
     guidance:
-      use: "Pull the enriched catalog to compare models on spec, price, and eval score."
-      next: "getModel (full record for one), leaderboard (rank for a task), chat via use-the-gateway (pin the winner)"
-      warn: "Large + stable — narrow with fields= and cache; don't re-list every turn."
+      use: "Pull the enriched catalog to compare models on spec, price, and eval score, and to read each row's `call_as`."
+      next: "getModel (full record for one), leaderboard (rank for a task), chat via use-the-gateway (send the winner's `call_as` as `model`)"
+      warn: "Large + stable — narrow with fields= and cache the rows, but not `call_as`: read it close to the call. A null `call_as` means the model cannot be called through the gateway now."
       telemetry_signal_default: "cold"
     http: GET /catalog/models
     params:
@@ -109,7 +115,7 @@ methods:
       configured_only:
         type: boolean
         required: false
-        description: Only routable (configured) models.
+        description: "Only rows whose stored is_configured flag is true. A saved flag, not a live check: a returned row can have call_as null, and a Codex row's id is refused. To call a row, send its call_as."
       free_only:
         type: boolean
         required: false
@@ -133,12 +139,13 @@ methods:
     description: >
       Full enriched record for one model by its catalog id (a spidergate_id or a
       raw provider/model): spec + authored copy + benchmarks + per-provider
-      pricing + links + evals aggregate, with provenance. 404 if the id is
-      unknown.
+      pricing + links + evals aggregate, with provenance. The record carries
+      `call_as`: the exact `model` string to send for this model right now, or
+      null. 404 if the id is unknown.
     guidance:
-      use: "Inspect one model in full before pinning it."
-      next: "chat via use-the-gateway (pass model_id as `model`), modelEvals (the task-scoped prior)"
-      warn: "model_id includes the slash for provider/model ids — pass it whole (openai/gpt-4o-mini)."
+      use: "Inspect one model in full before calling it, and read its `call_as`."
+      next: "chat via use-the-gateway (pass the record's `call_as` as `model`), modelEvals (the task-scoped prior)"
+      warn: "model_id includes the slash for provider/model ids — pass it whole (openai/gpt-4o-mini). It is the lookup key, not what you send on a completion: send the record's `call_as`. If that is null, the model cannot be called through the gateway now."
       telemetry_signal_default: "cold"
     http: GET /catalog/models/{model_id}
     params:
@@ -161,8 +168,8 @@ methods:
       precedence over `task_type`. Omit both for the global eval ranking.
     guidance:
       use: "Rank models for a task ('best model for <task_type> under $X') OR for a capability category (category=coding, sort=score)."
-      next: "filter the returned rows by blended price for a budget, then getModel / pin via chat"
-      warn: "Two axes: task_type ranks by EVAL success rate, category ranks by benchmark PERCENTILE. Neither ranks by price — apply the budget filter yourself. Use listCategories() to see valid category keys."
+      next: "filter the returned rows by blended price for a budget, then getModel(id) and send that record's `call_as` via chat"
+      warn: "Two axes: task_type ranks by EVAL success rate, category ranks by benchmark PERCENTILE. Neither ranks by price — apply the budget filter yourself. Use listCategories() to see valid category keys. Leaderboard rows carry `id` but no `call_as`: a ranked model is not thereby callable — getModel(id) and read `call_as`."
       telemetry_signal_default: "cold"
     http: GET /catalog/leaderboard
     params:
@@ -215,7 +222,7 @@ methods:
       task; omit for all task types plus the global row.
     guidance:
       use: "Read the eval prior for a model (per task) before trusting it for that task."
-      next: "leaderboard (compare across models), chat via use-the-gateway (pin it)"
+      next: "leaderboard (compare across models), getModel (read `call_as`), chat via use-the-gateway (send that `call_as`)"
       warn: "A null score means 'no eval contribution yet', not zero — don't rank a model last for missing data."
       telemetry_signal_default: "cold"
     http: GET /catalog/models/{model_id}/evals

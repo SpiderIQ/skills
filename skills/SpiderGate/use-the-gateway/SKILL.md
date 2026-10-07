@@ -22,17 +22,19 @@ description: >
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.3.1"
+version: "0.3.2"
 category: ai-gateway
 ---
 
 # Use the Gateway (SpiderGate as your LLM provider)
 
 SpiderGate is an **OpenAI-compatible** LLM gateway. Point any OpenAI client at
-`https://spideriq.ai/api/gate/v1`, send a **task alias** (`spideriq/coding`,
-`spideriq/fast`, …) or a real model id as `model`, and SpiderGate picks the best
-available model across 100+ providers, retries + falls back on failure, and
-returns the actual per-call cost. You bring one PAT — not six provider keys.
+`https://spideriq.ai/api/gate/v1` and send a **task alias** (`spideriq/coding`,
+`spideriq/fast`, …) as `model`: SpiderGate picks the best available model across
+100+ providers, retries + falls back on failure, and returns the actual per-call
+cost. To call one fixed model instead, send that model's `call_as` from the
+catalog (the `model-catalog` skill), not its `id`. You bring one PAT — not six
+provider keys.
 
 ```
 your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions

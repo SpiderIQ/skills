@@ -72,6 +72,11 @@ Telegram/Discord/dashboard agents.
   on the response to see what actually answered.
 - **A bare model id loses the chain.** `model: "gpt-4o"` pins exactly that model — no
   fallback, no cost-bias. Only pin when you need that specific model's behavior.
+- **For one model from the catalog, send its `call_as`, not its `id`.** Every catalog
+  row carries `call_as`: the exact `model` string for that row right now, or `null`.
+  If it is `null`, the model cannot be called through the gateway now. A Codex row's
+  `id` is refused; its `call_as` is `codex/<model_id>`. `listModels` rows carry no
+  `call_as`, so read it with the `model-catalog` skill (`listCatalog` / `getModel`).
 - **`spideriq/vision` / `agent/vision`** are the only image-capable aliases. MiniMax has no
   working vision model (200s but ignores the image — LEARNINGS #34); vision routes to Pixtral.
 - **Free-tier ≠ free-quality, but free-tier = trainable.** The privacy risk, not the quality,

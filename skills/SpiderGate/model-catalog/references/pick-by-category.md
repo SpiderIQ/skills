@@ -27,9 +27,12 @@ Research · Tool-use · Chat · Translation**.
    confidence, components, computed_at}`, best-first. `components[]` is the WHY —
    the contributing benchmarks (each normalized, `self_reported` flagged).
 
-4. **Pin the winner** — pass its `model_id` to `use-the-gateway`'s `chat` as
-   `model` (D7 direct-model). Then optionally filter by the blended price for a
-   budget (the leaderboard ranks by score, not price).
+4. **Call the winner by its `call_as`.** A leaderboard row carries `id` and no
+   `call_as`: read the winner with `getModel(id)` and pass that record's
+   `call_as` to `use-the-gateway`'s `chat` as `model`. If `call_as` is `null`,
+   the model cannot be called through the gateway now, so take the next row.
+   Optionally filter by the blended price for a budget first (the leaderboard
+   ranks by score, not price).
 
 ## Gotchas
 

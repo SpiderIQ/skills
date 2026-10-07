@@ -31,9 +31,14 @@ There is no `max_price` param — the price is on each row so you filter yoursel
 that model×task. A null score means *no prior yet*, not "scored zero" — don't rank a
 model last for missing data.
 
-**Pinning the pick.** Once chosen, pass the `model_id` straight to `chat` as `model`
-(D7 direct-model) — the Router lazily registers the concrete model and records
-`actual_model` (G1). You do **not** have to wrap it in a task alias.
+**Calling the pick (corrected 2026-10-07).** This entry first said to pass the
+`model_id` straight to `chat` as `model`. That is not true of every row: a Codex
+row's `id` and its `model_id` are both refused, and the row is called as
+`codex/<model_id>`. Every catalog row and every `getModel` record now carries
+`call_as`, the exact `model` string to send for that row right now, or `null`.
+Send `call_as`. If it is `null`, the model cannot be called through the gateway
+now. Leaderboard rows carry no `call_as`, so read the winner with `getModel(id)`
+first. You still do **not** have to wrap it in a task alias.
 
 **Why it matters.** An agent that believes reads are billable throttles itself
 needlessly; one that thinks the leaderboard needs auth blocks a pre-auth "which model
