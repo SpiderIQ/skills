@@ -4,7 +4,7 @@ Four scopes of visibility. Pick the smallest one that answers the question.
 
 | Question | Surface |
 |---|---|
-| "What did **this call** cost?" | `spidergate_metadata.cost_usd` on the completion itself — free, immediate ([cost-aware-completion.md](cost-aware-completion.md)) |
+| "What did **this call** cost?" | Its row in the trace list (`gate_traces`, newest first) carries `cost_usd`. The completion response itself carries no cost ([cost-aware-completion.md](cost-aware-completion.md)) |
 | "What did we **spend / deliver** over a window?" | `GET …/gate/usage` · `gate_usage` · `spideriq gate usage` |
 | "Do we **need more keys**?" | `GET …/gate/capacity` · `gate_capacity` · `spideriq gate capacity` |
 | "What actually **served** my alias?" | `GET …/gate/flow` · `gate_flow` · `spideriq gate flow` |
@@ -116,7 +116,9 @@ curl -s "https://spideriq.ai/api/v1/brands/$BRAND_ID/gate/capacity?days=7&key_li
 
 `key_pressure` carries `traffic_scope: "pool_wide"` — it counts **every** request on a key
 regardless of which tenant caused it, because a pooled key serves the whole pool. It is
-**not "your usage"**. `subscription_windows` and `gate_flow` are brand-scoped.
+**not "your usage"**. Only keys in the shared pool are counted: no brand's private key is in
+these numbers, and a provider whose only traffic is on private keys has no row.
+`subscription_windows` and `gate_flow` are brand-scoped.
 
 Each `key_pressure.providers[]` row carries a **`verdict`**:
 
@@ -150,13 +152,14 @@ Your brand's own keys as they stand now. `days` does not apply to this block.
 "subscription_windows": {
   "scope": "brand_keys", "gauge_available": true, "gauge_blocked_reason": null,
   "keys": [
-    { "integration_id": 670, "provider": "gemini_cli", "cost_type": "subscription",
-      "subscription_tier": "gemini_ai_pro", "package_label": "Gemini AI Pro · $20/mo",
+    { "integration_id": 672, "provider": "qwen", "cost_type": "subscription",
+      "subscription_tier": "qwen_coding_pro",
+      "package_label": "Alibaba Coding Plan — Pro · $50/mo (6,000 requests/5h · 45,000/week)",
       "window_tokens_counted": 9001, "window_requests_counted": 412,
-      "window_limit": 1000, "window_hours": 24, "window_reset_at": null,
+      "window_limit": 6000, "window_hours": 5, "window_reset_at": null,
       "state": "measured", "reason": null, "detail": null,
-      "window_percent": 41.2, "weekly_percent": null, "verdict": null,
-      "packages_available": 5, "can_set_plan": false },
+      "window_percent": 6.87, "weekly_percent": null, "verdict": null,
+      "packages_available": 9, "can_set_plan": false },
     { "integration_id": 671, "provider": "codex", "cost_type": "subscription",
       "subscription_tier": "codex_pro", "package_label": "ChatGPT Pro 200 · $200/mo",
       "window_tokens_counted": null, "window_requests_counted": null,
@@ -182,8 +185,10 @@ synthetic; the shape is exact.
 
 **The counts follow the same rule.** `window_tokens_counted` and `window_requests_counted`
 are `null` on a key with no window width (`window_hours` is `null` or `0`). Nothing resets a
-count on such a key, so no per-window figure exists. With a width, `0` means nothing has been
-counted in this window yet. A `null` count is a normal answer, not a broken response. The
+count on such a key, so no per-window figure exists. They are also `null` on every lease-only
+key, with or without a width: SpiderGate sends no request on that login, so nothing is
+counted here. On any other key with a width, `0` means nothing has been counted in this
+window yet. A `null` count is a normal answer, not a broken response. The
 first field counts **tokens** and the second counts **requests**; only requests are compared
 with `window_limit`. Use `window_percent` as given. Do not recompute it from the counts.
 
@@ -202,8 +207,13 @@ An `unmeasurable` row carries exactly one `reason`:
 | `no_packages_for_provider` | The provider offers no packages. | No. There is nothing to pick. | This key's window cannot be measured, and nothing needs doing. |
 | `counter_incomparable` | A limit is set, and the request count is more than 10 times that limit. | No. A limit is already set, and another package would not help. | The count and the limit do not describe the same window, so no percentage is shown in place of a false 100%. |
 | `plan_has_no_published_cap` | A package is assigned, and it publishes no request limit. | No. The key already has its plan. | The key is on the plan named in `package_label`. That plan has no published request limit, so no percentage exists for it. This is a normal reading, not a fault. Many plans publish no limit. |
+| `lease_only_not_counted` | The key is lease-only and holds a request limit. SpiderGate lends that login to the owner's own CLI and sends no request on it, so it has no count to set against the limit. | No. No package changes this. | The limit in `window_limit` is real, and the provider counts the use against it where SpiderGate cannot see it. Relay `detail`. Do not say `0%` or "unused": no reading was taken. |
 
 Offer "set a plan" from `can_set_plan`, never from your own reading of the other fields.
+
+**A lease-only key is never `measured`.** Its `window_percent` and both counts are `null`
+whatever plan it is on. Where it holds no request limit it reads the same reason as any
+other key (`no_plan_assigned`, `no_packages_for_provider` or `plan_has_no_published_cap`).
 
 Every row carries all 18 fields on every response:
 
@@ -212,13 +222,13 @@ Every row carries all 18 fields on every response:
 | `integration_id` · `provider` · `cost_type` | integer · string · string | never |
 | `subscription_tier` | string | no tier is set. It can also be an empty string; neither is a plan |
 | `package_label` | string | no tier is set, or the tier matches no package |
-| `window_tokens_counted` · `window_requests_counted` | integer | the key has no window width |
+| `window_tokens_counted` · `window_requests_counted` | integer | the key has no window width, or the key is lease-only |
 | `window_limit` | integer | the key holds no limit |
 | `window_hours` | integer | the key has no window width (`0` means the same) |
 | `window_reset_at` | ISO-8601 string | the key has no window width, or no reset time is recorded |
 | `state` | `measured` or `unmeasurable` | never |
 | `reason` · `detail` | string | `state` is `measured` |
-| `window_percent` | number, `0` to `100` | `state` is `unmeasurable` |
+| `window_percent` | number, `0` to `100` | `state` is `unmeasurable` (always, on a lease-only key) |
 | `weekly_percent` · `verdict` | `null` | **always.** No weekly count is collected, and a window row carries no verdict |
 | `packages_available` | integer | never. The number of packages the key's provider offers |
 | `can_set_plan` | boolean | never. `true` only on `no_plan_assigned` |
@@ -253,13 +263,19 @@ cross-tab, not all of it — raise `limit` before drawing a conclusion about the
 ## 4. Traces — one request, end to end
 
 ```bash
-# list (filters: agent_id, model, status ∈ success|error, limit, offset)
+# list, newest first (filters: agent_id, model, status ∈ success|error; pages: page from 1, limit 1-100, default 50)
 curl -s "…/gate/traces?status=error&limit=20"       -H "Authorization: Bearer $SPIDERIQ_PAT"
 # one trace: span waterfall (auth → route → LLM call → track) + input/output messages
 curl -s "…/gate/traces/$TRACE_ID"                   -H "Authorization: Bearer $SPIDERIQ_PAT"
 # summary: total traces, success/error counts, p95 latency, total cost
 curl -s "…/gate/traces/stats/summary"               -H "Authorization: Bearer $SPIDERIQ_PAT"
 ```
+
+The list answers `traces`, `total`, `page` and `has_more`. Ask for `page + 1` while `has_more`
+is `true`. The route has **no `offset`**: one sent to it is dropped without an error and
+page 1 comes back, so a loop over `offset` reads the same rows every time. The `gate_traces`
+tool pages by `page` from `@spideriq/mcp-gate` 1.12.0 (sink `@spideriq/mcp` 1.96.0); older
+releases sent `offset` and always returned page 1.
 
 MCP: `gate_traces` · `gate_trace_detail` · `gate_trace_stats`. Brand overview:
 `gate_stats` (`…/gate/stats` — active agents, total requests, spend; unchanged by this
@@ -279,13 +295,16 @@ release and already at parity with the page).
   a pooled key serves the whole pool, so a brand-filtered per-key rollup under-counts it by
   ~72%. Never reuse usage numbers as a quota or headroom input — that is what
   `gate_capacity` is for.
-- **Traces degrade to metadata-only when LangFuse is down.** The list still returns from
-  `gate_request_logs` (model, tokens, cost, latency, status) but **without** message bodies.
-  A trace with no messages is the fallback path, not a bug.
+- **The list never carries message bodies, and one trace can lose them.** The list is always
+  read from `gate_request_logs` (model, tokens, cost, latency, status). One trace's messages
+  and spans come from LangFuse; when LangFuse cannot be reached, or does not hold the trace
+  under your brand, the detail read answers from the same row with `input` and `output`
+  `null`, `spans` empty and `source: "database"`. That is the fallback, not a bug.
 - **No message content in `gate_request_logs`.** Prompts/responses live in LangFuse only.
   Don't expect to recover a prompt from the usage rollup.
-- **Per-call cost ≠ the rollup, instantly.** For the exact cost of a call you just made,
-  read its `spidergate_metadata.cost_usd` — don't poll `/usage` for it.
+- **Per-call cost is on the trace row, not in the response.** For the cost of a call you just
+  made, read its row in the trace list (`cost_usd`). The completion response has no
+  `spidergate_metadata` block.
 - **A `500` here is honest.** This endpoint deliberately does **not** fall back to a
   zero-filled payload, because all-zeros is indistinguishable on screen from "you used
   nothing". Retry; do not treat a failure as an empty result.

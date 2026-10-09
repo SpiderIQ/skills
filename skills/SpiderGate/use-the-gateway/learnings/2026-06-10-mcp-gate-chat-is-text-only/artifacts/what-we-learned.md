@@ -1,54 +1,33 @@
-# The MCP gate_chat tool is text-only
+# The MCP gate_chat tool was text-only (resolved)
 
-## The trap
+## What was true until 2026-06-11
 
-An agent connected to `@spideriq/mcp-gate` sees a `gate_chat` tool and assumes it's a
-full OpenAI client. It isn't. The wrapper forwards **only** `model` and `messages`:
+An agent connected to `@spideriq/mcp-gate` saw a `gate_chat` tool and took it for a
+full OpenAI client. The wrapper forwarded **only** `model` and `messages`, so through
+MCP you could not set `temperature` / `max_tokens` / `stop` / `seed`, use
+`response_format` (JSON mode / json_schema), or pass `tools` / `tool_choice`.
 
-```ts
-// packages/mcp-tools/src/gate/gate.ts
-return client.gateChat(args.model, args.messages);
-```
+## What is true now
 
-So through MCP you **cannot**:
+From `@spideriq/mcp@1.31.0` / `@spideriq/mcp-gate@1.3.0` / `@spideriq/core@1.26.0` the
+tool forwards every one of those fields, and `spideriq gate chat` has `--json`.
+Streaming is still not available through the tool: it returns one whole response.
+For token-by-token output use raw HTTP with `stream: true`, or the OpenAI SDK.
 
-- set `temperature` / `max_tokens` / `stop` / `seed`
-- `stream` the response
-- use `response_format` (JSON mode / json_schema)
-- pass `tools` / `tool_choice` (function calling)
-- set `spidergate_options` — i.e. **no `max_cost_usd` cap, no `cache_enabled`, no
-  `fallback_models`**
+## The part of this note that was wrong
 
-Those `spidergate_options` are precisely the features that make SpiderGate worth using
-over hitting a provider directly. Via MCP, you lose them.
-
-## The workaround
-
-For anything beyond a plain text completion, **use raw HTTP** (or the OpenAI SDK pointed
-at the gateway base URL):
-
-```bash
-curl -s https://spideriq.ai/api/gate/v1/chat/completions \
-  -H "Authorization: Bearer $SPIDERIQ_PAT" -H "Content-Type: application/json" \
-  -d '{"model":"spideriq/coding","messages":[...],
-       "response_format":{"type":"json_object"},
-       "spidergate_options":{"max_cost_usd":0.02,"cache_enabled":true}}'
-```
-
-```python
-from openai import OpenAI
-client = OpenAI(base_url="https://spideriq.ai/api/gate/v1", api_key=SPIDERIQ_PAT)
-# full params available: stream=, tools=, response_format=, extra_body={"spidergate_options": {...}}
-```
+The first version of this note said the missing piece that mattered most was
+`spidergate_options` — "no `max_cost_usd` cap, no `cache_enabled`, no
+`fallback_models`" — and called those the reason to use the gateway. The tool and
+the CLI (`--max-cost`, `--cache`) forward that object now. The server reads none of
+those fields, so forwarding them changed nothing. See
+`2026-10-08-spidergate-options-are-not-read`.
 
 ## How to apply
 
-- Plain text answer, no cost cap → `gate_chat` is fine.
-- Cost-capped / cached / streamed / JSON / tool-calling → drop to HTTP.
-- This is logged as **Gap 2** in `references/gaps.md` with the proposed `inputSchema`
-  widening for the CLI/MCP owners. Until that ships, the references in this skill all use
-  raw HTTP for the advanced paths on purpose.
-
-> Verify against the live tool: if a future `@spideriq/mcp-gate` version widens
-> `gate_chat`'s inputSchema (check `packages/mcp-tools/src/gate/gate.ts`), prefer the tool
-> again and update this note.
+- Text, JSON mode or tool calling: `gate_chat` does it.
+- Streaming: raw HTTP or the OpenAI SDK.
+- A cost ceiling: `max_tokens` on the call and a monthly budget on the token. Not
+  `spidergate_options`.
+- The lesson that holds: when a wrapper forwards a subset of a request, the basic
+  call still works and its tests still pass. Check what reaches the wire.

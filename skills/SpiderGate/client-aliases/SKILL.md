@@ -2,32 +2,37 @@
 name: client-aliases
 description: >
   Create and manage YOUR OWN routing aliases on the SpiderGate LLM gateway — a
-  named, ordered fallback chain of models you can call as one stable model name.
+  named pool of models you can call as one stable model name.
   Trigger on: "create my own alias", "make a routing alias", "my own model
   chain", "route my calls through my own key", "set up a fallback chain",
   "use my OpenAI key through the gateway", "BYOK alias", "bring my own key",
   "rename a model for my team", "list my aliases", "why is my alias failing",
   "disable my alias", "delete my alias", "add a fallback model", "reorder my
-  fallback chain". These are CLIENT aliases ("client:<brand>/<leaf>") — the ones
+  fallback chain" (slots are a pool, not a ladder: read on before you do either). These are CLIENT aliases ("client:<brand>/<leaf>") — the ones
   you create, funded by YOUR OWN provider keys. They are NOT the SpiderIQ task
   aliases (spideriq/coding, spideriq/fast, agent/*), which you read with
   model-catalog and call with use-the-gateway. This skill MANAGES aliases; it
   does not send completions.
-version: "0.1.0"
+version: "0.1.1"
 category: ai-gateway
 ---
 
 # client-aliases
 
-Your own named model chain on the gateway, funded by your own provider keys.
+Your own named pool of models on the gateway, funded by your own provider keys.
 
 ```
   client:<your-brand>/<leaf>          ← the name you call
         │
-        ├── slot 0   your key #102 → openai/gpt-4o-mini      ← tried first
-        ├── slot 1   your key #103 → mistral/mistral-small
-        └── slot 2   your key #104 → groq/llama-3.3-70b       ← last resort
+        ├── slot 0   your key #102 → openai/gpt-4o-mini   ┐
+        ├── slot 1   your key #103 → mistral/mistral-small ├ ONE POOL: least busy serves
+        └── slot 2   your key #104 → groq/llama-3.3-70b    ┘
 ```
+
+🔴 **Slots are a pool, not a fallback ladder.** Every eligible slot takes traffic and is
+paid by its own key. The slot number is display order, not priority. A costly model put
+"last, as a fallback" is billed its share of every day's calls. Put a model in an alias
+only if you are happy for it to serve any request.
 
 ## Approach
 
@@ -35,8 +40,8 @@ Your own named model chain on the gateway, funded by your own provider keys.
 |---|---|
 | see what you already have | `listClientAliases` |
 | diagnose one that is failing | `getClientAlias` — it reports each slot's key state |
-| make a new one | `createClientAlias` with an ordered `slots` chain |
-| change the chain, or park it | `updateClientAlias` (`enabled: false` parks it reversibly) |
+| make a new one | `createClientAlias` with its `slots` |
+| change the slots, or park it | `updateClientAlias` (`enabled: false` parks it reversibly) |
 | remove it for good | `deleteClientAlias` |
 
 Then **call it** with the `use-the-gateway` skill, passing `client:<brand>/<leaf>`
@@ -68,7 +73,7 @@ call returns. Pass `enabled: false` to author one without arming it. This
 matters because there is no draft state to fall back to.
 
 **`slots` REPLACES, NEVER MERGES:** on update, `slots` overwrites the whole
-ordered chain. **ALWAYS** read the alias first and send back the full list you
+set. **ALWAYS** read the alias first and send back the full list you
 want — sending one slot to "add" one silently deletes the rest.
 
 **NAME IS THE LEAF ONLY:** pass `cheap`, never `client:7/cheap`. The

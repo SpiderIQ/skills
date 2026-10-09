@@ -1,8 +1,8 @@
 # Structured output (JSON) + tool calling
 
 SpiderGate is OpenAI-compatible, so `response_format` (JSON mode / JSON schema) and
-`tools` / `tool_choice` (function calling) work exactly as they do against OpenAI —
-**over HTTP.** The MCP `gate_chat` tool forwards neither, so these are HTTP-only
+`tools` / `tool_choice` (function calling) work exactly as they do against OpenAI,
+over HTTP and through the MCP `gate_chat` tool, which forwards both
 ([gaps.md](gaps.md)). Tool-using turns on free-tier providers also have a streaming
 failure mode worth knowing (below).
 
@@ -41,7 +41,7 @@ For a strict shape, use `json_schema`:
 
 **Gotcha:** not every provider/model behind every alias honors `json_schema` strictly.
 Prefer a model that supports structured outputs (the `gpt-*` family, Mistral) — pin it
-or use an alias whose slot-0 is one of those. Always still wrap your `json.loads` in a
+or build a client alias whose slots are all such models (any slot behind an alias can serve). Always still wrap your `json.loads` in a
 guard and retry on parse failure.
 
 ## Tool / function calling
@@ -77,7 +77,7 @@ function calling well (Groq Llama 3.3 70B / MiniMax M2.5). `tool_choice` accepts
 
 ## Gotcha — `tool_use_failed` on streaming + free-tier Groq
 
-A tool-using call that **streams** AND falls through to a **Groq** slot can surface a
+A tool-using call that **streams** AND is served by a **Groq** slot can surface a
 provider error `tool_use_failed` (the model emitted a tool call that failed schema
 validation — more likely with a large tool inventory). SpiderGate maps it to a clean
 **HTTP 400** `invalid_request_error` carrying `failed_generation` — it is **non-retriable**;

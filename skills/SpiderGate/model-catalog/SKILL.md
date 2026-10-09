@@ -16,7 +16,7 @@ description: >
   completions (that's use-the-gateway) and does NOT author catalog copy or edit
   the category taxonomy (that's admin-only). Read it before you call a model you
   picked from the catalog: the string to send is the row's `call_as`.
-version: "0.2.1"
+version: "0.2.2"
 category: ai-gateway
 ---
 
@@ -39,7 +39,7 @@ agent               │       enriched rows, narrowed to the sections you need
     │               └── GET /catalog/models/{id}/evals    the #7 prior (per task)
     │
     ▼  pick a row  ──▶  read its call_as  ──▶  use-the-gateway  chat(model: <call_as>)
-          call_as is null  ──▶  that model cannot be called through the gateway now
+          call_as is null  ──▶  the shared pool cannot serve that row now
 ```
 
 All reads are **LIST-ONLY — not metered, not billable** (same class as `listModels`).
@@ -60,13 +60,14 @@ All reads are **LIST-ONLY — not metered, not billable** (same class as `listMo
   percentile**. `listCategories()` to see the 9 categories + how many models each
   scores, then `leaderboard(category=<key>, sort=score)` to rank; read a specific
   model's own scores with `listCatalog(fields=category_scores)` /
-  `getModel(fields=category_scores)`. Only ~19% of models are scored — an empty
+  `getModel(model_id)` (it takes no `fields` and returns every section). Only ~19% of models are scored — an empty
   `category_scores[]` means "unscored", not "bad".
   → [references/pick-by-category.md](references/pick-by-category.md).
 - **Call the winner: send its `call_as`.** Every catalog row carries `call_as`,
   the exact `model` string to pass to `use-the-gateway`'s `chat` for that row
-  right now, or `null`. If it is `null`, the model cannot be called through the
-  gateway now. Do not send the row's `id` or `model_id` instead. You do not have
+  right now, or `null`. If it is `null`, the shared pool cannot serve that row
+  now; it does not cover your brand's own unshared keys. Do not send the row's
+  `id` or `model_id` instead. You do not have
   to route through a task alias.
   → [references/enriched-catalog.md](references/enriched-catalog.md#call-a-model-send-its-call_as).
 
@@ -86,7 +87,7 @@ All reads are **LIST-ONLY — not metered, not billable** (same class as `listMo
 
 <HARD-GATE name="send-call-as-not-the-id">
 To call a model from the catalog, send its **`call_as`**. If `call_as` is `null`,
-the model cannot be called through the gateway now.
+the shared pool cannot serve that row now.
 
 - A row's `id` is a lookup key. For a Codex row the `id` and the `model_id` are
   both refused as `model`; the row is called as `codex/<model_id>`, and that is

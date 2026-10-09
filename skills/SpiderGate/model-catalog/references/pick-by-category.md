@@ -22,7 +22,8 @@ Research · Tool-use · Chat · Translation**.
    over `task_type`; you must pass `sort=score`.
 
 3. **Read one model's own scores** — `listCatalog(fields=category_scores)` for a
-   set, or `getModel(model_id)` with `category_scores` in the projection, for one.
+   set, or `getModel(model_id)` for one (it returns every section and takes no
+   `fields`).
    Each element: `{category_key, label, emoji, score, rank, n_signals,
    confidence, components, computed_at}`, best-first. `components[]` is the WHY —
    the contributing benchmarks (each normalized, `self_reported` flagged).
@@ -30,7 +31,7 @@ Research · Tool-use · Chat · Translation**.
 4. **Call the winner by its `call_as`.** A leaderboard row carries `id` and no
    `call_as`: read the winner with `getModel(id)` and pass that record's
    `call_as` to `use-the-gateway`'s `chat` as `model`. If `call_as` is `null`,
-   the model cannot be called through the gateway now, so take the next row.
+   the shared pool cannot serve that row now, so take the next row.
    Optionally filter by the blended price for a budget first (the leaderboard
    ranks by score, not price).
 
@@ -54,8 +55,9 @@ Research · Tool-use · Chat · Translation**.
 ## Surfaces
 
 - **This skill / HTTP:** `GET /catalog/categories`,
-  `GET /catalog/leaderboard?category=<key>&sort=score`, `category_scores` via
-  `fields=` on `/catalog/models[/{id}]`.
+  `GET /catalog/leaderboard?category=<key>&sort=score`, `category_scores` on
+  `/catalog/models` (in the default projection, or `fields=category_scores`) and on
+  `/catalog/models/{id}` (always).
 - **Dashboard:** the same data powers the category chips + per-category score bar /
   rank / "why" tooltip on `/dashboard/gate/models`.
 - **Not yet on client MCP/CLI** — the category read reaches agents through this

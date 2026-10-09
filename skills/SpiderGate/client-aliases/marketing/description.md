@@ -1,11 +1,11 @@
-# SpiderGate client aliases — bring your own key, name your own chain
+# SpiderGate client aliases — bring your own key, name your own pool
 
 A client alias is a routing name **you** create on the SpiderGate gateway:
-`client:<your-brand>/<leaf>`. Behind it sits an ordered fallback chain, and every
-slot in that chain is funded by one of **your own** provider keys.
+`client:<your-brand>/<leaf>`. Behind it sits a least-busy pool of models, and every
+slot in that pool is funded by one of **your own** provider keys.
 
 Call it once and you get a stable model name your whole team can use. Change what
-is behind it — swap a model, reorder the fallbacks, retire a provider — without
+is behind it — swap a model, add or drop a slot, retire a provider — without
 touching a line of the code that calls it.
 
 The property that makes this safe to hand to an agent: a client alias reaches

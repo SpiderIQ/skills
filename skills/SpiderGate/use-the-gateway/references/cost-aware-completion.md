@@ -1,11 +1,15 @@
-# Send a completion — cost-aware
+# Send a completion — and keep its cost bounded
 
-The headline reason to route through SpiderGate instead of a raw provider: a
-**per-request dollar cap**, a **response cache**, an **explicit fallback chain**, and
-the **actual cost handed back** (`spidergate_metadata.cost_usd`, when present). The first
-three live in the `spidergate_options` body block and are now forwarded by **MCP
-`gate_chat` and `spideriq gate chat`** (≥ cli@1.25.0 / mcp@1.31.0; `--max-cost`/`--cache`
-on the CLI) — the curl examples below are the raw-HTTP form, equivalent to the tool args.
+One OpenAI-compatible call. What bounds its cost is `max_tokens` and your token's
+budget. What it cost is read afterwards, from usage or the trace.
+
+🔴 **`spidergate_options` does not cap, cache or re-route anything.** The request
+accepts that object, and the server reads none of these fields:
+`max_cost_usd`, `cache_enabled`, `cache_ttl_seconds`, `fallback_models`,
+`preferred_providers`, `excluded_providers`, `timeout_ms`, `retry_count`.
+Sending them changes nothing: no cost ceiling, no cache, no extra fallback.
+Earlier versions of this skill said the opposite. A loop that relies on
+`max_cost_usd` to stop is not bounded.
 
 ## The minimal call
 
@@ -20,68 +24,67 @@ curl -s https://spideriq.ai/api/gate/v1/chat/completions \
   }'
 ```
 
-Response is OpenAI-shaped, plus a `spidergate_metadata` block:
+The answer is the OpenAI chat-completion body: `id`, `model`, `choices`, `usage`.
+There is **no `spidergate_metadata` block** and no dollar figure in it.
 
-```json
-{
-  "choices": [{"message": {"role":"assistant","content":"Acme Corp"}, "finish_reason":"stop"}],
-  "usage": {"prompt_tokens": 18, "completion_tokens": 3, "total_tokens": 21},
-  "spidergate_metadata": {
-    "provider": "groq", "provider_model": "llama-3.1-8b-instant",
-    "latency_ms": 640, "cost_usd": 0.000004, "cache_hit": false, "fallback_used": false
-  }
-}
-```
+| You want | Read |
+|---|---|
+| What served the call | `model` in the body. On raw HTTP also the `X-Served-Model-Catalog-Id` response header: the served model, normalised to the catalog's id space. It is sent on streaming and non-streaming answers. |
+| Tokens used | `usage.prompt_tokens`, `usage.completion_tokens`, `usage.total_tokens` |
+| What it cost | Not in the response. The call's row in the trace list (`gate_traces`, newest first) carries `cost_usd`, and `gate_usage` sums a period. See [read-usage-and-traces.md](read-usage-and-traces.md). |
 
 ## WRONG → RIGHT
 
-### Reading cost from the wrong place
+### Reading cost from the response
 
-❌ **WRONG** — `usage` is tokens only; there is no dollar figure in it.
+❌ **WRONG** — there is no such block. This raises `KeyError`.
 ```python
-cost = resp["usage"]["total_tokens"]        # that's a token COUNT, not dollars
+cost = resp["spidergate_metadata"]["cost_usd"]
 ```
 
-✅ **RIGHT** — the dollar cost of THIS call is in `spidergate_metadata`.
+❌ **WRONG** — a token count is not dollars.
 ```python
-meta = resp["spidergate_metadata"]
-cost = meta["cost_usd"]                      # e.g. 0.000004
-served = meta["provider_model"]             # what actually answered (may differ from slot-0)
+cost = resp["usage"]["total_tokens"]
+```
+
+✅ **RIGHT** — keep what the response does carry, and read cost where it is stored.
+```python
+served = resp["model"]                      # the model that answered
+tokens = resp["usage"]["total_tokens"]      # a count, for your own bookkeeping
+# cost: this call's row in the trace list (gate_traces), or gate_usage for a period
 ```
 
 ### Letting an expensive call run unbounded
 
-❌ **WRONG** — a long-context prompt on a premium model with no ceiling.
+❌ **WRONG** — trusting a cost ceiling that is not read.
 ```json
-{"model": "spideriq/lead-analysis", "messages": [...huge...]}
+{"model": "spideriq/lead-analysis", "messages": [...], "spidergate_options": {"max_cost_usd": 0.02}}
 ```
 
-✅ **RIGHT** — cap the spend; the gateway aborts/avoids a route that would exceed it.
+✅ **RIGHT** — bound the output, and bound the token.
 ```json
-{
-  "model": "spideriq/lead-analysis",
-  "messages": [...],
-  "spidergate_options": { "max_cost_usd": 0.02 }
-}
+{"model": "spideriq/lead-analysis", "messages": [...], "max_tokens": 800}
 ```
-`max_cost_usd` is bounded `0.001 .. 100.0`. Use it as a circuit-breaker on agent loops
-that could otherwise fan out into many premium calls.
+
+- **`max_tokens`** bounds the output of this one call. It does not bound the
+  input: a long prompt is billed whatever `max_tokens` says, so trim the context
+  you send.
+- **The token's monthly budget** bounds everything the token spends. When a
+  token has a `monthly_budget_usd` and its spend reaches it, every request on that
+  token is refused with **`402`**, code **`budget_exceeded`**, before a provider is
+  contacted. A token with no budget set is not capped. The check runs before the
+  request, so the call that crosses the line still completes.
+- **In an agent loop**, count the calls yourself and stop on your own limit.
+  Nothing on the server stops a loop that stays under the token's budget.
 
 ### Re-paying for an identical prompt
 
-❌ **WRONG** — the same system+user prompt sent 50× in a batch, paid 50×.
+❌ **WRONG** — expecting `cache_enabled` to make the second call free. It is not
+read, and no request option turns a response cache on.
 
-✅ **RIGHT** — enable the exact-match cache for idempotent prompts.
-```json
-{
-  "model": "spideriq/classification",
-  "messages": [...],
-  "spidergate_options": { "cache_enabled": true, "cache_ttl_seconds": 3600 }
-}
-```
-A cache hit returns `spidergate_metadata.cache_hit: true` and `cost_usd: 0`. `cache_ttl_seconds`
-is bounded `60 .. 86400`. Only cache when identical inputs SHOULD give identical outputs
-(classification/extraction — yes; creative generation — usually no).
+✅ **RIGHT** — keep your own map from prompt to answer for prompts where the same
+input should give the same output (classification, extraction), and do not send
+the repeat.
 
 ### When nothing can serve your budget — `422 no_qualifying_model`
 
@@ -125,41 +128,40 @@ a task alias if you want the reroute.
 **On the streaming path this is a real `422` with `content-type: application/json`** — not a `200`
 carrying an error frame in the SSE body. Assert the status code, not merely "did I get an error".
 
-### Hand-rolling a fallback chain the alias already gives you
+### Hand-rolling a fallback
 
-❌ **WRONG** — catching an error client-side and re-POSTing to a second model.
+❌ **WRONG** — sending `spidergate_options.fallback_models`. It is not read, and it
+adds no model to the alias.
 
-✅ **RIGHT** — let the alias chain do it, or declare your own:
-```json
-{
-  "model": "spideriq/coding",
-  "messages": [...],
-  "spidergate_options": { "fallback_models": ["spideriq/chat", "gpt-4o"] }
-}
-```
-SpiderGate already does 3 retries + 60 s cooldown per failed deployment and walks the
-alias chain. `fallback_models` *extends* that with your own preferences. `fallback_used: true`
-in the metadata tells you a fallback fired; `original_model` shows what you asked for.
+✅ **RIGHT** — send a task alias and let the gateway route. The router retries a
+failed attempt up to 3 times and rests a failing deployment for 60 seconds. What
+sits behind an alias, and which aliases hand over to another alias when their
+own models are exhausted, is in [pick-an-alias.md](pick-an-alias.md). To choose
+the models yourself, build a client alias (the `client-aliases` skill).
 
 ## Gotchas
 
-- **`max_cost_usd` is a guard, not a quote.** It prevents a route whose estimated cost
-  exceeds the cap; it does not pre-quote the call. Read `cost_usd` after to see the real number.
-- **`temperature`/`max_tokens`/`stop`/`seed`** are standard OpenAI params and pass straight
-  through — they are NOT under `spidergate_options`.
-- **`preferred_providers` / `excluded_providers`** (inside `spidergate_options`) steer or
-  ban providers by name (e.g. exclude a provider whose ToS you can't accept) — analogous to
-  OpenRouter's `provider.order` / `provider.ignore` ([competitor-landscape.md](competitor-landscape.md)).
-- **MCP + CLI now do all of the above** (≥ cli@1.25.0 / mcp@1.31.0): pass `spidergate_options`
-  to `gate_chat`, or `--max-cost`/`--cache` to `spideriq gate chat`. Older clients: raw HTTP.
+- **`temperature`, `max_tokens`, `stop`, `seed`, `response_format`, `tools` and
+  `tool_choice`** are standard OpenAI parameters at the top level of the body.
+  They are read. None of them goes under `spidergate_options`.
+- **The CLI flags `--max-cost` and `--cache` are sent and ignored.**
+  `spideriq gate chat` and the MCP `gate_chat` tool both forward
+  `spidergate_options` as given; the server does not read the fields above.
+- **You cannot steer or ban a provider per request.** `preferred_providers` and
+  `excluded_providers` are not read. Choose an alias whose models you accept, or
+  build a client alias.
 
 ## Verify
 
 ```bash
-# Confirm the cap + cost-readback path on a tiny call:
-curl -s https://spideriq.ai/api/gate/v1/chat/completions \
+# One tiny call. Headers go to /tmp/h, the body to the Python reader.
+curl -s -D /tmp/h https://spideriq.ai/api/gate/v1/chat/completions \
   -H "Authorization: Bearer $SPIDERIQ_PAT" -H "Content-Type: application/json" \
-  -d '{"model":"spideriq/fast","messages":[{"role":"user","content":"say OK"}],"max_tokens":8,"spidergate_options":{"max_cost_usd":0.01}}' \
-  | python3 -c "import json,sys; m=json.load(sys.stdin)['spidergate_metadata']; print('served:', m['provider_model'], '| cost_usd:', m['cost_usd'], '| cache_hit:', m['cache_hit'])"
+  -d '{"model":"spideriq/fast","messages":[{"role":"user","content":"say OK"}],"max_tokens":8}' \
+  | python3 -c "import json,sys; r=json.load(sys.stdin); print('served:', r.get('model'), '| tokens:', (r.get('usage') or {}).get('total_tokens'), '| spidergate_metadata present:', 'spidergate_metadata' in r)"
+grep -i 'x-served-model-catalog-id' /tmp/h
 ```
-A printed `cost_usd` (even `0.0` on a cache hit) confirms the metadata path works.
+
+It prints the model that served, the token count, and
+`spidergate_metadata present: False`. The header line gives the served model's
+catalog id.

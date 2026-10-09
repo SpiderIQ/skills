@@ -15,4 +15,4 @@ prior**.
 
 Reads are list-only (not billable); the leaderboard needs no auth. Once you've
 picked, send the row's `call_as` as `model` on a completion. A `null` `call_as`
-means the model cannot be called through the gateway now.
+means the shared pool cannot serve that row now.

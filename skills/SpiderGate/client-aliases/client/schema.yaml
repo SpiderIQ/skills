@@ -12,10 +12,10 @@
 # Method `http:` paths stay SHORT/relative and must NOT start with /api/v1, or
 # the composed URL doubles the prefix.
 name: client-aliases
-version: "0.1.0"
+version: "0.1.1"
 description: >
   Create and manage your own named routing aliases on the SpiderGate gateway —
-  an ordered fallback chain of models, each slot funded by one of your own
+  a least-busy pool of models, each slot funded by one of your own
   provider keys, callable afterwards as the single model name
   "client:<brand>/<leaf>".
 category: ai-gateway
@@ -44,10 +44,11 @@ triggers:
 guidance:
   use: >
     Manage the routing aliases THIS tenant created — list, inspect, create,
-    update and delete "client:<brand>/<leaf>". Each alias is an ordered chain of
+    update and delete "client:<brand>/<leaf>". Each alias is a pool of
     slots, and every slot names one of the tenant's own provider keys, which is
-    what funds it. Reach for this when someone wants their own stable model name,
-    their own fallback order, or wants their gateway calls billed to their own
+    what funds it. Every eligible slot takes traffic (least busy first served);
+    the slot number is display order, not priority. Reach for this when someone
+    wants their own stable model name, their own set of models, or wants their gateway calls billed to their own
     provider key.
   not:
     - "use-the-gateway → SEND a completion (including one that names a client alias). This skill only manages the aliases."
@@ -57,7 +58,8 @@ guidance:
   pitfalls:
     - "`integration_id` is REQUIRED on every slot and has no default — it is one of YOUR OWN provider keys, and it funds the slot. There is no fallback to the SpiderIQ pool, by design."
     - "Creating PUBLISHES the alias — it is live the moment the call returns. Send `enabled: false` to author one without arming it."
-    - "On update, `slots` REPLACES the whole ordered chain. It is not a merge and not an append: read the alias first and send back the full list."
+    - "On update, `slots` REPLACES the whole set. It is not a merge and not an append: read the alias first and send back the full list."
+    - "Slots are a least-busy POOL, not a fallback ladder: every eligible slot takes traffic and is paid by its own key. A costly model added last as a fallback is billed its share. Slot number is display order, not priority."
     - "`name` is the SHORT LEAF only (`cheap`), never `client:7/cheap`. The prefix is generated server-side and cannot be supplied."
     - "A 404 means 'no such alias FOR YOU'. Another tenant's alias returns the same 404 by design, so a 404 is never evidence a name is globally free."
     - "An alias that creates cleanly can still be unservable — creation validates shape, not the key's ability to serve that model. Read the slot key state from getClientAlias before blaming routing."
@@ -66,7 +68,7 @@ guidance:
 methods:
   listClientAliases:
     description: >
-      List this tenant's own routing aliases, each with its ordered slots. These
+      List this tenant's own routing aliases, each with its slots. These
       are aliases the client created — the SpiderIQ task aliases (spideriq/*,
       agent/*, opvs/*) never appear here.
     guidance:
@@ -108,7 +110,7 @@ methods:
 
   createClientAlias:
     description: >
-      Create a client alias with an ordered fallback chain. The server prepends
+      Create a client alias: a least-busy pool of slots. The server prepends
       `client:<your-brand>/` to the name, so the alias can never collide with
       spideriq/*, agent/* or opvs/*.
     guidance:
@@ -133,7 +135,7 @@ methods:
       slots:
         type: array
         required: true
-        description: "Ordered fallback chain, 1–16 entries. Slot 0 is tried first."
+        description: "A least-busy POOL, 1–16 slots: every eligible slot gets traffic and is paid by its own key. Slot number is display order, not priority."
         items:
           type: object
           properties:
@@ -163,7 +165,7 @@ methods:
     guidance:
       use: "Change the fallback order, swap a model or key, re-describe an alias, or park/unpark it."
       next: "getClientAlias (confirm what the chain now is)"
-      warn: "⚠️ `slots` REPLACES the whole ordered set — not a merge, not an append. Read getClientAlias first and send back the FULL list, or the slots you omitted are deleted. Requires the admin role."
+      warn: "⚠️ `slots` REPLACES the whole set — not a merge, not an append. Read getClientAlias first and send back the FULL list, or the slots you omitted are deleted. Requires the admin role."
       telemetry_signal_default: "warm"
     http: PATCH /dashboard/gate/client-aliases/{name}
     params:
@@ -182,7 +184,7 @@ methods:
       slots:
         type: array
         required: false
-        description: "REPLACES the whole ordered chain, 1–16 entries. Omit the field entirely to leave slots untouched."
+        description: "REPLACES the whole set of slots, 1–16 entries. Omit the field entirely to leave slots untouched."
         items:
           type: object
           properties:

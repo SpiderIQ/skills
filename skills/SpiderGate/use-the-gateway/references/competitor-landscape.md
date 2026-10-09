@@ -10,25 +10,25 @@ pattern; here's the SpiderGate name for it." Sources cited at the bottom.
 |---|---|---|---|---|
 | OpenAI-compatible endpoint | ✓ | ✓ | ✓ | ✓ `/api/gate/v1/chat/completions` |
 | "route by task," not model | Presets | `model_group` aliases | Configs | **task aliases** `spideriq/<task>` |
-| Fallback chain | `models: [...]` array | `fallbacks` list | composable `fallback` targets | alias chain + `spidergate_options.fallback_models` |
-| Per-request price ceiling | `provider.max_price` | (per-key budget) | budget limits | **`spidergate_options.max_cost_usd`** |
-| Provider steer / ban | `provider.order` / `ignore` | deployment list | load-balance targets | `preferred_providers` / `excluded_providers` |
-| Per-call cost back | `usage` (priced on served model) | response cost hook | analytics | **`spidergate_metadata.cost_usd`** |
-| Response cache | (no) | (no, app-level) | semantic + simple cache | `spidergate_options.cache_enabled` (exact-match) |
+| Fallback | `models: [...]` array | `fallbacks` list | composable `fallback` targets | the alias's own models, then for some aliases a hand-over to another alias. No per-request list: `fallback_models` is not read |
+| Per-request price ceiling | `provider.max_price` | (per-key budget) | budget limits | **none.** `max_cost_usd` is not read. `max_tokens` per call, a monthly budget per token |
+| Provider steer / ban | `provider.order` / `ignore` | deployment list | load-balance targets | not per request (`preferred_providers` / `excluded_providers` are not read). Build a client alias |
+| Per-call cost back | `usage` (priced on served model) | response cost hook | analytics | not in the response. `cost_usd` on the call's trace row |
+| Response cache | (no) | (no, app-level) | semantic + simple cache | none a request can turn on (`cache_enabled` is not read) |
 | Per-request observability | generation stats endpoint | callbacks | trace id + dashboard | **traces** (`/gate/traces`, LangFuse-backed) |
 
 ## OpenRouter — the closest analogue for "one endpoint, many providers"
 
 - **Fallback** = you pass an array of model ids in priority order; on an error OpenRouter
   tries the next, transparently. SpiderGate bakes that chain into each **task alias**, so
-  you send one alias instead of hand-ordering models — and can still extend it with
-  `spidergate_options.fallback_models`.
+  you send one alias instead of hand-ordering models. You cannot extend it per request:
+  `spidergate_options.fallback_models` is not read.
 - **Provider routing** = `provider.{sort, order, only, ignore, allow_fallbacks, max_price, …}`.
-  SpiderGate's `preferred_providers`/`excluded_providers` are the `order`/`ignore` analogue;
-  `max_cost_usd` is the `max_price` analogue but expressed as a whole-request dollar cap.
+  SpiderGate has no per-request analogue: `preferred_providers`, `excluded_providers` and
+  `max_cost_usd` are accepted and not read.
 - **Cost** = "priced using the model that was ultimately used, returned in the `model`
-  attribute." SpiderGate prices on the served model too and returns it as
-  `spidergate_metadata.provider_model` + `cost_usd`.
+  attribute." SpiderGate returns the served model in `model` too, and keeps the
+  cost on the call's trace row, not in the response.
 - **Presets** = named, reusable config bundles. SpiderGate task aliases are the same idea,
   curated + eval-tested centrally instead of per-account.
 
@@ -37,18 +37,19 @@ pattern; here's the SpiderGate name for it." Sources cited at the bottom.
 SpiderGate runs **litellm.Router underneath** (least-busy routing, 3 retries, 60 s cooldown).
 So LiteLLM concepts map 1:1: `model_group` alias ≈ our task alias, `fallbacks` ≈ the alias
 chain, Router strategy ≈ our least-busy. What SpiderGate adds on top: multi-tenant PAT auth,
-the analytics/traces surface, the per-request `max_cost_usd` cap, and a curated alias catalog —
+the analytics/traces surface, per-token budgets, and a curated alias catalog —
 you don't run or configure the Router yourself. (We pin `litellm==1.82.6`; never assume
 latest-litellm docs apply to behavior you see.)
 
 ## Portkey — the closest analogue for cost-governance + traces
 
 - **Configs** = a JSON object (routing/fallback/load-balance) referenced by id. SpiderGate's
-  equivalent is the alias + the inline `spidergate_options` block (no separate config object to
-  manage).
+  equivalent is the alias itself (no separate config object to manage, and no per-request
+  routing options).
 - **Virtual keys / vault** ≈ SpiderGate's key pool (managed via the `spidergate-manager` skill,
   not this one).
-- **Budget limits** ≈ `max_cost_usd` (per request) + the brand's spend tracking.
+- **Budget limits** ≈ the token's monthly budget + the brand's spend tracking. There is no
+  per-request cap.
 - **Trace id / observability** ≈ SpiderGate **traces** — find a request, see the span waterfall
   and input/output, read p95 latency + cost ([read-usage-and-traces.md](read-usage-and-traces.md)).
 

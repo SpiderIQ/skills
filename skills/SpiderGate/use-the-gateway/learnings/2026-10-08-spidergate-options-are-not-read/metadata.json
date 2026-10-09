@@ -1,0 +1,15 @@
+{
+  "title": "spidergate_options caps nothing, and the response has no spidergate_metadata",
+  "summary": "Until 0.12.3 this skill taught a per-request cost cap (spidergate_options.max_cost_usd), a response cache (cache_enabled), an extra fallback list (fallback_models), and a spidergate_metadata block on the response carrying cost_usd. None of it was ever served. The completions handler builds the provider request from the OpenAI fields only and never copies spidergate_options; the response is the provider library's dump plus the request id. An agent loop relying on max_cost_usd to stop was unbounded, and code reading spidergate_metadata.cost_usd raised on every call. Bound a call with max_tokens and the token with its monthly budget; read cost from the trace row or the usage read. This learning replaces 2026-06-10-cost-is-in-spidergate-metadata, which stated the opposite.",
+  "created_at": "2026-10-08",
+  "updated_at": "2026-10-08",
+  "tags": ["cost", "spidergate_options", "correction"],
+  "references": [
+    "app/api/v1/gate/completions.py — _build_request_dict: copies model, messages and the OpenAI sampling/tool fields; spidergate_options is not among them",
+    "app/api/v1/gate/completions.py — _handle_non_streaming: response_dict = response.model_dump(); response_dict['id'] = request_id; nothing named spidergate_metadata is added",
+    "app/api/v1/gate/completions.py — the X-Served-Model-Catalog-Id header, set on the streaming and the non-streaming path",
+    "app/services/gate/budget_guard.py — check_token_budget: 402 budget_exceeded once a token's spend reaches monthly_budget_usd",
+    "tests/unit/gate/test_spi3_103_texts_match_code.py — the request builder ignores the options, the handler adds no metadata, and the skill's Verify command runs on the handler's output",
+    "SPI3-103 (code review 2026-10-08, finding 1)"
+  ]
+}

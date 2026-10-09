@@ -10,7 +10,7 @@
 
 ## The one that bites: `slots` replaces
 
-`slots` on update **overwrites the entire ordered chain**. It is not a merge and
+`slots` on update **overwrites the entire set**. It is not a merge and
 not an append. There is no partial-slot syntax.
 
 | You want to | Send |
@@ -53,6 +53,6 @@ behalf, on purpose.
 ## Verify
 
 ```
-getClientAlias(<leaf>)   → the chain is exactly what you sent, in order
+getClientAlias(<leaf>)   → the slots are exactly what you sent, in slot order
 listClientAliases()      → after a delete, the leaf is absent
 ```

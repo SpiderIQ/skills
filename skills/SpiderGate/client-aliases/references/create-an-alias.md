@@ -1,6 +1,6 @@
 # Create a client alias end to end
 
-Build a named fallback chain the tenant can then call as one model name.
+Build a named pool of models the tenant can then call as one model name.
 
 ## Steps
 
@@ -8,8 +8,10 @@ Build a named fallback chain the tenant can then call as one model name.
    `integration_id`, and it must be a key this tenant owns. Read them from the
    brand integrations surface. Do not proceed on a guess — see Gotchas.
 
-2. **Decide the order.** Slots are a fallback chain, slot 0 first. Put the model
-   you actually want at 0 and the cheaper/more-available ones after it.
+2. **Decide which models belong.** Slots are a least-busy pool, not a fallback
+   ladder: every eligible slot takes traffic and is paid by its own key. The slot
+   number is display order, not priority. Put in only models you are happy to have
+   serve any request, and leave out one you would want "only as a fallback".
 
 3. **Create it, unarmed if you are not sure:**
 

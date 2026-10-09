@@ -53,8 +53,9 @@ for chunk in stream:
 - **Streaming + tool calls + a Groq fallback** can surface `tool_use_failed` as a clean HTTP
   400 (`failed_generation` in the body) — non-retriable, repair-and-resubmit. See
   [structured-output-and-tools.md](structured-output-and-tools.md).
-- **Cost on a stream** still arrives in `spidergate_metadata` on the response, and token usage
-  only if you set `stream_options.include_usage`.
+- **A stream carries no cost either.** There is no `spidergate_metadata` on any response. The
+  served model is in each chunk's `model` and in the `X-Served-Model-Catalog-Id` response header;
+  cost is on the call's row in the trace list ([read-usage-and-traces.md](read-usage-and-traces.md)).
 - **Proxy buffering** can stall a stream if you front the gateway with your own nginx — disable
   `proxy_buffering` and raise `proxy_read_timeout` (SpiderGate LEARNINGS #10). Calling
   `spideriq.ai` directly, this is already handled.

@@ -17,12 +17,13 @@ description: >
   "agent/embed-small", "agent/embed-large", "embeddings without an OpenAI key".
   One OpenAI-compatible endpoint replaces
   juggling OpenRouter + Groq + Mistral keys: send `model: "spideriq/<task>"`,
-  SpiderGate routes to the best available model, falls back on failure, and
-  hands back the real per-call cost. This skill teaches the CONSUMER surface
+  SpiderGate routes across the models behind that alias and retries on
+  failure. Cost is read from the usage and trace reads, not from the response.
+  This skill teaches the CONSUMER surface
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.3.2"
+version: "0.3.3"
 category: ai-gateway
 ---
 
@@ -30,9 +31,9 @@ category: ai-gateway
 
 SpiderGate is an **OpenAI-compatible** LLM gateway. Point any OpenAI client at
 `https://spideriq.ai/api/gate/v1` and send a **task alias** (`spideriq/coding`,
-`spideriq/fast`, …) as `model`: SpiderGate picks the best available model across
-100+ providers, retries + falls back on failure, and returns the actual per-call
-cost. To call one fixed model instead, send that model's `call_as` from the
+`spideriq/fast`, …) as `model`: SpiderGate routes the call across the models
+behind that alias and retries on failure. The response carries no cost: read
+it from the usage or trace reads. To call one fixed model instead, send that model's `call_as` from the
 catalog (the `model-catalog` skill), not its `id`. You bring one PAT — not six
 provider keys.
 
@@ -41,10 +42,10 @@ your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
    model: "spideriq/extraction"          (a TASK, not a vendor)
         │
         ▼  litellm.Router  →  Groq · Mistral · Cerebras · NVIDIA NIM · OpenRouter (100+)
-   picks slot-0 model → on error falls through the alias chain → 3 retries, 60s cooldown
+   least busy across the alias's slots (a POOL, not a ranked list) → up to 3 retries, 60s cooldown
         │
-        ▼  OpenAI-shaped response  +  spidergate_metadata { provider, provider_model,
-                                       cost_usd, latency_ms, cache_hit, fallback_used }
+        ▼  OpenAI-shaped response: `model` (what served) and `usage` (tokens).
+           No spidergate_metadata block and no cost in it.
 ```
 
 ## Approach
@@ -52,10 +53,11 @@ your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
 - **Send a completion** — the 90% case. Pick a task alias, POST messages, read
   the answer. → [references/pick-an-alias.md](references/pick-an-alias.md), then
   [references/cost-aware-completion.md](references/cost-aware-completion.md).
-- **Make it cheap + safe** — cap cost per call (`max_cost_usd`), cache repeats,
-  declare a fallback chain, read `cost_usd` back. → [references/cost-aware-completion.md](references/cost-aware-completion.md).
-- **Structured output / tools** — JSON mode + function calling (HTTP only — the
-  MCP `gate_chat` tool can't). → [references/structured-output-and-tools.md](references/structured-output-and-tools.md).
+- **Keep its cost bounded** — `max_tokens` and the token's budget bound it;
+  `spidergate_options` does not (no cost cap, no cache, no extra fallback). Cost
+  is read afterwards. → [references/cost-aware-completion.md](references/cost-aware-completion.md).
+- **Structured output / tools** — JSON mode + function calling, over HTTP or
+  through the MCP `gate_chat` tool. → [references/structured-output-and-tools.md](references/structured-output-and-tools.md).
 - **Account for spend** — read usage, per-call cost, and traces. → [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
 - **Stream** — token-by-token SSE, and where job events live. → [references/stream-and-events.md](references/stream-and-events.md).
 - **Embed text** — vectorise one string or a batch through the gateway (`agent/embed-small|large`), no raw OpenAI key needed. → [references/embeddings.md](references/embeddings.md).
@@ -63,7 +65,9 @@ your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
 
 <HARD-GATE name="no-pii-on-free-tier">
 Free-tier providers (Groq, Mistral-free, OpenRouter `:free`) may use request data
-for **model training**, especially outside the EU. The cost-biased aliases route
+for **model training**, especially outside the EU. This is **our own reading**
+(SpiderGate LEARNINGS #12), not a quoted term of any provider: check the
+provider's own terms for your case. The rule below stands either way. The cost-biased aliases route
 there by design: **`spideriq/fast`, `spideriq/free`, `spideriq/extraction`,
 `spideriq/classification`, and `spideriq/summarization` are NOT safe for client
 PII** (names, emails, phone numbers, account data, anything a data-subject could be
@@ -78,13 +82,13 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 
 **AUTH:** every call carries `Authorization: Bearer <client_id>:<api_key>:<api_secret>` (or a `spideriq_pat_…`). CLI/MCP load it from `~/.spideriq/credentials.json`; for raw HTTP never echo the secret into logs or chat. The PAT is self-identifying (`spideriq_pat_<agent_ref>_<secret>`; legacy `<32-hex>` still works) and carries an `opvsAddress` (`<name>@opvs.run`) — one account, so re-auth ROTATES (held PAT wins) and `--as <opvs-address>` RECOVERs on a fresh box.
 
-**ALIASES ARE TASKS, NOT VENDORS — and the chain matters.** `model: "spideriq/coding"` means "route this *coding* task," not "use a fixed model." The served model can differ from slot-0 (a fallback fired); **read `spidergate_metadata.provider_model` to know what actually answered** — don't assume. Bare model ids (`gpt-4o`) pin one model and lose the fallback chain.
+**ALIASES ARE TASKS, NOT VENDORS — and an alias is a POOL.** `model: "spideriq/coding"` means "route this *coding* task," not "use a fixed model." Every slot behind the alias takes traffic, least busy first served; the slot number is display order, not priority. The served model is whichever model behind the alias took the call; **read the response `model` to know what actually answered** — don't assume. Bare model ids (`gpt-4o`) pin one model: no pool behind it, and no hand-over to another alias.
 
-**COST LIVES IN `spidergate_metadata`, NOT `usage`.** `usage` gives token counts; the per-call **dollar cost is `spidergate_metadata.cost_usd`** (provider-priced on the model that actually served) **when the field is present** — it rides non-streaming responses and is provider-dependent, so guard for its absence rather than assuming it. The aggregate `/usage` endpoint needs your numeric `brand_id`. ([references/read-usage-and-traces.md](references/read-usage-and-traces.md))
+**THE RESPONSE CARRIES NO COST.** `usage` gives token counts, and there is no `spidergate_metadata` block: code that reads `spidergate_metadata.cost_usd` raises on every call. The dollar cost of a call is on its row in the trace list (`gate_traces`), and `gate_usage` sums a period. Both need your numeric `brand_id`. ([references/read-usage-and-traces.md](references/read-usage-and-traces.md))
 
 **A DELIVERED RATE IS NOT A SUCCESS RATE, AND `unknown` IS NOT A SUCCESS.** `usage.outcome` splits into **four** mutually exclusive states — `delivered` / `hollow` / `failed` / **`unknown`** — where `unknown` means *we cannot tell* (rows predating the measurement column), so folding it into `delivered` is a false all-clear. Read `outcome.measurable_from` (**never hard-code the date**): if `window_predates_measurement` is `true`, `delivered_rate` covers only the classifiable rows and the percentage cannot mean what it appears to. `truncated` and `tool_call_turns` are **annotations that overlap** those states, not extra states — summing all six double-counts. And a bare `total_requests` is an **attempt** count, not demand: read `turn_metrics` and quote `turns` with the `amplification`. ([references/read-usage-and-traces.md](references/read-usage-and-traces.md))
 
-**`max_cost_usd`, cache, JSON, and tools are first-class on CLI + MCP (≥ cli@1.25.0 / mcp@1.31.0).** The per-request budget cap, response cache, fallback chain, `response_format`, and `tools`/`tool_choice` are forwarded by `gate_chat` and `spideriq gate chat` (`--max-cost`/`--cache`/`--json`). **Only token-by-token streaming is still HTTP-only** — use the raw endpoint with `stream: true` (or the OpenAI SDK) for that. Older clients: use raw HTTP for all of the above. ([references/gaps.md](references/gaps.md))
+**`spidergate_options` DOES NOT CAP, CACHE OR RE-ROUTE.** The server reads none of `max_cost_usd`, `cache_enabled`, `cache_ttl_seconds`, `fallback_models`, `preferred_providers`, `excluded_providers`, `timeout_ms`, `retry_count`. Nothing caps the cost of one request: bound it with `max_tokens`, and bound the token with its monthly budget (`402 budget_exceeded` once spent). **JSON mode and tools are first-class on CLI + MCP (≥ cli@1.25.0 / mcp@1.31.0):** `response_format` and `tools`/`tool_choice` are forwarded by `gate_chat` and `spideriq gate chat` (`--json`). The CLI's `--max-cost` and `--cache` are sent and ignored. **Only token-by-token streaming is still HTTP-only** — use the raw endpoint with `stream: true` (or the OpenAI SDK) for that. ([references/gaps.md](references/gaps.md))
 
 **A `422 no_qualifying_model` IS NOT RETRIABLE — never loop on it.** The gateway now qualifies candidate models BEFORE it contacts a provider: if a model is measured to return an empty completion at your `max_tokens`, it is dropped from the pool and another model behind the alias serves you. If nothing qualifies you get **HTTP 422**, `code: no_qualifying_model`, at **zero spend** — no tokens are billed. It carries **no `Retry-After`** because the same request fails identically every time; a retry loop spins forever. Raise `max_tokens`, or pick a different model or alias. The body's `spidergate_error.candidates[]` names each model, its provider, and the verdict (`known_empty_at_budget` | `exceeds_tier_ceiling`). Streaming returns the same real 422 with `content-type: application/json`, **not** a `200` carrying an error frame. ([references/cost-aware-completion.md](references/cost-aware-completion.md))
 
@@ -95,7 +99,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 | The user wants to… | Read |
 |---|---|
 | understand the task-alias families and pick the right one (incl. the PII lane) | [references/pick-an-alias.md](references/pick-an-alias.md) |
-| send a completion cheaply — cap cost, cache, fall back, read cost back | [references/cost-aware-completion.md](references/cost-aware-completion.md) |
+| send a completion and keep its cost bounded — what `spidergate_options` does not do, `max_tokens`, the token budget, where cost is read | [references/cost-aware-completion.md](references/cost-aware-completion.md) |
 | get strict JSON (JSON mode / schema) or call tools/functions through the gateway | [references/structured-output-and-tools.md](references/structured-output-and-tools.md) |
 | read how much was spent — usage over a real date range, the delivered/hollow/unknown/failed split, per-call cost, traces, p95 latency | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | decide whether MORE KEYS would help (and when they would not) — key pressure, verdicts, subscription windows | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
@@ -112,7 +116,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 
 | Do | HTTP | MCP tool | CLI |
 |---|---|---|---|
-| Send a completion | `POST /api/gate/v1/chat/completions` | `gate_chat` *(now forwards cost-cap/JSON/tools)* | `spideriq gate chat` |
+| Send a completion | `POST /api/gate/v1/chat/completions` | `gate_chat` *(forwards JSON mode and tools)* | `spideriq gate chat` |
 | List models (+ pricing, context window) | `GET /api/gate/v1/models` | `gate_models` | `spideriq gate models` |
 | List task aliases (+ model chains) | `GET /api/gate/v1/aliases` | `gate_aliases` | `spideriq gate aliases` |
 | Gateway health | `GET /api/gate/v1/health` | `gate_health` | `spideriq gate health` |
@@ -128,7 +132,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 > mcp@1.31.0) **plus the full analytics surface** — `gate_usage` takes `from`/`to`/`bucket`/`compare`, and
 > `gate_capacity` + `gate_flow` are new at **`@spideriq/mcp-gate` ≥ 1.10.0** (sink `@spideriq/mcp` ≥ 1.89.0,
 > `@spideriq/cli` ≥ 1.71.0); on an older client those two tools do not exist. `gate_chat` forwards the
-> cost-cap / JSON / tool-calling controls. Still HTTP-only:
+> JSON-mode and tool-calling controls. Still HTTP-only:
 > token-by-token **streaming**, **embeddings** (alias-aware — see [references/embeddings.md](references/embeddings.md)),
 > and the rest of the **multimodal** endpoints (images/TTS/STT — gap 4). See [references/gaps.md](references/gaps.md).
 
@@ -138,7 +142,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 |---|---|---|
 | `chat` | send a chat completion (task alias or model id) | [references/cost-aware-completion.md](references/cost-aware-completion.md) |
 | `listModels` | list models with provider, context window, pricing | [references/pick-an-alias.md](references/pick-an-alias.md) |
-| `listAliases` | list task aliases with their fallback chains + usage | [references/pick-an-alias.md](references/pick-an-alias.md) |
+| `listAliases` | list task aliases with the slots behind each + usage | [references/pick-an-alias.md](references/pick-an-alias.md) |
 | `embed` | vectorise one text or a batch (`agent/embed-small\|large\|embed`) | [references/embeddings.md](references/embeddings.md) |
 | `health` | gateway liveness | [references/stream-and-events.md](references/stream-and-events.md) |
 
@@ -147,7 +151,7 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 ## References (loaded on demand)
 
 - **[references/pick-an-alias.md](references/pick-an-alias.md)** — the two alias families (`spideriq/*` worker, `agent/*` live-agent), how to choose, the PII lane. **Read before your first call.**
-- **[references/cost-aware-completion.md](references/cost-aware-completion.md)** — `max_cost_usd`, `cache_enabled`, `fallback_models`, and reading `cost_usd` back. WRONG→RIGHT.
+- **[references/cost-aware-completion.md](references/cost-aware-completion.md)** — what bounds a call's cost (`max_tokens`, the token budget), what does not (`spidergate_options`), and where cost is read. WRONG→RIGHT.
 - **[references/structured-output-and-tools.md](references/structured-output-and-tools.md)** — `response_format` (json_object/json_schema) + `tools`/`tool_choice`. WRONG→RIGHT.
 - **[references/read-usage-and-traces.md](references/read-usage-and-traces.md)** — usage over a real date range (`from`/`to`, calendar months), `turns` vs `attempts`, the four-state outcome split incl. `unknown`, `cost_avoided` as a counterfactual, key-pressure **verdicts that can refuse** (`not_quota` / `account_capped`), the alias→model→provider cross-tab, and trace list/detail/stats.
 - **[references/stream-and-events.md](references/stream-and-events.md)** — `stream: true` SSE framing + the difference vs the `events-stream` job-event skill.
@@ -157,5 +161,5 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 
 ## See also
 
-- `learnings/` — `no-pii-on-free-tier` (the HARD-GATE's why), `cost-is-in-spidergate-metadata`, `mcp-gate-chat-is-text-only`, `embeddings-need-no-openai-key`, **`unknown-is-not-a-success`** (why the outcome split has four states and folding the fourth into `delivered` manufactures a false all-clear). Starting points, not ground truth — verify against current code.
+- `learnings/` — `no-pii-on-free-tier` (the HARD-GATE's why), `spidergate-options-are-not-read` (the cost cap, cache and `spidergate_metadata` this skill used to teach were never served), `mcp-gate-chat-is-text-only`, `embeddings-need-no-openai-key`, **`unknown-is-not-a-success`** (why the outcome split has four states and folding the fourth into `delivered` manufactures a false all-clear). Starting points, not ground truth — verify against current code.
 - **Sibling skills in this package:** `spidergate-manager` (administer the key pool — add provider keys, health, billing) and `events-stream` (subscribe to *job* lifecycle events). This skill is the consumer of the gateway; those manage it.

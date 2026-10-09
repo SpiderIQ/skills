@@ -22,7 +22,7 @@ SpiderGate CLI/MCP owners, not a `needs-replan` escalation.
 
 **Fixed in `@spideriq/cli@1.25.0`** ([packages/cli/src/commands/gate.ts](../../../../../packages/cli/src/commands/gate.ts)):
 `spideriq gate chat` (`-m`/`-p`/`--system`/`--messages-file`/`--max-tokens`/`--temperature`/
-`--json`/`--max-cost <usd>`/`--cache`), `spideriq gate models`, `spideriq gate aliases`,
+`--json`), `spideriq gate models`, `spideriq gate aliases`,
 `spideriq gate usage -b <brand> -d <days>`, `spideriq gate health`. The CLI had no gateway
 surface before — every other product slice did.
 
@@ -32,16 +32,17 @@ surface before — every other product slice did.
 
 **Fixed in `@spideriq/mcp@1.31.0` / `@spideriq/mcp-gate@1.3.0` / `@spideriq/core@1.26.0`.**
 The MCP `gate_chat` inputSchema + `core.gateChat` now forward `temperature`, `max_tokens`,
-`top_p`, `stop`, `seed`, `response_format` (JSON mode), `tools`/`tool_choice`, and
-`spidergate_options` (`max_cost_usd`, `cache_enabled`, `fallback_models`, …). Before, the
-wrapper forwarded only `model`+`messages`, so the gateway's headline value was MCP-unreachable.
+`top_p`, `stop`, `seed`, `response_format` (JSON mode) and `tools`/`tool_choice`. Before, the
+wrapper forwarded only `model`+`messages`. It also forwards a `spidergate_options` object, and
+so does the CLI (`--max-cost`, `--cache`): the server reads none of the fields in it, so that
+half of the fix changed nothing ([cost-aware-completion.md](cost-aware-completion.md)).
 
 **Note:** token-by-token **streaming** is still not exposed through the single-response MCP
 tool — for live streaming use the raw HTTP endpoint (`stream: true`) or the OpenAI SDK; see
-[stream-and-events.md](stream-and-events.md). The cost-cap / cache / JSON / tool-calling
-controls are all now in the tool.
+[stream-and-events.md](stream-and-events.md). The JSON-mode and tool-calling controls are
+in the tool.
 
-**Fallback (older MCP):** raw HTTP for any cost-capped / cached / streamed / JSON / tool-calling call.
+**Fallback (older MCP):** raw HTTP for any streamed / JSON / tool-calling call.
 **Original ask (now shipped):** widen `gate_chat`'s inputSchema to pass `temperature`, `max_tokens`, `stream`,
 `response_format`, `tools`, `tool_choice`, and a `spidergate_options` object through to
 `client.gateChat`.
@@ -86,6 +87,5 @@ in one PR.
 ---
 
 **Net:** the skill is fully usable today via HTTP, but the *MCP/CLI agent surface
-under-serves the gateway* — the cost-control + streaming + structured-output features that
-make SpiderGate worth using over a raw provider are HTTP-only. Closing Gaps 1 + 2 would let
-an MCP/CLI agent use the gateway's real value without dropping to curl.
+under-serves the gateway* on streaming, embeddings and the other multimodal endpoints, which
+are HTTP-only.

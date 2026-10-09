@@ -1,9 +1,10 @@
 # Pick a task alias
 
 A **task alias** (`spideriq/coding`, `spideriq/fast`, …) tells SpiderGate *what kind
-of task* this is, and SpiderGate maps it to an ordered chain of real models, biased
-for that task. Sending an alias — instead of a bare model id like `gpt-4o` — buys you
-the fallback chain, retries, and cost-bias. **Prefer an alias; pin a model only when
+of task* this is, and SpiderGate maps it to a pool of real models chosen for that
+task. Each request goes to the least busy slot in the pool: the slots are not a
+ranked list. Sending an alias — instead of a bare model id like `gpt-4o` — buys you
+the pool, retries, and for most aliases a hand-over to another alias. **Prefer an alias; pin a model only when
 you genuinely need that exact one.**
 
 There are **two deliberately separate families.** Pick the family first, then the task.
@@ -15,20 +16,23 @@ cost dominates at batch scale. Use for scraping post-processing, extraction, cla
 one-shot transforms. (OpenRouter `:free` was retired from this family in 2026-06 — it can't do
 tool calls; paid OpenRouter is kept for `spideriq/vision` only.)
 
-| Alias | Task | Slot-0 model (today) |
-|---|---|---|
-| `spideriq/coding` | code gen, debugging | Codex `gpt-5.3-codex` → MiniMax M2.5 |
-| `spideriq/extraction` | pull fields from text | Groq Llama 3.1 8B (fastest) |
-| `spideriq/classification` | categorize | Groq Llama 3.1 8B |
-| `spideriq/summarization` | summarize | Groq Scout 17B |
-| `spideriq/translation` | translate | Mistral Small |
-| `spideriq/fast` | low-latency utility | Groq Llama 3.1 8B (~813 ms) |
-| `spideriq/free` | zero-cost | Groq Llama 3.1 8B |
-| `spideriq/chat` | conversational | Groq Llama 3.3 70B |
-| `spideriq/research` | long-context analysis | Groq Llama 3.3 70B |
-| `spideriq/lead-analysis` | B2B lead analysis, CHAMP scoring | **Mistral Codestral (premium — the PII-safe lane)** |
-| `spideriq/creative` | SEO / creative writing | Mistral Codestral |
-| `spideriq/vision` | image understanding | Mistral Pixtral |
+| Alias | Task |
+|---|---|
+| `spideriq/coding` | code gen, debugging |
+| `spideriq/extraction` | pull fields from text |
+| `spideriq/classification` | categorize |
+| `spideriq/summarization` | summarize |
+| `spideriq/translation` | translate |
+| `spideriq/fast` | low-latency utility |
+| `spideriq/free` | zero-cost |
+| `spideriq/chat` | conversational |
+| `spideriq/research` | long-context analysis |
+| `spideriq/lead-analysis` | B2B lead analysis, CHAMP scoring (the designated lane for PII) |
+| `spideriq/creative` | SEO / creative writing |
+| `spideriq/vision` | image understanding |
+
+This table names no model. The slots behind an alias are edited as providers
+change, so read them live (step 1 below).
 
 ## `agent/*` — for LIVE conversational agents (multi-turn, uptime-dominated)
 
@@ -37,16 +41,18 @@ where multi-turn coherence + uptime beat per-token cost. Use for chat personas,
 Telegram/Discord/dashboard agents.
 
 `agent/chat`, `agent/tool-use`, `agent/coding`, `agent/planning`, `agent/creative`,
-`agent/vision`, `agent/research`, `agent/fast`. Every `agent/*` alias falls through to
-`agent/chat` when its own chain exhausts.
+`agent/vision`, `agent/research`, `agent/fast`. When its own pool cannot serve, an `agent/*`
+alias hands over to `agent/chat`, and `agent/chat` to `agent/tool-use`. `agent/vision` has no
+hand-over: a pool of text models would answer about an image it never received. The same is
+true of `spideriq/vision` and `spideriq/design-vision`.
 
 > **There is NO Anthropic model in any `agent/*` alias** — subscription routing is
 > ToS-banned. Don't ask the gateway for Claude via an alias.
 
 ## Steps
 
-1. **List the live aliases + their chains** (don't trust this table for slot-0 — models
-   get re-bound as providers change models):
+1. **List the live aliases + the slots behind each** (`models` in each entry; slot order is
+   display order, not priority):
 
    ```bash
    curl -s https://spideriq.ai/api/gate/v1/aliases \
@@ -66,15 +72,14 @@ Telegram/Discord/dashboard agents.
 
 ## Gotchas
 
-- **Slot-0 drifts.** Providers delist models (Groq dropped all Kimi/Moonshot models in
-  2026-04 — see SpiderGate LEARNINGS #33). The alias keeps working (it falls through), but
-  don't hard-code "spideriq/coding == model X." Read `spidergate_metadata.provider_model`
+- **The models behind an alias change.** Providers delist models and slots are edited. The
+  alias keeps its name, so don't hard-code "spideriq/coding == model X." Read `model`
   on the response to see what actually answered.
-- **A bare model id loses the chain.** `model: "gpt-4o"` pins exactly that model — no
-  fallback, no cost-bias. Only pin when you need that specific model's behavior.
+- **A bare model id has no pool.** `model: "gpt-4o"` pins exactly that model — no other
+  slot to route to, and no hand-over to another alias. Only pin when you need that specific model's behavior.
 - **For one model from the catalog, send its `call_as`, not its `id`.** Every catalog
   row carries `call_as`: the exact `model` string for that row right now, or `null`.
-  If it is `null`, the model cannot be called through the gateway now. A Codex row's
+  If it is `null`, the shared pool cannot serve that row now. A Codex row's
   `id` is refused; its `call_as` is `codex/<model_id>`. `listModels` rows carry no
   `call_as`, so read it with the `model-catalog` skill (`listCatalog` / `getModel`).
 - **`spideriq/vision` / `agent/vision`** are the only image-capable aliases. MiniMax has no

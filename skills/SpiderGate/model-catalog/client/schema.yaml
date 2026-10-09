@@ -9,7 +9,7 @@
 # not metered, not billable (same class as listModels).
 
 name: model-catalog
-version: "0.2.1"
+version: "0.2.2"
 description: >
   Read the enriched SpiderGate model catalog, the public model×task leaderboard,
   the model-capability CATEGORY taxonomy (Coding, Design/Frontend, Reasoning,
@@ -69,14 +69,14 @@ guidance:
     - "model_id (the getModel / modelEvals path param) is a LOOKUP key — a spidergate_id OR a raw provider/model (e.g. openai/gpt-4o-mini); the slash is part of the id, pass it whole. It is not the string you send as `model` on a completion — that is the row's `call_as`."
     - "Eval fields can be null until an OPVS eval contribution lands for that model×task — treat a null score as 'no prior yet', not 'zero'."
     - "The catalog is large + stable — pull once with fields= to narrow, then cache; don't re-list every turn."
-    - "To CALL a model from the catalog, send its `call_as` as `model` to use-the-gateway's chat. If `call_as` is null, the model cannot be called through the gateway now. Do not send the row's `id` or `model_id` instead: for a Codex row both are refused, and the row is called as codex/<model_id>, which is what its `call_as` holds while the gateway holds a pooled Codex seat. You don't have to route through a task alias."
-    - "A filter does not make a row callable. configured_only=true selects on a stored is_configured flag (a saved flag, not a live check) and can return a row whose `call_as` is null. `servable` is true when the row's provider has a healthy pooled key and stays false for Codex. Decide on `call_as`, not on `servable` or `is_configured`."
-    - "`call_as` is read from one gateway process's in-memory key state on each request, per PROVIDER (not per model, not per key, not a check of your credential's allowed models). It can differ between two reads for a moment — read it close to the call; cache the rest of the row, not `call_as`."
+    - "To CALL a model from the catalog, send its `call_as` as `model` to use-the-gateway's chat. If `call_as` is null, the shared pool cannot serve that row now (a null does not cover your brand's own unshared keys: GET /api/gate/v1/subscriptions answers for those). Do not send the row's `id` or `model_id` instead: for a Codex row both are refused, and the row is called as codex/<model_id>, which is what its `call_as` holds while the gateway holds a pooled Codex seat. You don't have to route through a task alias."
+    - "A filter does not make a row callable. configured_only=true selects on a stored is_configured flag (a saved flag, not a live check) and can return a row whose `call_as` is null. `servable` is per row: true when a pooled key may serve that model on that row (not hidden, no Codex row taking the same id first), and it stays false for Codex. Decide on `call_as`, not on `servable` or `is_configured`."
+    - "`call_as` is read from one gateway process's in-memory key state on each request, per ROW, for the shared pool (not a check of your own unshared keys, and not a check of your credential's allowed models). It can differ between two reads for a moment — read it close to the call; cache the rest of the row, not `call_as`."
     - "Leaderboard rows carry `id` but NO `call_as`. Before calling a ranked model, getModel(id) and send that record's `call_as`."
     - "TWO ranking axes, don't confuse them: leaderboard(task_type=…) ranks by the #7 EVAL success rate (needs an eval contribution); leaderboard(category=…, sort=score) ranks by the benchmark-derived per-category PERCENTILE (needs published benchmarks). Use `category` for capability questions ('best coding/vision model'), `task_type` for eval-prior questions."
     - "A category `score` IS a within-category PERCENTILE (0–100), NOT a raw benchmark mean — higher = better relative to peers scored in that category. Read `rank` ÷ the response `total` for 'rank/N'; each score's `components[]` is the WHY (the contributing benchmarks, self_reported flagged)."
     - "Only ~19% of catalog models (≈219 of 1126) carry any category score — a model with an empty `category_scores[]` is unscored (no published benchmarks yet), NOT bad. Render 'no score' gracefully; don't rank it last."
-    - "`category_scores[]` is a child section on the catalog record — request it explicitly with fields=category_scores on listCatalog/getModel (like benchmarks/evals); it's omitted from the default projection."
+    - "`category_scores[]` is a child section on the catalog record — it is IN the default projection of listCatalog (with benchmarks/evals/links/per_provider) and is always on a getModel record. Pass fields=category_scores to listCatalog to get only it; getModel takes no `fields`."
 
 methods:
   listCatalog:
@@ -87,12 +87,12 @@ methods:
       sourced row carrying provenance. Pass `fields` (CSV) to narrow the payload
       to just the sections you need for concrete-model selection. Every row
       carries `call_as` under every `fields` projection: the exact `model` string
-      to send for that row right now, or null when the model cannot be called
-      through the gateway now.
+      to send for that row right now, or null when the shared pool cannot serve
+      that row now.
     guidance:
       use: "Pull the enriched catalog to compare models on spec, price, and eval score, and to read each row's `call_as`."
       next: "getModel (full record for one), leaderboard (rank for a task), chat via use-the-gateway (send the winner's `call_as` as `model`)"
-      warn: "Large + stable — narrow with fields= and cache the rows, but not `call_as`: read it close to the call. A null `call_as` means the model cannot be called through the gateway now."
+      warn: "Large + stable — narrow with fields= and cache the rows, but not `call_as`: read it close to the call. A null `call_as` means the shared pool cannot serve that row now."
       telemetry_signal_default: "cold"
     http: GET /catalog/models
     params:
@@ -111,7 +111,7 @@ methods:
       fields:
         type: string
         required: false
-        description: 'CSV projection — recognised: capabilities, context, max_output, pricing, tier, descriptions, tags, aliases, per_provider, benchmarks, links, evals, category_scores. e.g. "capabilities,pricing,category_scores". `category_scores` adds each model''s per-category percentile section ([{category_key,label,emoji,score,rank,n_signals,confidence,components,computed_at}], best-first; [] for the ~900 unscored models). Unknown tokens ignored.'
+        description: 'CSV projection — recognised: capabilities, context, max_output, pricing, tier, descriptions, dates, tags, aliases, per_provider, benchmarks, links, evals, category_scores. e.g. "capabilities,pricing,category_scores". `category_scores` adds each model''s per-category percentile section ([{category_key,label,emoji,score,rank,n_signals,confidence,components,computed_at}], best-first; [] for the ~900 unscored models). Unknown tokens ignored.'
       configured_only:
         type: boolean
         required: false
@@ -145,7 +145,7 @@ methods:
     guidance:
       use: "Inspect one model in full before calling it, and read its `call_as`."
       next: "chat via use-the-gateway (pass the record's `call_as` as `model`), modelEvals (the task-scoped prior)"
-      warn: "model_id includes the slash for provider/model ids — pass it whole (openai/gpt-4o-mini). It is the lookup key, not what you send on a completion: send the record's `call_as`. If that is null, the model cannot be called through the gateway now."
+      warn: "model_id includes the slash for provider/model ids — pass it whole (openai/gpt-4o-mini). It is the lookup key, not what you send on a completion: send the record's `call_as`. If that is null, the shared pool cannot serve that row now."
       telemetry_signal_default: "cold"
     http: GET /catalog/models/{model_id}
     params:

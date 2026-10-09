@@ -3,16 +3,16 @@
 Teach an agent to use **SpiderGate as its LLM provider** — the consumer side of the
 gateway. Point any OpenAI-compatible client at `https://spideriq.ai/api/gate/v1`, send a
 **task alias** (`spideriq/coding`, `spideriq/fast`, `spideriq/extraction`, …) instead of a
-fixed model, and SpiderGate routes across 100+ providers, retries + falls back on failure,
-and hands back the real per-call cost. One PAT replaces juggling OpenRouter + Groq + Mistral
+fixed model, and SpiderGate routes across 100+ providers and retries on failure. One PAT replaces juggling OpenRouter + Groq + Mistral
 keys and their six rate-limit policies.
 
 ### What this skill teaches
 
 - **Pick a task alias** — the two families (`spideriq/*` cost-biased for workers, `agent/*`
   subscription-biased for live agents), and how to choose. Includes the PII-safe lane.
-- **Cost-aware completions** — cap spend per call (`max_cost_usd`), cache idempotent prompts,
-  declare a fallback chain, and read the dollar cost back from `spidergate_metadata.cost_usd`.
+- **Keeping a call's cost bounded** — `max_tokens` and the token's monthly budget bound it.
+  `spidergate_options` does not: no cost cap, no cache, no extra fallback. Cost is read
+  afterwards from the trace row or the usage read.
 - **Structured output + tools** — JSON mode (`response_format`) and function calling, with the
   free-tier streaming `tool_use_failed` gotcha.
 - **Account for spend, honestly** — usage over a *real* date range (calendar months, not just a
@@ -33,8 +33,8 @@ silent leak the competitors leave entirely to you.
 
 ### Honest about the tooling
 
-Cost-control, JSON mode and tool-calling are now **first-class on CLI + MCP** (`gate_chat`,
-`spideriq gate chat --max-cost/--cache/--json`), and the analytics surface is complete:
+JSON mode and tool-calling are **first-class on CLI + MCP** (`gate_chat`,
+`spideriq gate chat --json`), and the analytics surface is complete:
 `gate_usage` takes `from`/`to`/`bucket`/`compare`, and `gate_capacity` + `gate_flow` ship at
 **`@spideriq/mcp-gate` ≥ 1.10.0** (`@spideriq/cli` ≥ 1.71.0) — on an older client those two
 tools simply do not exist. Still **HTTP-only**: token-by-token streaming, embeddings, and the
