@@ -16,7 +16,7 @@ description: >
   completions (that's use-the-gateway) and does NOT author catalog copy or edit
   the category taxonomy (that's admin-only). Read it before you call a model you
   picked from the catalog: the string to send is the row's `call_as`.
-version: "0.2.2"
+version: "0.2.3"
 category: ai-gateway
 ---
 

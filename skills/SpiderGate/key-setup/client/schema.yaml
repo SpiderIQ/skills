@@ -1,0 +1,180 @@
+# SpiderGate key setup (onboarding). API surface + envelope.
+#
+# ⚠ UPSTREAM: this skill spans TWO bases — the brand routes under /api/v1
+# (/brands/{brand_id}/gate/onboarding, /brands/{brand_id}/integrations,
+# /auth/workspaces) and the PUBLIC provider guide under /api/gate/v1
+# (/providers). One upstream cannot end where both begin, so `upstream.base_url`
+# ends at `/api` and every method path starts at the version segment
+# (`/v1/...`, `/gate/v1/...`). The composed URL is the real path, never doubled
+# (AUTHORING §5.3), and the OpenAPI join base is `/api`, which the spec carries.
+name: key-setup
+version: "0.1.0"
+description: >
+  Walk the owner through getting keys into the SpiderGate gateway from chat:
+  read where setup stands and the one next step, save their answers, explain
+  how to get a key for a provider, save a FREE key they paste, and propose a
+  teammate to add keys. Paid keys and browser sign-ins get the dashboard link.
+category: ai-gateway
+base_url: /api/v1/spideriq
+upstream:
+  base_url: https://spideriq.ai/api  # method paths carry /v1/... or /gate/v1/... themselves
+auth:
+  type: pat
+  header: Authorization
+  prefix: Bearer
+  env_var: SPIDERIQ_PAT
+defaults:
+  format: json
+  timeout_ms: 30000
+requires_brand: true
+triggers:
+  - set up the gateway
+  - gateway setup
+  - add a provider key
+  - add my groq key
+  - free API key
+  - connect my agent to SpiderGate
+  - I have no key yet
+  - invite a teammate to add a key
+  - onboarding
+
+guidance:
+  use: >
+    Run gateway setup with the owner: getOnboardingStatus first, say
+    `next.action` with its link, then the matching method. Save a FREE key the
+    owner pastes with addKey; give the dashboard link for everything else.
+  not:
+    - "use-the-gateway → SEND completions once a key is in. This skill never sends one."
+    - "model-catalog → compare and pick models; setup only reports recommended_model."
+    - "client-aliases → name your own routing chain over keys you already added."
+    - "workspace (@spideriq/workspace-skills) → brand settings, team members and the full integrations list."
+  intent_aliases: [setup, onboarding, add key, vault]
+  pitfalls:
+    - "🔴 NEVER repeat a key back — not in a reply, a file, a log, a board comment, not even its first or last characters. The vault is the only place it goes."
+    - "Only a FREE key is taken in chat (kind free). A paid key (payg, enterprise, media) and a subscription are added by the owner at the dashboard link; addKey is not called for them."
+    - "add_method login_link (ChatGPT, Gemini CLI, Claude …) is a browser sign-in: give the link, never ask for a password. A provider's phone check happens on its own page: never ask for the code."
+    - "proposeInvite SENDS NOTHING. The owner sends the invite in the dashboard (step 4). Say so."
+    - "Never recommend agent/chat to a workspace. Recommend `recommended_model` from the status."
+    - "A 403 on addKey means the key lacks gate:vault:write or the caller is not the brand owner — not that the API is broken."
+
+methods:
+  getMyBrand:
+    description: >
+      The brand this credential acts for. A PAT is bound to one brand; read its
+      `brand_id` here and pass it to the other methods.
+    guidance:
+      use: "Once, before the first brand call."
+      next: "getOnboardingStatus"
+      warn: "More than one brand in the answer means the credential is a person's session, not a brand PAT: ask which brand, never guess."
+      telemetry_signal_default: "warm"
+    http: GET /v1/auth/workspaces
+    params: {}
+    response:
+      format: json
+
+  getOnboardingStatus:
+    description: >
+      Where setup stands — state, step (1-6), answers, connected providers, the
+      pool, what is waiting on a teammate, can_use_models, models_usable /
+      models_total, recommended_model — and `next`, the one thing to do next
+      with its links.
+    guidance:
+      use: "First call of every setup conversation, and after each change, to say the next step."
+      next: "by next.action: answer_questions → updateOnboarding · add_free_key → addKey or next.add_url · add_key / connect_subscription → give next.add_url · send_invites → give next.dashboard_url · connect_agents → references/connect-your-agent.md"
+      warn: "Read-only. can_use_models false means no key yet: do not suggest agent/* models. Recommend recommended_model, never agent/chat."
+      telemetry_signal_default: "hot"
+    http: GET /v1/brands/{brand_id}/gate/onboarding
+    params:
+      brand_id: { type: string, required: true, description: "From getMyBrand" }
+    response:
+      format: json
+
+  updateOnboarding:
+    description: >
+      Save the owner's answers and progress. Send only what changed; returns the
+      new status. Accepted: step, state (in_progress | done), skipped_steps and
+      answers {uses {goals, agents, other}, pays_for, free_keys_chosen}.
+    guidance:
+      use: "After the owner answers a setup question, or to mark setup done."
+      next: "getOnboardingStatus is returned — read its next"
+      warn: "Never send `ui` or the pool consent: those are the owner's own act (403 HUMAN_ACT_REQUIRED). Derived fields (connected, pool, can_use_models …) are refused (FIELD_IS_DERIVED). Teammates go through proposeInvite."
+      telemetry_signal_default: "warm"
+    http: PATCH /v1/brands/{brand_id}/gate/onboarding
+    params:
+      brand_id: { type: string, required: true, description: "From getMyBrand" }
+      step: { type: integer, required: false, description: "1-6" }
+      state: { type: string, required: false, values: ["in_progress", "done"], description: "done closes setup" }
+      skipped_steps: { type: array, required: false, items: { type: integer }, description: "Steps the owner skipped" }
+      answers:
+        type: object
+        required: false
+        description: >
+          {"uses": {"goals": [agents|chat|build|media|team], "agents":
+          [openclaw|hermes|cursor|n8n|own_code|other], "other": "<text>"},
+          "pays_for": ["codex", …], "free_keys_chosen": ["groq", …]}
+    response:
+      format: json
+
+  getProviderGuide:
+    description: >
+      How to get a key for one provider (or every provider): kind, what it
+      unlocks, free limits, what sign-up needs (email, phone check, card),
+      minutes, steps, signup_url, docs_url, extra_fields and add_method
+      (paste | login_link | never). Public; no sign-in needed.
+    guidance:
+      use: "Before asking the owner for a key, to tell them where to get it and whether it can be pasted at all."
+      next: "addKey (free + paste) · give add_url / signup_url (everything else)"
+      warn: "The guide entries are in `guide`, not `data` (data is the catalog summary). add_method never: say it cannot be added and quote terms_note."
+      telemetry_signal_default: "warm"
+    http: GET /gate/v1/providers
+    params:
+      provider: { type: string, required: false, description: "Provider name, e.g. groq. Omit for every provider." }
+    response:
+      format: json
+
+  addKey:
+    description: >
+      Save a FREE key the owner pasted into the brand's vault. The vault makes
+      one small test call to the provider before saving; a refused key is not
+      stored (422, the key redacted). Needs a PAT with gate:vault:write held by
+      the brand owner.
+    guidance:
+      use: "Only when getProviderGuide says kind free and add_method paste, and the owner has pasted the key."
+      next: "getOnboardingStatus (connected now lists it, with its model count)"
+      warn: "🔴 Never repeat the key. Paid keys and sign-ins are NOT sent here — give the link. Tell the owner to delete the chat message that carried the key."
+      telemetry_signal_default: "cold"
+    http: POST /v1/brands/{brand_id}/integrations
+    params:
+      brand_id: { type: string, required: true, description: "From getMyBrand" }
+      provider_name: { type: string, required: true, description: "Provider name from the guide, e.g. groq" }
+      credentials:
+        type: object
+        required: true
+        description: >
+          {"api_key": "<as pasted>"} plus every required field the guide's
+          extra_fields names (e.g. account_id). Never echoed.
+      key_label: { type: string, required: false, description: "Label for the key" }
+    response:
+      format: json
+
+  proposeInvite:
+    description: >
+      Propose a teammate who should add keys for some providers. Writes the
+      whole proposed list into setup step 4; the owner sends the invite from
+      the dashboard. Sends no email.
+    guidance:
+      use: "When the owner names a teammate who holds a provider account."
+      next: "Give the owner the step-4 link: https://app.spideriq.ai/dashboard/gate/setup?step=4"
+      warn: "`teammates` REPLACES the proposed list: read getOnboardingStatus first, keep every entry with status proposed, add or extend this one, and send them all. Entries with status sent/completed/expired are invites, not proposals — do not send them back."
+      telemetry_signal_default: "cold"
+    http: PATCH /v1/brands/{brand_id}/gate/onboarding
+    params:
+      brand_id: { type: string, required: true, description: "From getMyBrand" }
+      answers:
+        type: object
+        required: true
+        description: >
+          {"teammates": [{"email": "anna@example.com", "providers": ["openai"]}, …]}
+          — every proposal, not only the new one. At most 20, 25 providers each.
+    response:
+      format: json

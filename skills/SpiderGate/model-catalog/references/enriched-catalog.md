@@ -40,15 +40,18 @@ now, or `null`.
     { "id": "gpt-6-sol-codex", "provider": "codex", "model_id": "gpt-6-sol",
       "spidergate_id": "gpt-6-sol-codex", "display_name": "gpt-6-sol", "owned_by": "",
       "pricing_input": 0.0, "pricing_output": 0.0,
-      "servable": false, "call_as": "codex/gpt-6-sol" },
+      "servable": false, "call_as": "codex/gpt-6-sol",
+      "delisting": null },
     { "id": "lease-model-anthropic", "provider": "anthropic", "model_id": "lease-model",
       "spidergate_id": "lease-model-anthropic", "display_name": "lease-model", "owned_by": "",
       "pricing_input": 0.0, "pricing_output": 0.0,
-      "servable": false, "call_as": null },
+      "servable": false, "call_as": null,
+      "delisting": null },
     { "id": "llama-x-groq", "provider": "groq", "model_id": "llama-x",
       "spidergate_id": "llama-x-groq", "display_name": "llama-x", "owned_by": "",
       "pricing_input": 0.0, "pricing_output": 0.0,
-      "servable": true, "call_as": "llama-x-groq" } ] }
+      "servable": true, "call_as": "llama-x-groq",
+      "delisting": null } ] }
 ```
 
 These three rows are the service's own test fixtures run through the catalog
@@ -58,9 +61,17 @@ read with `fields=pricing`. The names and prices are synthetic; the shape and th
 | The row | `servable` | `call_as` |
 |---|---|---|
 | a lease-only provider (its logins are lent to the owner's own CLI; the gateway never calls the model) | `false` | `null`, always. Checked first |
+| `delisting.state` is `confirmed`: the liveness probe read the model as removed AND the provider's own model list dropped it | `false` | `null` |
 | a pooled key may serve this model on this row (the row is not hidden, and no Codex row answers to the same id first) | `true` | the row's own `id` |
 | Codex, while the gateway holds a pooled Codex seat, for a model it still offers, on a row that is not hidden | `false` | `codex/<model_id>` |
 | anything else, including Codex with no seat | `false` | `null` |
+
+**`delisting`.** `null` on most rows. When the liveness probe read a model as
+removed (a 404/410), it says which kind: `confirmed` — the provider's own model
+list dropped it too, so the row is not callable and `reason` reads "the provider
+removed this model on <date>" — or `unconfirmed` — one key's 404 while the
+provider still lists it, so the row stays callable. Nothing is stored: the next
+probe that reads ok makes the row callable again.
 
 **Why the `id` is not enough.** The Codex row above has `id` `gpt-6-sol-codex` and
 `model_id` `gpt-6-sol`. Both are refused as `model`. Only `codex/gpt-6-sol` is

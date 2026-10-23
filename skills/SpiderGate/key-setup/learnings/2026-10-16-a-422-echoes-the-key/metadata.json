@@ -1,0 +1,15 @@
+{
+  "title": "A failed vault create echoed the pasted key back into the agent's chat",
+  "summary": "The 422 envelope returned the whole request body in what_you_sent, and the only MCP tool that added a vault key sent field names the route refuses, so every call was a 422 that carried the key back into the transcript and stored nothing. Unknown vault fields are now refused by name, a failed key check redacts the key, and the agent surface builds the body from the route's own fields and scrubs any error text before returning it.",
+  "created_at": "2026-10-16",
+  "updated_at": "2026-10-23",
+  "tags": ["gateway", "vault", "secrets", "onboarding", "no-echo"],
+  "references": [
+    "docs/services/SpiderGate/plans/GATE-KEY-ONBOARDING-AGENT-SURFACE.md — §0 findings 1 and 2 (measured on master 892bfeeb0, 2026-10-16)",
+    "app/middleware/error_envelope.py — the 422 handler and its what_you_sent echo",
+    "app/schemas/integration.py — IntegrationCreate refuses unknown vault fields by name before field validation",
+    "packages/mcp-tools/src/admin/brands.ts — create_brand_integration, which sent provider/api_key/label until GKO-12",
+    "packages/core/src/gate-setup.ts — addFreeGateKey builds provider_name/credentials and scrubs the key from error text",
+    "SpiderIQ card GKO-12 — the agent surface this learning ships with"
+  ]
+}

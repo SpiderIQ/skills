@@ -9,7 +9,7 @@
 # gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
-version: "0.3.3"
+version: "0.3.5"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …). Cost is
@@ -209,6 +209,42 @@ methods:
         type: string
         required: false
         description: Optional end-user id passed through to OpenAI for abuse monitoring.
+    response:
+      format: json
+
+  usageByTask:
+    description: >
+      Which keys served one task — the task id your PAT was minted with
+      (`metadata.task_id`). Your brand's requests for that task, grouped by serving
+      key and request kind: attempts, success/errors, prompt/completion tokens,
+      first_at/last_at, lease_count + lease_ids. Counts and ids only. The brand is
+      the credential's; there is no brand parameter. `key.owned_by` is `own` (your
+      key: id, label, provider, plan), `group:<name>` (a connected company's key: id,
+      provider, plan, never its label), `pool` (no id, no label; all pool rows of one
+      provider and kind are one group) or `unknown` (no key was recorded).
+    guidance:
+      use: "Attribute one task's LLM traffic to the keys that served it — own, a connected company's, or the pool."
+      next: "a group's integration_id can be looked up in your vault only when owned_by is `own`; use the trace list (gate_traces) for one request end to end"
+      warn: "`attempts` counts rows, one per attempt: a retried turn counts each attempt, so never quote it as requests. An unknown task id is an empty 200, not an error. Requests made before the passthrough reached a lane (lease, embeddings, media, judge) carry no task_id and are not found; chat always carried it. `truncated: true` = more than 50 groups — narrow with since/until."
+      telemetry_signal_default: "warm"
+    http: GET /usage/by-task
+    params:
+      task_id:
+        type: string
+        required: true
+        description: The task id, 1-128 characters.
+      since:
+        type: string
+        required: false
+        description: Inclusive lower bound, ISO-8601 (a naive value reads as UTC).
+      until:
+        type: string
+        required: false
+        description: Exclusive upper bound, ISO-8601 (a naive value reads as UTC).
+      format:
+        type: string
+        required: false
+        description: '"json" (default), "yaml", "md" or "llm".'
     response:
       format: json
 

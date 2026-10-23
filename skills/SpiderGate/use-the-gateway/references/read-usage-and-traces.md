@@ -283,6 +283,42 @@ release and already at parity with the page).
 
 ---
 
+## 5. Usage by task — which keys served one task
+
+A factory PAT is minted with a `task_id` in its metadata. Every row the gateway writes for
+that token carries it: chat, a key lease, embeddings, media and the judge. This read groups
+one task's rows by the key that served them. *(`@spideriq/mcp-gate` ≥ 1.13.0, sink
+`@spideriq/mcp` ≥ 1.97.0, `@spideriq/cli` ≥ 1.77.0.)*
+
+```bash
+curl -s "https://spideriq.ai/api/gate/v1/usage/by-task?task_id=$TASK_ID" \
+  -H "Authorization: Bearer $SPIDERIQ_PAT"
+# MCP: gate_usage_by_task { task_id }      CLI: spideriq gate usage-by-task $TASK_ID
+```
+
+No `brand_id`: the brand is your credential's, and another brand's rows with the same task id
+are never counted. Each group has a `key` block — read `owned_by` first:
+
+| `owned_by` | `integration_id` | `label` | `provider` / `plan` |
+|---|---|---|---|
+| `own` | your key's id | your label | yes |
+| `group:<name>` | the connected company's key id | **null, always** | yes |
+| `pool` | **null** | **null** | provider yes, plan null — all pool rows of one provider and kind are ONE group |
+| `unknown` | null | null | null — the row recorded no key (a refusal before a key was chosen) |
+
+| Field | Meaning |
+|---|---|
+| `attempts` | rows, one per attempt — a retried turn counts each attempt. Never quote it as "requests" |
+| `success` / `errors` | served (`success`, or `leased` for a lease) vs everything else |
+| `lease_count` / `lease_ids` | distinct leases in an `interactive_lease` group (ids capped at 50) |
+| `truncated` | more than 50 groups matched; narrow with `since` / `until` |
+
+An unknown task id is an **empty 200**, not a 404. Rows written before the task_id reached a
+lane carry none: before this release only chat rows did, so an older lease, embedding, media
+or judge request is not found here.
+
+---
+
 ## Gotchas
 
 - **`client_id` is the identity ground-truth; `brand_id` is the analytics key.** Traces are

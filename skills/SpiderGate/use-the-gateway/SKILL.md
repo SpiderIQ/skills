@@ -12,6 +12,7 @@ description: >
   "spend this month / this calendar month", "how many requests vs retries",
   "how many calls actually returned an answer", "do I need more API keys",
   "are we being rate limited", "what model actually served my alias",
+  "which key served this task", "usage by task id",
   "stream a completion", "JSON mode / structured output via the gateway",
   "tool calling through SpiderGate", "embed text / create embeddings / vectorise",
   "agent/embed-small", "agent/embed-large", "embeddings without an OpenAI key".
@@ -23,7 +24,7 @@ description: >
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.3.3"
+version: "0.3.5"
 category: ai-gateway
 ---
 
@@ -36,6 +37,10 @@ behind that alias and retries on failure. The response carries no cost: read
 it from the usage or trace reads. To call one fixed model instead, send that model's `call_as` from the
 catalog (the `model-catalog` skill), not its `id`. You bring one PAT — not six
 provider keys.
+
+> **No key yet, or setting up?** Route to the `key-setup` skill: it reads where
+> setup stands, adds a free key and says which model to call. Come back here to
+> send the first completion.
 
 ```
 your agent ──Bearer PAT──▶ POST /api/gate/v1/chat/completions
@@ -104,6 +109,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 | read how much was spent — usage over a real date range, the delivered/hollow/unknown/failed split, per-call cost, traces, p95 latency | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | decide whether MORE KEYS would help (and when they would not) — key pressure, verdicts, subscription windows | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | see what actually SERVED an alias — requested → served → real provider | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
+| see which keys served ONE task (own, a connected company's, the pool) | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) §5 |
 | stream tokens as they generate — or watch *job* events (not completion tokens) | [references/stream-and-events.md](references/stream-and-events.md) |
 | embed text / build a vector index — single or batch, no raw OpenAI key | [references/embeddings.md](references/embeddings.md) |
 | reuse a saved system-prompt/model/settings bundle by reference | [references/saved-prompts.md](references/saved-prompts.md) |
@@ -123,6 +129,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | Read usage / spend over a REAL range | `GET /api/v1/brands/{brand_id}/gate/usage?from=&to=&bucket=&compare=` | `gate_usage` | `spideriq gate usage -b <brand> --from --to` |
 | Key pressure — "do I need more keys?" *(≥ mcp-gate 1.10.0)* | `GET …/gate/capacity?days=&key_limit=` | `gate_capacity` | `spideriq gate capacity -b <brand>` |
 | Requested alias → served model → real provider *(≥ mcp-gate 1.10.0)* | `GET …/gate/flow?days=&limit=` | `gate_flow` | `spideriq gate flow -b <brand>` |
+| Which keys served one task *(≥ mcp-gate 1.13.0)* | `GET /api/gate/v1/usage/by-task?task_id=` | `gate_usage_by_task` | `spideriq gate usage-by-task <task_id>` |
 | List / inspect traces | `GET …/gate/traces` · `…/traces/{id}` · `…/traces/stats/summary` | `gate_traces` / `gate_trace_detail` / `gate_trace_stats` | — |
 | Brand stats / agents / providers | `…/gate/stats` · `/agents` · `/providers` | `gate_stats` / `gate_agents` / `gate_providers` | — |
 | Embed text (alias-aware: `agent/embed-small\|large\|embed`) | `POST /api/gate/v1/embeddings` | — *(gap 4)* | — *(gap 4)* |
@@ -144,6 +151,7 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | `listModels` | list models with provider, context window, pricing | [references/pick-an-alias.md](references/pick-an-alias.md) |
 | `listAliases` | list task aliases with the slots behind each + usage | [references/pick-an-alias.md](references/pick-an-alias.md) |
 | `embed` | vectorise one text or a batch (`agent/embed-small\|large\|embed`) | [references/embeddings.md](references/embeddings.md) |
+| `usageByTask` | which keys served one task, grouped by key and request kind | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | `health` | gateway liveness | [references/stream-and-events.md](references/stream-and-events.md) |
 
 The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry_signal_default`, plus skill-level `intent_aliases`) lives in [client/schema.yaml](client/schema.yaml). Brand-analytics reads (usage / capacity / flow / traces) are served under a different root (`/api/v1/brands/{brand_id}/gate`) and are exposed as the `gate_usage` / `gate_capacity` / `gate_flow` / `gate_traces` MCP tools — **there is deliberately no `getUsage` METHOD in `client/schema.yaml`**. See [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
@@ -153,7 +161,7 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 - **[references/pick-an-alias.md](references/pick-an-alias.md)** — the two alias families (`spideriq/*` worker, `agent/*` live-agent), how to choose, the PII lane. **Read before your first call.**
 - **[references/cost-aware-completion.md](references/cost-aware-completion.md)** — what bounds a call's cost (`max_tokens`, the token budget), what does not (`spidergate_options`), and where cost is read. WRONG→RIGHT.
 - **[references/structured-output-and-tools.md](references/structured-output-and-tools.md)** — `response_format` (json_object/json_schema) + `tools`/`tool_choice`. WRONG→RIGHT.
-- **[references/read-usage-and-traces.md](references/read-usage-and-traces.md)** — usage over a real date range (`from`/`to`, calendar months), `turns` vs `attempts`, the four-state outcome split incl. `unknown`, `cost_avoided` as a counterfactual, key-pressure **verdicts that can refuse** (`not_quota` / `account_capped`), the alias→model→provider cross-tab, and trace list/detail/stats.
+- **[references/read-usage-and-traces.md](references/read-usage-and-traces.md)** — usage over a real date range (`from`/`to`, calendar months), `turns` vs `attempts`, the four-state outcome split incl. `unknown`, `cost_avoided` as a counterfactual, key-pressure **verdicts that can refuse** (`not_quota` / `account_capped`), the alias→model→provider cross-tab, trace list/detail/stats, and which keys served one task.
 - **[references/stream-and-events.md](references/stream-and-events.md)** — `stream: true` SSE framing + the difference vs the `events-stream` job-event skill.
 - **[references/embeddings.md](references/embeddings.md)** — `POST /embeddings` the OpenAI-compatible way: `agent/embed-small|large|embed` aliases, batch `input`, `dimensions`, and why no raw `OPENAI_API_KEY` is needed. WRONG→RIGHT.
 - **[references/competitor-landscape.md](references/competitor-landscape.md)** — OpenRouter / LiteLLM / Portkey mapping (cited).
@@ -162,4 +170,4 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 ## See also
 
 - `learnings/` — `no-pii-on-free-tier` (the HARD-GATE's why), `spidergate-options-are-not-read` (the cost cap, cache and `spidergate_metadata` this skill used to teach were never served), `mcp-gate-chat-is-text-only`, `embeddings-need-no-openai-key`, **`unknown-is-not-a-success`** (why the outcome split has four states and folding the fourth into `delivered` manufactures a false all-clear). Starting points, not ground truth — verify against current code.
-- **Sibling skills in this package:** `spidergate-manager` (administer the key pool — add provider keys, health, billing) and `events-stream` (subscribe to *job* lifecycle events). This skill is the consumer of the gateway; those manage it.
+- **Sibling skills in this package:** `key-setup` (no key yet / setting up: setup status, add a free key, connect an agent), `spidergate-manager` (administer the key pool — health, billing) and `events-stream` (subscribe to *job* lifecycle events). This skill is the consumer of the gateway; those manage it.
