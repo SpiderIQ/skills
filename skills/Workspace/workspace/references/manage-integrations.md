@@ -15,7 +15,8 @@ directly. Owner/admin only for writes. Migrated here from the former
 1. **Resolve brand_id + role** (`listBrands` → integer id + `membership_role`).
 2. **List what's there:** `GET /brands/42/integrations`.
 3. **Add a key (owner/admin):** `POST /brands/42/integrations` with
-   `{provider, api_key, label?, daily_limit?, billing_mode?, subscription_tier?}`.
+   `{provider_name, credentials: {api_key}, key_label?, daily_limit?, billing_mode?, subscription_tier?}`.
+   The vault refuses `provider` / `api_key` / `label` at the top level by name.
 4. **Always test after adding:** `POST /brands/42/integrations/{id}/test`.
 5. **Remove when rotated/leaked:** `DELETE /brands/42/integrations/{id}`.
 
@@ -35,7 +36,7 @@ and never joins the shared litellm pool.
 ```bash
 curl -X POST https://spideriq.ai/api/v1/brands/42/integrations \
   -H "Authorization: Bearer $OPVS_PAT" -H "Content-Type: application/json" \
-  -d '{"provider":"openrouter","api_key":"<secret>","label":"prod","daily_limit":50000}'
+  -d '{"provider_name":"openrouter","credentials":{"api_key":"<secret>"},"key_label":"prod","daily_limit":50000}'
 # then:
 curl -X POST https://spideriq.ai/api/v1/brands/42/integrations/itg_9a/test \
   -H "Authorization: Bearer $OPVS_PAT"

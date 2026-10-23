@@ -339,10 +339,16 @@ methods:
     http: POST /brands/{brand_id}/integrations
     params:
       brand_id: { type: integer, required: true, description: Integer brand id }
-      provider: { type: string, required: true, description: "Provider name (e.g. openrouter, mistral)" }
-      api_key: { type: string, required: true, description: API key value (secret — do not echo) }
-      label: { type: string, required: false, description: Human-readable label }
-      daily_limit: { type: integer, required: false, description: Daily usage cap }
+      provider_name: { type: string, required: true, description: "Provider name (e.g. openrouter, mistral)" }
+      credentials:
+        type: object
+        required: true
+        description: >
+          {"api_key": "<secret>"} plus any other field the provider needs (e.g.
+          account_id). The key is a secret — never echo it. The vault checks it
+          with the provider before saving; a refused key is not stored (422).
+      key_label: { type: string, required: false, description: Human-readable label }
+      daily_limit: { type: integer, required: false, description: "Daily request cap for this key (a count, not USD)" }
       billing_mode:
         type: string
         required: false
