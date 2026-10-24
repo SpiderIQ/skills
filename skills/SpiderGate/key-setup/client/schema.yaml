@@ -8,7 +8,7 @@
 # (`/v1/...`, `/gate/v1/...`). The composed URL is the real path, never doubled
 # (AUTHORING §5.3), and the OpenAPI join base is `/api`, which the spec carries.
 name: key-setup
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Walk the owner through getting keys into the SpiderGate gateway from chat:
   read where setup stands and the one next step, save their answers, explain
@@ -37,6 +37,8 @@ triggers:
   - I have no key yet
   - invite a teammate to add a key
   - onboarding
+  - which model should my agent use
+  - which recipes work with my keys
 
 guidance:
   use: >
@@ -54,7 +56,7 @@ guidance:
     - "Only a FREE key is taken in chat (kind free). A paid key (payg, enterprise, media) and a subscription are added by the owner at the dashboard link; addKey is not called for them."
     - "add_method login_link (ChatGPT, Gemini CLI, Claude …) is a browser sign-in: give the link, never ask for a password. A provider's phone check happens on its own page: never ask for the code."
     - "proposeInvite SENDS NOTHING. The owner sends the invite in the dashboard (step 4). Say so."
-    - "Never recommend agent/chat to a workspace. Recommend `recommended_model` from the status."
+    - "Never recommend agent/chat to a workspace. Recommend `recommended_model` from the status (the same name getRecipes marks recommended)."
     - "A 403 on addKey means the key lacks gate:vault:write or the caller is not the brand owner — not that the API is broken."
 
 methods:
@@ -154,6 +156,25 @@ methods:
           {"api_key": "<as pasted>"} plus every required field the guide's
           extra_fields names (e.g. account_id). Never echoed.
       key_label: { type: string, required: false, description: "Label for the key" }
+    response:
+      format: json
+
+  getRecipes:
+    description: >
+      Which ready-made model names (recipes, e.g. spideriq/chat) work on this
+      workspace's keys. Per recipe, each slot (provider + model) with its state:
+      usable (filled_by own | group | pool), locked (with `unlock`: provider,
+      title, kind, add_method, guide_url, add_url), lease_only or not_routed.
+      Top level: `recommended` (never agent/*), usable / total, and `unlock` —
+      providers ranked by how many recipes one key would open. Never a key.
+    guidance:
+      use: "When the owner asks which model their agent should use, what their keys can run, or which key to add next."
+      next: "give `recommended` as the agent's model · name unlock[0] with its add_url · addKey for a free provider"
+      warn: "Never recommend an agent/* name. integration_id appears only for the workspace's OWN keys. usable is not healthy: a cooled key still reads usable. recipes_active false = recipes are off on the server; only the pool serves these names."
+      telemetry_signal_default: "warm"
+    http: GET /v1/brands/{brand_id}/gate/recipes
+    params:
+      brand_id: { type: string, required: true, description: "From getMyBrand" }
     response:
       format: json
 
