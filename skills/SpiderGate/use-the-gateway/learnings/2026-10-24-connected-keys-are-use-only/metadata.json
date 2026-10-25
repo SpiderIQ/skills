@@ -1,0 +1,18 @@
+{
+  "title": "A connected company's key is USE ONLY, and connecting is a human act no tool can do",
+  "summary": "Companies one owner runs can be connected so each can use the others' gateway keys. An agent sees this through two reads only: `gate_subscriptions` lists the other companies' keys under a top-level `connected` array (owner, provider, label, health, plan, price per month, account email, use_only: true), and `gate_group` says whether the company is connected and who sends requests through its own keys. Three traps. First, a connected key looks like any other key, but every write on it (update/delete/test_brand_integration) answers 404 because the brand-integration routes are scoped to the keys a brand owns. Second, there is deliberately no tool to connect, disconnect or pair: the dashboard routes for it are session-only and answer an API client 403 human_act_required, identically on every retry, and the build fails if a tool with such a name is added. Third, `group: null` (or no `connected` key on /subscriptions) is the answer 'not connected', not a failed call. Keep private can be turned ON by an agent (`update_brand_integration` keep_private: true) and only OFF by a human.",
+  "created_at": "2026-10-24",
+  "updated_at": "2026-10-24",
+  "tags": ["connected-companies", "keys", "use-only", "human-act", "group"],
+  "references": [
+    "app/services/gate/connected_companies.py:970 — GroupKey: the connected row, use_only: Literal[True]",
+    "app/services/gate/connected_companies.py:1081 — list_group_keys, the single read both /subscriptions and the dashboard use",
+    "app/services/gate/subscriptions_read.py:537 — load_connected_keys: rows dumped unchanged; a brand in no group gets no `connected` key",
+    "app/api/v1/gate/group.py:95 — GET /api/gate/v1/group, auth get_brand_client (never require_group_admin), days 1-90",
+    "app/api/v1/dashboard_gate_connected_companies.py:362 — the 403 human_act_required an API client gets on the group routes",
+    "packages/mcp-tools/src/gate/gate.ts:602 — gate_subscriptions; :648 gate_group",
+    "packages/mcp-tools/src/admin/brands.ts:353 — update_brand_integration.keep_private (ON only)",
+    "packages/mcp/scripts/verify-tool-set.mjs:707 — the build fails on a connect/disconnect/pair gate tool",
+    "references/connected-companies.md — the agent-facing WRONG/RIGHT"
+  ]
+}

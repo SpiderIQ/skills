@@ -9,7 +9,7 @@
 # gate_traces MCP tools, not generated here — every method resolves through the proxy.
 
 name: use-the-gateway
-version: "0.3.5"
+version: "0.4.0"
 description: >
   Use SpiderGate as your LLM provider — OpenAI-compatible chat completions over
   100+ providers via task aliases (spideriq/coding, spideriq/fast, …). Cost is
@@ -34,6 +34,8 @@ triggers:
   - pick a task alias
   - cap the cost of an llm call
   - llm completion
+  - which subscriptions can i use
+  - connected company keys
 
 guidance:
   use: >
@@ -62,6 +64,8 @@ guidance:
     - "gate_capacity.subscription_windows: decide per ROW on `state`, never on gauge_available. gauge_available is derived on every response (true when at least one key is measured), so with it true other rows can still be unmeasurable. On an unmeasurable row window_percent is PRESENT AND NULL — not absent, not 0% — and `reason` is one of no_plan_assigned / no_packages_for_provider / counter_incomparable / plan_has_no_published_cap / lease_only_not_counted. Suggest setting a plan only when can_set_plan is true. Never render a null as an empty gauge."
     - "gate_capacity.subscription_windows counts can be null too: window_tokens_counted / window_requests_counted are null on a key with no window width (window_hours null or 0) and on every lease-only key (SpiderGate sends no request on that login, so nothing is counted) — a normal answer, not a broken response — and weekly_percent is always null. Test for null, never for a falsy value: 0 is a real reading (an open window with nothing counted yet)."
     - "gate_capacity / gate_flow need @spideriq/mcp-gate >= 1.10.0 (sink @spideriq/mcp >= 1.89.0) or @spideriq/cli >= 1.71.0. On an older client they do not exist."
+    - "USE ONLY: you can use a connected company's key, never change it. getSubscriptions lists them under `connected` (use_only: true); every write on one (update/delete/test_brand_integration) answers 404. There is no tool to connect, disconnect or pair companies: those are human acts in the dashboard, and the raw routes answer an API client 403 human_act_required. Never retry it."
+    - "getGroup `group: null` means your company is not connected — an answer, not an error. getSubscriptions with no `connected` key means the same; do not read the absence as a failure."
     - "Embeddings (embed) are HTTP-only (no MCP/CLI tool yet) and need a brand OpenAI key with the vault supports_embeddings flag — else 503 no_embeddings_key; use the SpiderGate PAT as api_key, never a raw OPENAI_API_KEY."
 
 methods:
@@ -245,6 +249,57 @@ methods:
         type: string
         required: false
         description: '"json" (default), "yaml", "md" or "llm".'
+    response:
+      format: json
+
+  getSubscriptions:
+    description: >
+      The LLM subscriptions and keys your company can use now, one row per
+      configured model or lease, with plan and usage-window state. The brand is the
+      credential's; there is no brand parameter. In a connected-companies group the
+      answer also carries a top-level `connected` array: the other companies' keys
+      you can use, each with integration_id, owner_brand_id, owner_name, provider,
+      key_label, health_status, plan_name, price_usd_month, display_email and
+      use_only: true. A brand in no group gets no `connected` key at all. The
+      gateway tries your own keys first, then the connected ones, then the pool.
+    guidance:
+      use: "See what your company can use right now, including a connected company's keys."
+      next: "chat (send the alias or call_as); getGroup to see who your company is connected to and who uses your own keys"
+      warn: "Use only: you can use a connected company's key, never change it. Every write on one answers 404. Connecting and disconnecting are human acts in the dashboard; no method does them."
+      telemetry_signal_default: "warm"
+    http: GET /subscriptions
+    params:
+      consumer:
+        type: string
+        required: false
+        description: For lease subscriptions, the consumer id you would lease as (e.g. opvs_runner:env_<uuid>).
+      include_unconfigured:
+        type: boolean
+        required: false
+        description: Also list catalog models never marked configured (default false).
+    response:
+      format: json
+
+  getGroup:
+    description: >
+      Your company's connected-companies group. `group` is null when your company
+      is not connected: an answer, not an error. Otherwise `group.companies` lists
+      each member (brand_id, name, is_mine, keys_shared) and `group.order_of_use` is
+      [own, connected, pool]. `my_keys` lists only keys your company owns that
+      carried requests in the window: provider, shareable, keep_private,
+      total_requests and the requests each company sent through it. Read-only; the
+      brand is the credential's.
+    guidance:
+      use: "Answer 'is my company connected, and who is using our keys?'"
+      next: "getSubscriptions to see the connected keys you can use; update_brand_integration keep_private: true (MCP) to keep one of your own keys to yourself"
+      warn: "Nothing here connects, disconnects or pairs companies, and no method does: those are human acts in the dashboard. Keep private can be turned ON by an agent, never OFF."
+      telemetry_signal_default: "cold"
+    http: GET /group
+    params:
+      days:
+        type: integer
+        required: false
+        description: Usage window in days, 1-90 (default 7). Outside that range is a 422.
     response:
       format: json
 

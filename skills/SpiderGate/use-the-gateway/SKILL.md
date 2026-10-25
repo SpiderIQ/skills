@@ -15,7 +15,9 @@ description: >
   "which key served this task", "usage by task id",
   "stream a completion", "JSON mode / structured output via the gateway",
   "tool calling through SpiderGate", "embed text / create embeddings / vectorise",
-  "agent/embed-small", "agent/embed-large", "embeddings without an OpenAI key".
+  "agent/embed-small", "agent/embed-large", "embeddings without an OpenAI key",
+  "which subscriptions can I use", "keys from a connected company",
+  "is my company connected", "who uses my keys".
   One OpenAI-compatible endpoint replaces
   juggling OpenRouter + Groq + Mistral keys: send `model: "spideriq/<task>"`,
   SpiderGate routes across the models behind that alias and retries on
@@ -24,7 +26,7 @@ description: >
   (use the gateway as a provider) — NOT key-pool administration (that's
   spidergate-manager) and NOT job-lifecycle event streaming (that's
   events-stream). Read it before sending the first completion.
-version: "0.3.5"
+version: "0.4.0"
 category: ai-gateway
 ---
 
@@ -97,6 +99,8 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 
 **A `422 no_qualifying_model` IS NOT RETRIABLE — never loop on it.** The gateway now qualifies candidate models BEFORE it contacts a provider: if a model is measured to return an empty completion at your `max_tokens`, it is dropped from the pool and another model behind the alias serves you. If nothing qualifies you get **HTTP 422**, `code: no_qualifying_model`, at **zero spend** — no tokens are billed. It carries **no `Retry-After`** because the same request fails identically every time; a retry loop spins forever. Raise `max_tokens`, or pick a different model or alias. The body's `spidergate_error.candidates[]` names each model, its provider, and the verdict (`known_empty_at_budget` | `exceeds_tier_ceiling`). Streaming returns the same real 422 with `content-type: application/json`, **not** a `200` carrying an error frame. ([references/cost-aware-completion.md](references/cost-aware-completion.md))
 
+**USE ONLY: you can use a connected company's key, never change it.** In a connected-companies group, `gate_subscriptions` lists the other companies' keys under `connected`, each `use_only: true`. The gateway tries your own keys first, then the connected ones, then the pool. Every write on a connected key (`update_brand_integration`, `delete_brand_integration`, `test_brand_integration`) answers **404**: it is not yours. Connecting, disconnecting and pairing are human acts in the dashboard; no tool or verb does them, so never look for one and never retry the 403 `human_act_required` a raw HTTP call gets. `group: null` from `gate_group` is an answer (not connected), not an error. ([references/connected-companies.md](references/connected-companies.md))
+
 **NEVER tight-loop a stream or a poll.** Streaming uses one long-lived SSE connection — consume it, don't reconnect per token. Don't re-`/models` on every turn; the catalog is stable (cache it).
 
 ## Decision tree — pick a reference
@@ -109,6 +113,7 @@ first. When unsure whether a payload carries PII, treat it as if it does.
 | read how much was spent — usage over a real date range, the delivered/hollow/unknown/failed split, per-call cost, traces, p95 latency | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | decide whether MORE KEYS would help (and when they would not) — key pressure, verdicts, subscription windows | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
 | see what actually SERVED an alias — requested → served → real provider | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
+| see what my company can use now, incl. a CONNECTED company's keys (use only), or whether we are connected and who uses our keys | [references/connected-companies.md](references/connected-companies.md) |
 | see which keys served ONE task (own, a connected company's, the pool) | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) §5 |
 | stream tokens as they generate — or watch *job* events (not completion tokens) | [references/stream-and-events.md](references/stream-and-events.md) |
 | embed text / build a vector index — single or batch, no raw OpenAI key | [references/embeddings.md](references/embeddings.md) |
@@ -130,6 +135,8 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | Key pressure — "do I need more keys?" *(≥ mcp-gate 1.10.0)* | `GET …/gate/capacity?days=&key_limit=` | `gate_capacity` | `spideriq gate capacity -b <brand>` |
 | Requested alias → served model → real provider *(≥ mcp-gate 1.10.0)* | `GET …/gate/flow?days=&limit=` | `gate_flow` | `spideriq gate flow -b <brand>` |
 | Which keys served one task *(≥ mcp-gate 1.13.0)* | `GET /api/gate/v1/usage/by-task?task_id=` | `gate_usage_by_task` | `spideriq gate usage-by-task <task_id>` |
+| What your company can use now (+ `connected`, use only) *(≥ mcp-gate 1.16.0)* | `GET /api/gate/v1/subscriptions?consumer=&include_unconfigured=` | `gate_subscriptions` | `spideriq gate subscriptions` |
+| Your connected-companies group + who uses your keys *(≥ mcp-gate 1.16.0)* | `GET /api/gate/v1/group?days=` | `gate_group` | `spideriq gate group --days N` |
 | List / inspect traces | `GET …/gate/traces` · `…/traces/{id}` · `…/traces/stats/summary` | `gate_traces` / `gate_trace_detail` / `gate_trace_stats` | — |
 | Brand stats / agents / providers | `…/gate/stats` · `/agents` · `/providers` | `gate_stats` / `gate_agents` / `gate_providers` | — |
 | Embed text (alias-aware: `agent/embed-small\|large\|embed`) | `POST /api/gate/v1/embeddings` | — *(gap 4)* | — *(gap 4)* |
@@ -152,6 +159,8 @@ All on `https://spideriq.ai`. Gateway core is `/api/gate/v1` (OpenAI-compatible,
 | `listAliases` | list task aliases with the slots behind each + usage | [references/pick-an-alias.md](references/pick-an-alias.md) |
 | `embed` | vectorise one text or a batch (`agent/embed-small\|large\|embed`) | [references/embeddings.md](references/embeddings.md) |
 | `usageByTask` | which keys served one task, grouped by key and request kind | [references/read-usage-and-traces.md](references/read-usage-and-traces.md) |
+| `getSubscriptions` | what your company can use now; a connected company's keys under `connected`, use only | [references/connected-companies.md](references/connected-companies.md) |
+| `getGroup` | your connected-companies group, and the requests each company sent through your own keys | [references/connected-companies.md](references/connected-companies.md) |
 | `health` | gateway liveness | [references/stream-and-events.md](references/stream-and-events.md) |
 
 The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry_signal_default`, plus skill-level `intent_aliases`) lives in [client/schema.yaml](client/schema.yaml). Brand-analytics reads (usage / capacity / flow / traces) are served under a different root (`/api/v1/brands/{brand_id}/gate`) and are exposed as the `gate_usage` / `gate_capacity` / `gate_flow` / `gate_traces` MCP tools — **there is deliberately no `getUsage` METHOD in `client/schema.yaml`**. See [references/read-usage-and-traces.md](references/read-usage-and-traces.md).
@@ -162,6 +171,7 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 - **[references/cost-aware-completion.md](references/cost-aware-completion.md)** — what bounds a call's cost (`max_tokens`, the token budget), what does not (`spidergate_options`), and where cost is read. WRONG→RIGHT.
 - **[references/structured-output-and-tools.md](references/structured-output-and-tools.md)** — `response_format` (json_object/json_schema) + `tools`/`tool_choice`. WRONG→RIGHT.
 - **[references/read-usage-and-traces.md](references/read-usage-and-traces.md)** — usage over a real date range (`from`/`to`, calendar months), `turns` vs `attempts`, the four-state outcome split incl. `unknown`, `cost_avoided` as a counterfactual, key-pressure **verdicts that can refuse** (`not_quota` / `account_capped`), the alias→model→provider cross-tab, trace list/detail/stats, and which keys served one task.
+- **[references/connected-companies.md](references/connected-companies.md)** — what a connected company's key is (use only), the order the gateway tries keys, `group: null`, why every write on a connected key is a 404, and why there is no connect tool. WRONG→RIGHT.
 - **[references/stream-and-events.md](references/stream-and-events.md)** — `stream: true` SSE framing + the difference vs the `events-stream` job-event skill.
 - **[references/embeddings.md](references/embeddings.md)** — `POST /embeddings` the OpenAI-compatible way: `agent/embed-small|large|embed` aliases, batch `input`, `dimensions`, and why no raw `OPENAI_API_KEY` is needed. WRONG→RIGHT.
 - **[references/competitor-landscape.md](references/competitor-landscape.md)** — OpenRouter / LiteLLM / Portkey mapping (cited).
@@ -169,5 +179,5 @@ The envelope contract (`guidance:` per method — `use`/`next`/`warn`/`telemetry
 
 ## See also
 
-- `learnings/` — `no-pii-on-free-tier` (the HARD-GATE's why), `spidergate-options-are-not-read` (the cost cap, cache and `spidergate_metadata` this skill used to teach were never served), `mcp-gate-chat-is-text-only`, `embeddings-need-no-openai-key`, **`unknown-is-not-a-success`** (why the outcome split has four states and folding the fourth into `delivered` manufactures a false all-clear). Starting points, not ground truth — verify against current code.
+- `learnings/` — `no-pii-on-free-tier` (the HARD-GATE's why), `spidergate-options-are-not-read` (the cost cap, cache and `spidergate_metadata` this skill used to teach were never served), `mcp-gate-chat-is-text-only`, `embeddings-need-no-openai-key`, **`connected-keys-are-use-only`** (a connected company's key can be used, never changed; connecting is a human act), **`unknown-is-not-a-success`** (why the outcome split has four states and folding the fourth into `delivered` manufactures a false all-clear). Starting points, not ground truth — verify against current code.
 - **Sibling skills in this package:** `key-setup` (no key yet / setting up: setup status, add a free key, connect an agent), `spidergate-manager` (administer the key pool — health, billing) and `events-stream` (subscribe to *job* lifecycle events). This skill is the consumer of the gateway; those manage it.
