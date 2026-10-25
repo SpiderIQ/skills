@@ -1,9 +1,9 @@
 ---
 name: integrations
-version: 1.0.0
+version: 1.1.0
 description: Manage API integrations (SpiderIQ, Smartlead, etc.)
 client: integrations
-client_version: "1.0.0"
+client_version: "1.1.0"
 category: integration
 triggers:
   - /integrations
@@ -70,6 +70,8 @@ Before deleting an integration, warn the user about active dependencies:
 - Do not delete a primary key without first setting another key as primary
 - Do not skip validation -- always test a new key by checking its integration detail after creation
 - Do not reset usage counters as a workaround for hitting limits -- adjust the limits instead
+- Do not write to a connected company's key. Every method here acts on keys your company owns; a connected company's key (`use_only: true` under `connected` in the gateway's `gate_subscriptions`) answers **404** on every write. You can use it, never change it -- ask its owner company.
+- Do not try to turn Keep private OFF. `setKeepPrivate` (ON) works from an agent; OFF answers `403 human_act_required` and is a human act in the dashboard. Do not send `keep_private` in `updateIntegration`'s PATCH body: it is not a field there and is silently ignored.
 
 ## Error Handling
 
@@ -79,6 +81,8 @@ Before deleting an integration, warn the user about active dependencies:
 | Low credits / approaching spend limit | Warn user with current balance and top-up link |
 | Integration already exists for provider | Offer to update existing key or create additional key with label |
 | Permission denied (non-admin) | Explain that only brand admins can manage integrations |
+| 404 on a key the gateway lists under `connected` | It is a connected company's key: use only. Ask its owner company to change it |
+| 403 `human_act_required` on keep-private OFF | Report it; an admin turns it off in the dashboard. Never retry |
 
 ## Available Methods
 
@@ -91,6 +95,7 @@ Before deleting an integration, warn the user about active dependencies:
 | `getIntegration` | Get details for a single integration key |
 | `createIntegration` | Create a new API integration key (incl. `billing_mode` / `subscription_tier`) |
 | `updateIntegration` | Update an existing integration key (label, credentials, limits, status, billing treatment) |
+| `setKeepPrivate` | Keep one of your own keys from your connected companies (ON only; OFF is a human act) |
 | `deleteIntegration` | Delete an integration key permanently |
 | `resetUsage` | Reset daily and minute usage counters for a key |
 | `getSpend` | Get spend details for a single integration key |

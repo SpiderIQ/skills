@@ -3,7 +3,7 @@
 # Regenerate plugin with: opvs-skills generate integrations
 
 name: integrations
-version: "1.0.0"
+version: "1.1.0"
 description: >
   Manage API integrations for third-party services (SpiderIQ, Smartlead,
   SpiderMail, etc.) — create, update, delete keys, check health and spend.
@@ -41,6 +41,8 @@ guidance:
   pitfalls:
     - "Marking a key billing_mode='subscription' force-de-pools it — a subscription key is private to the brand and never joins the shared litellm pool (share_with_pool is rejected for subscription/paid keys)."
     - "subscription_tier takes a tier_key from listSubscriptionTiers (e.g. minimax_max), NOT the human label — it seeds the key's metering window (the subscription meter's denominator)."
+    - "Every method here acts on keys your company OWNS. A connected company's key (listed by the gateway's gate_subscriptions under `connected`, use_only: true) answers 404 on every write — update, delete, test, keep-private. You can use it, never change it; ask its owner company."
+    - "keep_private is ON-only for an agent. setKeepPrivate (PUT) keeps one of your own keys from your connected companies; turning it OFF (DELETE) answers an API client 403 human_act_required — a human act in the dashboard. Never retry it. updateIntegration's PATCH body has no keep_private field: sent there it is silently ignored."
     - "billing_mode='auto' (the default) defers to the provider's own cost_type; only override to 'subscription'/'paid' when you deliberately want a flat-fee coding plan or forced per-token billing."
 
 methods:
@@ -205,13 +207,42 @@ methods:
     response:
       format: json
 
+  # -- Keep private (ON only) -------------------------------------------------
+  setKeepPrivate:
+    description: >
+      Keep one of your own keys to your own company inside a connected-companies
+      group: the other companies stop being able to use it. Idempotent. Only
+      keys your company owns (a connected company's key answers 404). Turning it
+      OFF is a human act in the dashboard: the DELETE on the same path answers an
+      API client 403 human_act_required.
+    guidance:
+      use: "Stop your connected companies from using one of your own keys."
+      next: "getGroup in use-the-gateway (my_keys[].keep_private reads true)"
+      warn: "ON only. OFF is 403 human_act_required for an agent, identically on every retry — report it, never retry. A connected company's key is 404 here: it is not yours."
+      telemetry_signal_default: cold
+    http: PUT /brands/{brand_id}/integrations/{integration_id}/keep-private
+    params:
+      brand_id:
+        type: integer
+        required: true
+        description: Brand ID (your own company)
+      integration_id:
+        type: integer
+        required: true
+        description: The integration key ID to keep private (one your company owns)
+    response:
+      format: json
+
   # -- Update Integration ----------------------------------------------------
   updateIntegration:
     description: >
       Update an existing integration key. Supports partial updates for
       label, credentials, limits, priority, active status, spend
       limits, and billing treatment (billing_mode / subscription_tier).
-      Brand admin only.
+      Brand admin only. Only keys your company owns: a connected company's
+      key answers 404. keep_private is not a PATCH field — use setKeepPrivate
+      (the MCP tool update_brand_integration takes keep_private: true and calls
+      it for you).
     guidance:
       use: "Edit a key's label / limits / status, or change its billing treatment (mark it subscription + pick a package)."
       next: "listSubscriptionTiers (to pick a valid tier_key), getIntegration (verify)"
