@@ -946,10 +946,11 @@ methods:
 
   uploadMedia:
     description: >
-      Upload an image/video/asset (MULTIPART — needs a local file). Returns a
-      permanent CDN URL to drop into a page/post (use it as cover_image_url,
-      logo_url, etc.). If you only have an image URL (no local file), use
-      uploadMediaFromUrl instead.
+      Upload a raster IMAGE (MULTIPART — needs a local file). It is re-encoded
+      to WebP. Returns a permanent CDN URL to drop into a page/post (use it as
+      cover_image_url, logo_url, etc.). SVG/EPS/PDF/ZIP are refused here, and a
+      PNG/JPEG comes back as WebP — for press-kit originals use registerMediaFile.
+      If you only have an image URL (no local file), use uploadMediaFromUrl.
     guidance:
       use: "host a LOCAL image/video file and get a permanent CDN URL"
       next: "use the returned media.r2_url as cover_image_url / logo_url / in a block"
@@ -975,6 +976,26 @@ methods:
       media_url: { type: string, required: true,  description: 'Remote image URL to fetch + host (any public host accepted)' }
       folder:    { type: string, required: false, description: "Target media folder, e.g. 'blog' or 'hero'" }
       alt_text:  { type: string, required: false, description: 'Alt text for accessibility' }
+    response: { format: json }
+
+  registerMediaFile:
+    description: >
+      Store a file BYTE-FOR-BYTE (MULTIPART — needs a local file) and get a
+      content_media row back. ZIP, SVG, EPS and PDF always; PNG, JPEG, GIF and
+      WebP with preserve_original=true. This is the upload for press-kit files:
+      media.id is what attachPressKitAsset takes. The row lands in the project
+      the request selected (X-Project-Id) and media.project_id says which.
+    guidance:
+      use: "upload a logo/brand file for a press kit without any re-encoding"
+      next: "check media.project_id, media.mime_type and media.sha256 against your file, then attachPressKitAsset(kit_id, media_id=media.id)"
+      warn: "A raster image without preserve_original=true is refused (400). Re-sending identical bytes to the same project/folder/name returns the existing row with deduplicated=true, not a copy."
+    http: POST /dashboard/media/upload-file
+    params:
+      file:              { type: string,  required: true,  description: 'Multipart file (SVG/EPS/PDF/ZIP, or PNG/JPEG/GIF/WebP with preserve_original). The bytes decide the type, not the extension.' }
+      folder:            { type: string,  required: false, description: "Target media folder (default 'press-kits')" }
+      alt_text:          { type: string,  required: false, description: 'Alt text / description' }
+      preserve_original: { type: boolean, required: false, description: 'true = accept a PNG/JPEG/GIF/WebP and store it unchanged' }
+      dedupe:            { type: boolean, required: false, description: 'Default true. false = always store a new copy.' }
     response: { format: json }
 
   updateMedia:
@@ -1963,13 +1984,23 @@ methods:
     description: Attach an ALREADY-UPLOADED media file to a kit.
     guidance:
       use: "put a logo pack, screenshot or headshot into a media kit"
-      warn: "this does NOT upload — call uploadMedia (or the media tools) first and pass the resulting media id. File size is read from the media record automatically."
+      warn: "this does NOT upload — call registerMediaFile first (preserve_original=true for PNG/JPEG) and pass media.id. uploadMedia re-encodes to WebP and refuses SVG; upload-batch results have NO media id. File size is read from the media record automatically."
     http: POST /dashboard/content/press/kits/{kit_id}/assets
     params:
       kit_id:   { type: string, required: true, description: 'Media kit id.' }
       media_id: { type: string, required: true, description: 'Id of an EXISTING media row.' }
       caption:  { type: string, required: false }
       sort:     { type: integer, required: false }
+    response: { format: json }
+
+  buildPressKitZip:
+    description: Build the kit's downloadable ZIP bundle from its assets (exact bytes, original filenames).
+    guidance:
+      use: "produce the one-click download of a media kit"
+      warn: "Idempotent: unchanged assets re-use the stored bundle (a forced rebuild is the CLI `kits zip --force` / MCP press_kit_build_zip force=true). 422 on an empty kit or a bundle over 100 MB."
+    http: POST /dashboard/content/press/kits/{kit_id}/zip
+    params:
+      kit_id: { type: string, required: true, description: 'Media kit id.' }
     response: { format: json }
 
   detachPressKitAsset:

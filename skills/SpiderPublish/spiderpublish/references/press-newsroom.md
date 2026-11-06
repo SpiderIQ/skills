@@ -2,7 +2,7 @@
 
 > **REQUIRES — read before you plan.**
 > **Using THIS skill?** ✅ You can do all of it — ~40 `*Press*` methods (`createPressRelease` `publishPressRelease` `schedulePressRelease` `embargoPressRelease` `createPressContact` `createPressBoilerplate` `createPressKit` `attachPressKitAsset` …) call the HTTP API directly.
-> **On MCP instead?** ⚠️ The 27 `press_*` tools are `@spideriq/mcp` (kitchen sink) **ONLY** — kept out of the atomic slice by design (no headroom). HTTP fallback: `/api/v1/dashboard/content/press/*` with the Bearer PAT.
+> **On MCP instead?** ⚠️ The 29 `press_*` tools are `@spideriq/mcp` (kitchen sink) **ONLY** — kept out of the atomic slice by design (no headroom). HTTP fallback: `/api/v1/dashboard/content/press/*` with the Bearer PAT.
 > **⚠️ Irreversible side effects:** publishing **notifies subscribed journalists** and cannot be recalled; scheduling auto-publishes unattended at the set time; `embargoPressRelease` returns each recipient's token **once**.
 > **Live on PUBLISH — no deploy needed.** Content is fetched from STORE at request time; allow ~60s for the edge cache (`s-maxage=60`). **Do not run a deploy to make content appear, and do not tell the user a deploy is pending.** Deploy is only for templates / theme / the config overlay.
 > **Not sure which universe you are in?** SKILL.md → *Step 0*.
@@ -64,9 +64,12 @@ call instead of three round-trips.
 
 3. createPressKit(slug="series-a-kit", name="Series A kit")
    → kit_id
-   # then, per file — the media must ALREADY be uploaded:
-   uploadMedia(...) → media_id
-   attachPressKitAsset(kit_id, media_id, caption="Logo pack (SVG + PNG)")
+   # then, per file — store the ORIGINAL bytes, then attach:
+   registerMediaFile(file=<logo.svg|logo.png>, folder="press-kit/logos",
+                     alt_text="…", preserve_original=true) → media
+   # check media.project_id, media.mime_type, media.file_size, media.sha256
+   attachPressKitAsset(kit_id, media_id=media.id, caption="Logo (SVG)")
+   buildPressKitZip(kit_id)                  # the one-click bundle
 
 4. createPressRelease(
      slug="acme-raises-series-a",
@@ -100,9 +103,22 @@ newsroom is empty, nothing has been published yet — that is not missing data.
 Pagination is keyset. Pass the previous response's `next_cursor` verbatim.
 Feeding it an integer will not work, and there is no `offset`.
 
-**The kit tools do not upload.**
-`attachPressKitAsset` takes an **existing** media id. Upload first, then attach.
+**The kit tools do not upload — and only one upload gives them an id.**
+`attachPressKitAsset` takes an existing `content_media` id. Get it from
+`registerMediaFile` (`POST /dashboard/media/upload-file`), which stores the file
+byte-for-byte: SVG/EPS/PDF/ZIP always, PNG/JPEG/GIF/WebP with
+`preserve_original=true`. The other doors do not fit a press kit: `uploadMedia`
+refuses SVG and re-encodes a PNG to WebP, and `upload-batch` stores bytes but
+returns **no media id** (a SpiderMedia catalog `asset_id` is not a media id).
+Send the project you mean in `X-Project-Id` and check `media.project_id` in the
+response. Identical bytes re-sent to the same project/folder/name return the
+existing row (`deduplicated: true`), so a retry never duplicates.
 File size is denormalized from the media record automatically — you never send it.
+
+**Download checks from Python: send a User-Agent.**
+`media.cdn.spideriq.ai` answers Cloudflare `403 / 1010` to the default
+`Python-urllib/3.x` agent. Identify your client (`User-Agent: my-press-kit/1.0`);
+`curl`, browsers and the CLI/MCP are unaffected.
 
 **`schedulePressRelease` auto-publishes at the set time.**
 The status flips to `scheduled`, and a background sweep flips it to `published`
@@ -176,7 +192,9 @@ spideriq content press schedule <release_id> 2026-08-01T09:00:00Z
 spideriq content press contacts create --name "Dana Ruiz" --email press@acme.com
 spideriq content press boilerplates create --label "About Acme" --body "…" --default
 spideriq content press kits create --slug series-a-kit --name "Series A kit"
+spideriq content press kits upload <kit_id> ./logo.svg --caption "Logo (SVG)"   # exits 1 unless verified
 spideriq content press kits attach <kit_id> <media_id> --caption "Logo pack"
+spideriq content press kits zip <kit_id>
 ```
 
 Scheduling has a CLI verb (`press schedule`); **embargo does not** — drive
