@@ -1865,7 +1865,12 @@ methods:
       region:   { type: string, required: false, description: 'e.g. "EMEA".' }
       beat:     { type: string, required: false, description: 'Topic handled, e.g. "Product & Engineering".' }
       timezone: { type: string, required: false, description: 'IANA tz, e.g. "Europe/Berlin".' }
-      avatar_url: { type: string, required: false }
+      avatar_url: { type: string, required: false, description: 'Headshot image URL. Upload the image first (media upload, folder "avatars") and pass its public URL.' }
+      linkedin_url:  { type: string, required: false, description: 'Public LinkedIn profile URL (absolute http/https; "" or null clears).' }
+      x_url:         { type: string, required: false, description: 'Public X (x.com) profile URL.' }
+      instagram_url: { type: string, required: false, description: 'Public Instagram profile URL.' }
+      facebook_url:  { type: string, required: false, description: 'Public Facebook profile URL.' }
+      substack_url:  { type: string, required: false, description: 'Public Substack URL (custom domains are fine).' }
       sort:     { type: integer, required: false }
     response: { format: json }
 
@@ -1881,7 +1886,12 @@ methods:
       region:   { type: string, required: false }
       beat:     { type: string, required: false }
       timezone: { type: string, required: false }
-      avatar_url: { type: string, required: false }
+      avatar_url: { type: string, required: false, description: 'Headshot image URL. Upload the image first (media upload, folder "avatars") and pass its public URL.' }
+      linkedin_url:  { type: string, required: false, description: 'Public LinkedIn profile URL (absolute http/https; "" or null clears).' }
+      x_url:         { type: string, required: false, description: 'Public X (x.com) profile URL.' }
+      instagram_url: { type: string, required: false, description: 'Public Instagram profile URL.' }
+      facebook_url:  { type: string, required: false, description: 'Public Facebook profile URL.' }
+      substack_url:  { type: string, required: false, description: 'Public Substack URL (custom domains are fine).' }
       sort:     { type: integer, required: false }
     response: { format: json }
 

@@ -27,7 +27,7 @@ releases); that one is the *page* half.
 | Thing | What it is |
 |---|---|
 | **Release** | The announcement. Slug + headline + body, optional dateline, hero image, legal tail. Statuses: `draft` → `scheduled` / `embargoed` → `published` → `archived`. A background sweep flips `scheduled` and `embargoed` releases to `published` when their time arrives. |
-| **Contact** | A press contact (name, title, email, phone, region, beat, timezone). Attach several to a release via `contact_ids`. |
+| **Contact** | A press contact (name, title, email, phone, region, beat, timezone), a headshot (`avatar_url`) and optional public-profile links: `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `substack_url`. Attach several to a release via `contact_ids`. |
 | **Boilerplate** | The reusable "About <company>" paragraph. One per language; mark one `is_default`. |
 | **Media kit** | A downloadable asset bundle. **Story-scoped, not one-per-company** — hold a launch kit, a brand kit, exec headshots. |
 
@@ -55,8 +55,17 @@ call instead of three round-trips.
 
 ```
 1. createPressContact(name="Dana Ruiz", title="Head of Communications",
-                      email="press@acme.com", region="EMEA", beat="Product")
+                      email="press@acme.com", region="EMEA", beat="Product",
+                      avatar_url="<public URL of an uploaded headshot>",
+                      linkedin_url="https://www.linkedin.com/in/danaruiz",
+                      x_url="https://x.com/danaruiz")
    → contact_id
+   # Headshot: upload the image first (MCP upload_local_file with folder
+   # "avatars", or the dashboard's Photo field), then pass its public URL.
+   # Social links must be absolute http(s) URLs; "" or null clears one.
+   # The public contact door (GET /content/press/contacts) and every release's
+   # contacts[] carry all five links, so a theme can render them as
+   # contact.linkedin_url etc.
 
 2. createPressBoilerplate(label="About Acme — short",
                           body="Acme builds …", language="en", is_default=true)
@@ -189,7 +198,9 @@ spideriq content press create --slug acme-raises-series-a --title "…" --markdo
 spideriq content press publish <release_id>
 spideriq content press schedule <release_id> 2026-08-01T09:00:00Z
 
-spideriq content press contacts create --name "Dana Ruiz" --email press@acme.com
+spideriq content press contacts create --name "Dana Ruiz" --email press@acme.com \
+  --avatar-file ./dana.jpg --linkedin https://www.linkedin.com/in/danaruiz --x https://x.com/danaruiz
+spideriq content press contacts update <contact_id> --substack https://danaruiz.substack.com --x ""   # "" clears
 spideriq content press boilerplates create --label "About Acme" --body "…" --default
 spideriq content press kits create --slug series-a-kit --name "Series A kit"
 spideriq content press kits upload <kit_id> ./logo.svg --caption "Logo (SVG)"   # exits 1 unless verified
