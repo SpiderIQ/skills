@@ -3,7 +3,7 @@
 # Regenerate plugin with: opvs-skills generate internet-data-access
 
 name: internet-data-access
-version: "1.0.0"
+version: "1.1.0"
 description: >
   Unified read/flag access to all per-client normalized data.
   Fetch, list, search, batch, flag, and get stats for businesses,
@@ -47,6 +47,7 @@ guidance:
     - "Resource IDs are UUIDs from norm_cli_* tables, NOT job IDs"
     - "rejected flag auto-excludes from list/search — use flags=-rejected to include"
     - "Batch max is 100 refs per request"
+    - "custom.<key> filters work on businesses only, and only for keys defined with defineCustomField"
 
 methods:
   fetchResource:
@@ -346,5 +347,179 @@ methods:
         type: string
         required: false
         description: Free-text reason recorded in the audit log (max 500 chars). e.g. "duplicate of <uuid>"
+    response:
+      format: json
+
+  listCustomFields:
+    description: >
+      List this client's custom field definitions. Custom fields extend the client's
+      businesses: define a field once, then its values travel in `custom` on every
+      business read and can be filtered with `custom.<key>=<value>` on listResources.
+    guidance:
+      use: "see which custom fields exist (key, label, type, aliases, is_public) before filtering or writing values"
+    http: GET /idap/custom-fields
+    params:
+      include_archived:
+        type: boolean
+        required: false
+        description: Include archived fields (default false)
+    response:
+      format: json
+
+  defineCustomField:
+    description: >
+      Define one custom field on businesses. Key must match ^[a-z][a-z0-9_]{0,62}$ and may
+      not reuse a built-in business field (422 naming it). Types: text, number, url, date,
+      json, image_url, boolean, currency, email, list. `is_public` (default false) decides
+      whether a SpiderPublish site may show the value; site and keyless callers of the
+      public /content doors get public keys only.
+    guidance:
+      use: "add a field the client wants to keep on every business (a booking link, a tier, a renewal date)"
+      pitfalls:
+        - "aliases let an uploaded CSV/JSON column land in this field when its header matches"
+        - "is_public=true makes the value readable by the client's websites without a key"
+    http: POST /idap/custom-fields
+    params:
+      key:
+        type: string
+        required: true
+        description: Field key, lower snake case
+      label:
+        type: string
+        required: true
+        description: Human label
+      type:
+        type: string
+        required: true
+        description: "text | number | url | date | json | image_url | boolean | currency | email | list"
+      visible:
+        type: boolean
+        required: false
+        description: Shown in the client's own screens (default true)
+      group:
+        type: string
+        required: false
+        description: Display group (default "custom")
+      is_public:
+        type: boolean
+        required: false
+        description: Whether a site may show the value (default false)
+      aliases:
+        type: array
+        required: false
+        description: Other header names an upload maps to this field
+    response:
+      format: json
+
+  defineCustomFieldsBulk:
+    description: >
+      Define up to 200 custom fields in one call. All or nothing: one invalid
+      definition refuses the whole request.
+    guidance:
+      use: "set up a client's field set in one call, e.g. from the headers of a file they will upload"
+    http: POST /idap/custom-fields/bulk
+    params:
+      fields:
+        type: array
+        required: true
+        description: List of definitions, each shaped like defineCustomField's body (max 200)
+    response:
+      format: json
+
+  updateCustomField:
+    description: >
+      Change a custom field definition; only the fields sent change. A type change is
+      applied only when every stored value converts (409 naming how many do not).
+      `archived: false` restores an archived field.
+    guidance:
+      use: "rename, retype, re-group, add aliases, or make a field public or private"
+    http: PATCH /idap/custom-fields/{key}
+    params:
+      key:
+        type: string
+        required: true
+        description: The field key
+      label:
+        type: string
+        required: false
+        description: New label
+      type:
+        type: string
+        required: false
+        description: New type (refused with 409 if stored values do not convert)
+      visible:
+        type: boolean
+        required: false
+        description: Shown in the client's own screens
+      group:
+        type: string
+        required: false
+        description: Display group
+      is_public:
+        type: boolean
+        required: false
+        description: Whether a site may show the value
+      aliases:
+        type: array
+        required: false
+        description: Replacement alias list
+      archived:
+        type: boolean
+        required: false
+        description: false restores an archived field
+    response:
+      format: json
+
+  archiveCustomField:
+    description: >
+      Archive a custom field. Its stored values are kept and hidden; updateCustomField
+      with archived=false restores it.
+    guidance:
+      use: "retire a field without losing its values"
+    http: DELETE /idap/custom-fields/{key}
+    params:
+      key:
+        type: string
+        required: true
+        description: The field key
+    response:
+      format: json
+
+  setCustomValues:
+    description: >
+      Set custom values on one business. Merges `custom` into the business; null removes
+      a key. Every key must be a defined, active field and every value must fit its type,
+      or nothing is written.
+    guidance:
+      use: "write a client's own data onto a business"
+    http: PATCH /idap/businesses/{business_id}/custom
+    params:
+      business_id:
+        type: string
+        required: true
+        description: UUID of the business
+      custom:
+        type: object
+        required: true
+        description: Map of field key to value (null removes the key)
+    response:
+      format: json
+
+  setCustomValuesBulk:
+    description: >
+      Set the same custom values on up to 1,000 businesses. Same rules as
+      setCustomValues; ids that do not exist come back in not_found.
+    guidance:
+      use: "tag many businesses at once with the same value"
+    http: PATCH /idap/businesses/custom
+    params:
+      ids:
+        type: array
+        required: true
+        description: Business UUIDs (max 1,000)
+      custom:
+        type: object
+        required: true
+        description: Map of field key to value (null removes the key)
     response:
       format: json
