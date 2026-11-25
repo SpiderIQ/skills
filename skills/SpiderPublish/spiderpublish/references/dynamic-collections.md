@@ -75,6 +75,36 @@ it is neither a collection `route_base` (a dot is not admissible in one) nor a p
 renders; every default-mode item link 404s. **Use authored mode** and write your own `href`s from
 `items`, or bind a custom collection instead if you need detail pages.
 
+#### The client's own fields: `item.custom.<key>`
+
+Each `idap.businesses` item carries `custom`, an object keyed by the client's custom field keys
+(defined with `POST /api/v1/idap/custom-fields`; there is no dashboard screen for it yet). **A site sees only the keys
+whose field is marked public**; a private key is simply absent, so always give it a fallback:
+
+```liquid
+{% for item in items %}
+  <h3>{{ item.name }}</h3>
+  {% if item.custom.subtypes %}<p>{{ item.custom.subtypes | join: ", " }}</p>{% endif %}
+  <p>Founded {{ item.custom.founded | default: "—" }}</p>
+{% endfor %}
+```
+
+Filter and sort the bound list on a **public** key with the items door's own parameters:
+`custom.subtypes=Pistol`, `custom.founded.gte=1990`, `custom.subtypes.exists=true`,
+`sort=-custom.founded`. A private key in a filter or sort is refused exactly like a key that does
+not exist (`422`). A custom-field sort pages with `offset` only (no `next_cursor`).
+
+#### The site's read key (`X-Content-Key`)
+
+A deployed site's Worker carries its own `site` read key: it is minted on the site's first deploy,
+bound as the `CONTENT_READ_KEY` secret, kept on every redeploy, and sent as `X-Content-Key` on the
+site's own `/content` reads. A template needs nothing for it. A frontend you run yourself mints a key
+with `POST /api/v1/content-keys` (PAT), keeps it server-side and sends it as `X-Content-Key`. The
+dev server reads `SPIDERIQ_CONTENT_READ_KEY` / `contentReadKey` only from its next release; the
+published 1.0.1 does not. Today the doors
+run in `log` mode: a call without a key is counted and gets the display fields, and nothing is
+refused. Requiring a key is a later step.
+
 ### `<custom-collection-slug>` — any collection you made
 
 Any collection created with `collection_create` (`^[a-z0-9][a-z0-9-]*$`). Its records come through
@@ -166,6 +196,8 @@ OFFSET_CAP_EXCEEDED`, which names the cap rather than silently returning page 1)
 - **Do not diagnose an empty page as a template problem.** Check the binding first.
 - **Do not promise merge tags here.**
 - **Do not promise `idap.*` detail pages.** The list works; the default item links 404.
+- **Do not promise a private custom field on a site.** Only fields marked public reach a page.
+- **Do not claim the business data is locked.** The read key is in `log` mode; nothing is refused yet.
 - **Do not offer `content_update_page` to change `collection_type`.** It cannot.
 - **Do not describe `directory_listings` as unrendered.** It renders — that was true before ISU-4
   and is not true now.
