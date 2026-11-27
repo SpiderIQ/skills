@@ -96,14 +96,19 @@ not exist (`422`). A custom-field sort pages with `offset` only (no `next_cursor
 
 #### The site's read key (`X-Content-Key`)
 
-A deployed site's Worker carries its own `site` read key: it is minted on the site's first deploy,
-bound as the `CONTENT_READ_KEY` secret, kept on every redeploy, and sent as `X-Content-Key` on the
-site's own `/content` reads. A template needs nothing for it. A frontend you run yourself mints a key
-with `POST /api/v1/content-keys` (PAT), keeps it server-side and sends it as `X-Content-Key`. The
-dev server reads `SPIDERIQ_CONTENT_READ_KEY` / `contentReadKey` only from its next release; the
-published 1.0.1 does not. Today the doors
-run in `log` mode: a call without a key is counted and gets the display fields, and nothing is
-refused. Requiring a key is a later step.
+The business-data doors (`idap.*` items, `/content/leads/resolve`, `/content/directory/*`) take a
+read key of the site's own workspace. Who needs to do what:
+
+| Caller | What it needs | How it gets it |
+|---|---|---|
+| A site SpiderPublish deploys | nothing | Its Worker carries a `site` key: minted on the site's deploy, bound as the `CONTENT_READ_KEY` secret, kept on every redeploy, sent as `X-Content-Key` on its own `/content` reads. A template needs nothing. |
+| An agent, a script, your own frontend or app | a read key **or** a PAT, sent from a server | Mint a key: `POST /api/v1/content-keys` with an admin's PAT, body `{"label": "my-frontend", "scope": "external"}`; the response shows the key once. Send it as `X-Content-Key`. Or send the workspace's own PAT as `Authorization: Bearer`. Never put either in browser code. |
+
+The local preview sends a key from `@spideriq/cli` 1.83.0 / `@spideriq/dev-server` 1.0.2:
+`spideriq dev --domain <site> --read-key <key>` (or env `SPIDERIQ_CONTENT_READ_KEY`). Today the doors run in `log` mode: a call without a key is counted and
+gets the display fields, and nothing is refused. At the lock-on (`enforce`), a call without a key of
+the domain's own workspace gets `401 content_key_required` (the directory doors answer with the
+display fields instead), so an agent or frontend adds its key before then.
 
 ### `<custom-collection-slug>` — any collection you made
 
@@ -198,6 +203,8 @@ OFFSET_CAP_EXCEEDED`, which names the cap rather than silently returning page 1)
 - **Do not promise `idap.*` detail pages.** The list works; the default item links 404.
 - **Do not promise a private custom field on a site.** Only fields marked public reach a page.
 - **Do not claim the business data is locked.** The read key is in `log` mode; nothing is refused yet.
+- **Do not tell a SpiderPublish site to add a key.** Its deploy binds one. Only an agent or a frontend
+  you run yourself needs a key or a PAT.
 - **Do not offer `content_update_page` to change `collection_type`.** It cannot.
 - **Do not describe `directory_listings` as unrendered.** It renders — that was true before ISU-4
   and is not true now.
