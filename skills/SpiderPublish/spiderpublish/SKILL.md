@@ -301,6 +301,7 @@ The user names ONE noun. That noun tells you which reference AND which package:
 | header, footer, nav, chrome | nav: any · 🔴 **override: `template_upsert` — the three `content_*_section` tools are registered by NO published server** | `references/content.md` |
 | component, marketplace, section library | default+ | `references/components.md` · `references/marketplace.md` |
 | theme, template, starter site, deploy | any universe | `references/templates-deploy.md` |
+| **edit templates/components as FILES in a coding tool, `spideriq dev`, AGENTS.md, push** | CLI, not MCP | `references/local-development.md` |
 | docs, API reference, OpenAPI | authoring: any · **ask/search: kitchen sink** | `references/content.md` · `references/docs-site-design.md` |
 | collection, case studies, products, custom type | any universe | `references/collections.md` |
 | **directory, listings, programmatic SEO, "a page per city"** | any universe | `references/directory-pages.md` |
